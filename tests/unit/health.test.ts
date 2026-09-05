@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import { createApp } from '../../src/index.js';
+import { createApp } from '../../src/web/createApp.js';
 it('健康检查返回服务状态', async () => {
   const server = createApp().listen(0, '127.0.0.1');
   try {

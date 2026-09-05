@@ -1,2 +1,148 @@
 @import "tailwindcss";
-body { margin: 0; background: #f8fafc; color: #172033; font-family: system-ui, sans-serif; }
+
+@keyframes pulse-anim {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.pulse-dot {
+  animation: pulse-anim 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes spin-ring {
+  to { transform: rotate(360deg); }
+}
+
+.phase-node-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.phase-ring-spin {
+  position: absolute;
+  inset: -3px;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  border-top-color: #3b82f6;
+  border-right-color: #3b82f6;
+  border-bottom-color: rgba(59, 130, 246, 0.2);
+  border-left-color: rgba(59, 130, 246, 0.2);
+  animation: spin-ring 1.2s linear infinite;
+}
+
+.plan-doc h1 { font-size: 1.5rem; font-weight: 700; margin: 1rem 0 0.5rem; }
+.plan-doc h2 { font-size: 1.25rem; font-weight: 600; margin: 0.8rem 0 0.4rem; }
+.plan-doc h3 { font-size: 1.1rem; font-weight: 600; margin: 0.6rem 0 0.3rem; }
+.plan-doc p { margin: 0.4rem 0; line-height: 1.6; }
+.plan-doc ul, .plan-doc ol { margin: 0.4rem 0 0.4rem 1.5rem; }
+.plan-doc li { margin: 0.2rem 0; }
+.plan-doc code { background: #f3f4f6; padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-size: 0.875rem; }
+.plan-doc pre { background: #1f2937; color: #e5e7eb; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin: 0.5rem 0; }
+.plan-doc pre code { background: transparent; color: inherit; }
+.plan-doc table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; }
+.plan-doc th, .plan-doc td { border: 1px solid #d1d5db; padding: 0.4rem 0.6rem; text-align: left; }
+.plan-doc th { background: #f9fafb; font-weight: 600; }
+.plan-doc input[type="checkbox"] { margin-right: 0.4rem; }
+
+.agent-log {
+  font-family: 'Menlo', 'Consolas', 'Monaco', monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.agent-log-item { padding: 0.25rem 0.5rem; border-left: 3px solid transparent; }
+.agent-log-item.log-assistant { border-left-color: #3b82f6; background: #eff6ff; }
+.agent-log-item.log-tool_use { border-left-color: #8b5cf6; background: #f5f3ff; }
+.agent-log-item.log-tool_result { border-left-color: #10b981; background: #ecfdf5; }
+.agent-log-item.log-result { border-left-color: #f59e0b; background: #fffbeb; }
+.agent-log-item.log-stderr { border-left-color: #ef4444; background: #fef2f2; }
+.agent-log-item.log-raw { border-left-color: #6b7280; background: #f9fafb; }
+.agent-log-item.log-system { border-left-color: #0ea5e9; background: #f0f9ff; }
+.agent-log-item.log-partial { border-left-color: #94a3b8; background: #f8fafc; }
+.agent-log-item.log-thinking { border-left-color: #a78bfa; background: #faf5ff; }
+
+.agent-log-item .log-badge {
+  display: inline-block;
+  min-width: 4.5rem;
+  text-align: center;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  margin-right: 0.4rem;
+  color: #fff;
+}
+.agent-log-item.log-assistant .log-badge { background: #3b82f6; }
+.agent-log-item.log-tool_use .log-badge { background: #8b5cf6; }
+.agent-log-item.log-tool_result .log-badge { background: #10b981; }
+.agent-log-item.log-result .log-badge { background: #f59e0b; }
+.agent-log-item.log-stderr .log-badge { background: #ef4444; }
+.agent-log-item.log-raw .log-badge { background: #6b7280; }
+.agent-log-item.log-system .log-badge { background: #0ea5e9; }
+.agent-log-item.log-partial .log-badge { background: #94a3b8; }
+.agent-log-item.log-thinking .log-badge { background: #a78bfa; }
+
+.label-tag {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 500;
+  margin-right: 0.25rem;
+  margin-bottom: 0.15rem;
+}
+
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+.fullscreen-doc-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 2rem;
+}
+
+.fullscreen-doc-container {
+  width: 100%;
+  max-width: 960px;
+  height: 100%;
+  background: #fff;
+  border-radius: 0.75rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+@media (min-width: 1280px) {
+  .fullscreen-doc-container { max-width: 1100px; }
+}
+
+.fullscreen-fade-enter-active { transition: opacity 0.2s ease; }
+.fullscreen-fade-enter-active .fullscreen-doc-container { transition: transform 0.2s ease; }
+.fullscreen-fade-leave-active { transition: opacity 0.15s ease; }
+.fullscreen-fade-leave-active .fullscreen-doc-container { transition: transform 0.15s ease; }
+.fullscreen-fade-enter-from { opacity: 0; }
+.fullscreen-fade-enter-from .fullscreen-doc-container { transform: scale(0.95); }
+.fullscreen-fade-leave-to { opacity: 0; }
+.fullscreen-fade-leave-to .fullscreen-doc-container { transform: scale(0.95); }
+
+.mini-panel { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; color: #1f2937; }
+.mini-panel h2 { font-size: 22px; font-weight: 700; margin-bottom: 12px; }
+.mini-panel h3 { font-size: 16px; font-weight: 600; margin: 12px 0; }
+.mini-panel p { margin: 10px 0; color: #4b5563; }
+.mini-panel input:not([type=checkbox]), .mini-panel textarea, .mini-panel select { display: block; width: 100%; border: 1px solid #d1d5db; border-radius: 6px; padding: 9px 12px; margin: 10px 0; }
+.mini-panel select { width: auto; display: inline-block; }
+.mini-panel button { background: #1f2937; color: white; border-radius: 6px; padding: 8px 12px; margin: 6px 8px 6px 0; }
+.mini-panel button:disabled { opacity: .45; cursor: not-allowed; }
+.mini-panel a { color: #2563eb; text-decoration: underline; margin-right: 12px; }
+.mini-panel .mini-error { color: #b91c1c; }
+.mini-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 450px; overflow: auto; font-size: 13px; padding: 12px; background: #f9fafb; }
+.mini-card { border: 1px solid #e5e7eb; padding: 16px; margin-top: 16px; border-radius: 8px; }
+.mini-panel td, .mini-panel th { padding: 10px; border-bottom: 1px solid #e5e7eb; }
