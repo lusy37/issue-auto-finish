@@ -1,0 +1,96 @@
+{
+  "name": "issue-auto-finish",
+  "version": "0.1.0",
+  "description": "单仓库 AI Issue 开发与验收工作台，按可验证增量重实现",
+  "type": "module",
+  "main": "./dist/lib.js",
+  "types": "./dist/lib.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js"
+    },
+    "./service": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "issue-auto-finish": "./bin/issue-auto-finish.js"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "src/web/frontend/dist/"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "dev": "tsx watch src/run.ts",
+    "start": "tsx src/run.ts",
+    "build": "tsup && tsc --emitDeclarationOnly --outDir dist",
+    "build:cli": "tsup",
+    "prepublishOnly": "npm run build && npm run web:build",
+    "web:dev": "vite --config src/web/frontend/vite.config.ts",
+    "web:build": "vite build --config src/web/frontend/vite.config.ts",
+    "web:preview": "vite preview --config src/web/frontend/vite.config.ts",
+    "lint": "eslint src/ tests/",
+    "lint:fix": "eslint src/ tests/ --fix",
+    "test": "vitest run --exclude tests/e2e/**",
+    "test:unit": "vitest run tests/unit/",
+    "test:integration": "vitest run tests/integration/",
+    "test:contracts": "vitest run tests/contracts/",
+    "test:e2e": "vitest run tests/e2e/",
+    "test:ci": "vitest run --exclude tests/e2e/**",
+    "test:all": "vitest run",
+    "test:watch": "vitest --exclude 'tests/e2e/**'",
+    "dev:all": "node scripts/dev-all.mjs",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json && vue-tsc --noEmit -p src/web/frontend/tsconfig.json",
+    "e2e:install": "playwright install chromium",
+    "doctor": "tsx src/cli/index.ts doctor",
+    "init": "tsx src/cli/index.ts init",
+    "demo": "tsx scripts/demo.ts",
+    "test:codex": "tsx scripts/codex-smoke.ts",
+    "test:windows": "vitest run tests/integration/windows-preview.test.ts"
+  },
+  "dependencies": {
+    "@openai/codex-sdk": "0.154.0",
+    "@playwright/test": "^1.58.0",
+    "@types/diff": "^7.0.2",
+    "commander": "^14.0.3",
+    "cross-spawn": "^7.0.6",
+    "diff": "^9.0.0",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "marked": "^17.0.3",
+    "open": "^11.0.0",
+    "vue": "^3.5.29",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@tailwindcss/vite": "^4.2.1",
+    "@types/cross-spawn": "^6.0.6",
+    "@types/express": "^4.17.6",
+    "@types/node": "^20.11.0",
+    "@vitejs/plugin-vue": "^6.0.4",
+    "@vue/test-utils": "^2.4.10",
+    "eslint": "^9.17.0",
+    "eslint-plugin-vue": "^9.32.0",
+    "globals": "^15.14.0",
+    "happy-dom": "^20.9.0",
+    "tailwindcss": "^4.2.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.18.0",
+    "vite": "^7.3.1",
+    "vitest": "^3.2.4",
+    "vue-eslint-parser": "^9.4.3",
+    "vue-tsc": "^3.2.5"
+  }
+}
