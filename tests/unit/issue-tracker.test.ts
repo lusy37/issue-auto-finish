@@ -1,0 +1,373 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { IssueTracker } from '../../src/tracker/IssueTracker.js';
+import { IssueState } from '../../src/tracker/IssueState.js';
+import { getIssueNumber } from '../../src/tracker/IssueRecordHelper.js';
+import { PLAN_MODE_PIPELINE, createLifecycleManager } from '../../src/pipeline/PipelineDefinition.js';
+
+const planModeLM = createLifecycleManager(PLAN_MODE_PIPELINE);
+
+function createTracker(dir: string) {
+  return new IssueTracker(dir, new Map([['plan-mode', planModeLM]]));
+}
+
+describe('IssueTracker', () => {
+  let tmpDir: string;
+  let tracker: IssueTracker;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tracker-test-'));
+    tracker = createTracker(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function createRecord(number: number, state: IssueState, updatedAt?: string) {
+    const record = tracker.create({
+      demandSpec: {
+        demandId: `gh-${number}`,
+        sourceRef: { source: 'github-issue', externalId: `${number + 100}`, displayId: `${number}` },
+        title: `Issue ${number}`,
+        description: '',
+        createdAt: '2024-01-01T00:00:00Z',
+      },
+      state: IssueState.Pending,
+      branchName: `feat/issue-${number}`,
+    });
+    if (state !== IssueState.Pending) {
+      tracker.updateState(number, state);
+    }
+    if (updatedAt) {
+      const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker.json'), 'utf-8'));
+      raw.issues[String(number)].updatedAt = updatedAt;
+      fs.writeFileSync(path.join(tmpDir, 'tracker.json'), JSON.stringify(raw, null, 2));
+      // Reload tracker to pick up the manual edit
+      tracker = createTracker(tmpDir);
+    }
+    return record;
+  }
+
+  describe('isStalled', () => {
+    it('returns false for non-existent issue', () => {
+      expect(tracker.isStalled(999)).toBe(false);
+    });
+
+    it('returns false for completed issue', () => {
+      createRecord(1, IssueState.Completed);
+      expect(tracker.isStalled(1)).toBe(false);
+    });
+
+    it('returns false for failed issue', () => {
+      createRecord(1, IssueState.PhaseRunning);
+      tracker.markFailed(1, 'test error', IssueState.PhaseRunning);
+      expect(tracker.isStalled(1)).toBe(false);
+    });
+
+    it('returns false for recently updated in-progress issue', () => {
+      createRecord(1, IssueState.PhaseRunning);
+      expect(tracker.isStalled(1)).toBe(false);
+    });
+
+    it('returns true for in-progress issue with stale updatedAt', () => {
+      const staleTime = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      createRecord(1, IssueState.PhaseRunning, staleTime);
+      expect(tracker.isStalled(1, 5 * 60 * 1000)).toBe(true);
+    });
+
+    it('respects custom threshold', () => {
+      const staleTime = new Date(Date.now() - 2000).toISOString();
+      createRecord(1, IssueState.PhaseRunning, staleTime);
+      expect(tracker.isStalled(1, 1000)).toBe(true);
+      expect(tracker.isStalled(1, 10000)).toBe(false);
+    });
+  });
+
+  describe('getDrivableIssues', () => {
+    it('returns empty array when no issues exist', () => {
+      expect(tracker.getDrivableIssues(3)).toEqual([]);
+    });
+
+    it('returns pending issues', () => {
+      createRecord(1, IssueState.Pending);
+      const result = tracker.getDrivableIssues(3);
+      expect(result).toHaveLength(1);
+      expect(getIssueNumber(result[0])).toBe(1);
+    });
+
+    it('returns branch_created issues (e.g. after plan rejection)', () => {
+      createRecord(1, IssueState.BranchCreated);
+      const result = tracker.getDrivableIssues(3);
+      expect(result).toHaveLength(1);
+      expect(getIssueNumber(result[0])).toBe(1);
+    });
+
+    it('returns failed issues under retry limit', () => {
+      createRecord(1, IssueState.PhaseRunning);
+      tracker.markFailed(1, 'err', IssueState.PhaseRunning);
+      const result = tracker.getDrivableIssues(3);
+      expect(result).toHaveLength(1);
+      expect(result[0].state).toBe(IssueState.Failed);
+    });
+
+    it('excludes failed issues over retry limit', () => {
+      createRecord(1, IssueState.PhaseRunning);
+      tracker.markFailed(1, 'err1', IssueState.PhaseRunning);
+      tracker.markFailed(1, 'err2', IssueState.PhaseRunning);
+      tracker.markFailed(1, 'err3', IssueState.PhaseRunning);
+      const result = tracker.getDrivableIssues(3);
+      expect(result).toHaveLength(0);
+    });
+
+    it('returns stalled in-progress issues', () => {
+      const staleTime = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      createRecord(1, IssueState.PhaseRunning, staleTime);
+      const result = tracker.getDrivableIssues(3, 5 * 60 * 1000);
+      expect(result).toHaveLength(1);
+    });
+
+    it('returns phase-done states (e.g. after retryFromPhase)', () => {
+      // PhaseDone is always drivable in the new model
+      const tmpDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'tracker-done-'));
+      const t = createTracker(tmpDir2);
+      t.create({
+        demandSpec: {
+          demandId: 'gh-1',
+          sourceRef: { source: 'github-issue', externalId: '101', displayId: '1' },
+          title: 'Test',
+          description: '',
+          createdAt: '2024-01-01T00:00:00Z',
+        },
+        state: IssueState.Pending, branchName: 'feat/1',
+      });
+      t.updateState(1, IssueState.PhaseDone);
+      const result = t.getDrivableIssues(3);
+      expect(result, 'PhaseDone should be drivable').toHaveLength(1);
+      fs.rmSync(tmpDir2, { recursive: true, force: true });
+    });
+
+    it('excludes active non-stalled in-progress issues', () => {
+      createRecord(1, IssueState.PhaseRunning);
+      const result = tracker.getDrivableIssues(3);
+      expect(result).toHaveLength(0);
+    });
+
+    it('excludes completed issues', () => {
+      createRecord(1, IssueState.Completed);
+      const result = tracker.getDrivableIssues(3);
+      expect(result).toHaveLength(0);
+    });
+
+    it('returns mixed drivable issues', () => {
+      createRecord(1, IssueState.Pending);
+      createRecord(2, IssueState.Completed);
+      createRecord(3, IssueState.PhaseRunning);
+      tracker.markFailed(3, 'err', IssueState.PhaseRunning);
+
+      const result = tracker.getDrivableIssues(3);
+      const iids = result.map((r) => getIssueNumber(r)).sort();
+      expect(iids).toEqual([1, 3]);
+    });
+  });
+
+  describe('updateState clears error on completion', () => {
+    it('clears lastError and failedAtState when transitioning to Completed', () => {
+      createRecord(1, IssueState.PhaseRunning);
+      tracker.markFailed(1, 'some error', IssueState.PhaseRunning);
+      expect(tracker.get(1)!.lastError).toBe('some error');
+      expect(tracker.get(1)!.failedAtState).toBe(IssueState.PhaseRunning);
+
+      tracker.updateState(1, IssueState.Completed);
+      const record = tracker.get(1)!;
+      expect(record.state).toBe(IssueState.Completed);
+      expect(record.lastError).toBeUndefined();
+      expect(record.failedAtState).toBeUndefined();
+    });
+
+    it('preserves lastError when transitioning to non-Completed state', () => {
+      createRecord(1, IssueState.PhaseRunning);
+      tracker.markFailed(1, 'some error', IssueState.PhaseRunning);
+
+      tracker.updateState(1, IssueState.PhaseRunning);
+      const record = tracker.get(1)!;
+      expect(record.state).toBe(IssueState.PhaseRunning);
+      expect(record.lastError).toBe('some error');
+    });
+  });
+
+  describe('resetFull', () => {
+    it('returns false for non-existent issue', () => {
+      expect(tracker.resetFull(999)).toBe(false);
+    });
+
+    it('resets a failed issue to Pending with zero attempts', () => {
+      createRecord(1, IssueState.PhaseRunning);
+      tracker.markFailed(1, 'err', IssueState.PhaseRunning);
+      expect(tracker.resetFull(1)).toBe(true);
+      const record = tracker.get(1)!;
+      expect(record.state).toBe(IssueState.Pending);
+      expect(record.attempts).toBe(0);
+      expect(record.lastError).toBeUndefined();
+      expect(record.failedAtState).toBeUndefined();
+      expect(record.sessionId).toBeUndefined();
+    });
+
+    it('resets an in-progress issue to Pending', () => {
+      createRecord(1, IssueState.PhaseRunning);
+      expect(tracker.resetFull(1)).toBe(true);
+      const record = tracker.get(1)!;
+      expect(record.state).toBe(IssueState.Pending);
+      expect(record.attempts).toBe(0);
+    });
+
+    it('resets a completed issue to Pending', () => {
+      createRecord(1, IssueState.Completed);
+      expect(tracker.resetFull(1)).toBe(true);
+      expect(tracker.get(1)!.state).toBe(IssueState.Pending);
+    });
+  });
+
+  describe('resetToPhase', () => {
+    it('returns false for non-existent issue', () => {
+      expect(tracker.resetToPhase(999, 'plan', PLAN_MODE_PIPELINE)).toBe(false);
+    });
+
+    it('resets to BranchCreated for plan phase (plan-mode)', () => {
+      createRecord(1, IssueState.PhaseRunning);
+      expect(tracker.resetToPhase(1, 'plan', PLAN_MODE_PIPELINE)).toBe(true);
+      expect(tracker.get(1)!.state).toBe(IssueState.BranchCreated);
+    });
+
+    it('resets to PhaseApproved for build phase (plan-mode)', () => {
+      createRecord(1, IssueState.PhaseRunning);
+      expect(tracker.resetToPhase(1, 'build', PLAN_MODE_PIPELINE)).toBe(true);
+      expect(tracker.get(1)!.state).toBe(IssueState.PhaseApproved);
+    });
+
+    it('resets to PhaseDone for verify phase (plan-mode)', () => {
+      createRecord(1, IssueState.Completed);
+      expect(tracker.resetToPhase(1, 'verify', PLAN_MODE_PIPELINE)).toBe(true);
+      expect(tracker.get(1)!.state).toBe(IssueState.PhaseDone);
+    });
+
+    it('returns false for unknown phase name', () => {
+      createRecord(1, IssueState.PhaseRunning);
+      expect(tracker.resetToPhase(1, 'nonexistent', PLAN_MODE_PIPELINE)).toBe(false);
+    });
+
+    it('clears error fields after resetToPhase', () => {
+      createRecord(1, IssueState.PhaseRunning);
+      tracker.markFailed(1, 'some error', IssueState.PhaseRunning);
+      expect(tracker.resetToPhase(1, 'build', PLAN_MODE_PIPELINE)).toBe(true);
+      const record = tracker.get(1)!;
+      expect(record.lastError).toBeUndefined();
+      expect(record.failedAtState).toBeUndefined();
+      expect(record.sessionId).toBeUndefined();
+    });
+  });
+
+  describe('processingLock', () => {
+    it('acquires lock on unlocked issue', () => {
+      createRecord(1, IssueState.Pending);
+      expect(tracker.acquireProcessingLock(1, 'corr-1')).toBe(true);
+      const record = tracker.get(1)!;
+      expect(record.processingLock).toBeDefined();
+      expect(record.processingLock!.correlationId).toBe('corr-1');
+    });
+
+    it('rejects acquire when lock is held by another', () => {
+      createRecord(1, IssueState.Pending);
+      expect(tracker.acquireProcessingLock(1, 'corr-1')).toBe(true);
+      expect(tracker.acquireProcessingLock(1, 'corr-2')).toBe(false);
+    });
+
+    it('releases lock when correlationId matches', () => {
+      createRecord(1, IssueState.Pending);
+      tracker.acquireProcessingLock(1, 'corr-1');
+      tracker.releaseProcessingLock(1, 'corr-1');
+      expect(tracker.get(1)!.processingLock).toBeUndefined();
+    });
+
+    it('skips release when correlationId does not match', () => {
+      createRecord(1, IssueState.Pending);
+      tracker.acquireProcessingLock(1, 'corr-1');
+      tracker.releaseProcessingLock(1, 'corr-wrong');
+      expect(tracker.get(1)!.processingLock).toBeDefined();
+      expect(tracker.get(1)!.processingLock!.correlationId).toBe('corr-1');
+    });
+
+    it('clearProcessingLock removes lock unconditionally', () => {
+      createRecord(1, IssueState.Pending);
+      tracker.acquireProcessingLock(1, 'corr-1');
+      tracker.clearProcessingLock(1);
+      expect(tracker.get(1)!.processingLock).toBeUndefined();
+    });
+
+    it('getDrivableIssues excludes locked issues', () => {
+      createRecord(1, IssueState.Pending);
+      createRecord(2, IssueState.Pending);
+      tracker.acquireProcessingLock(1, 'corr-1');
+
+      const result = tracker.getDrivableIssues(3);
+      const iids = result.map((r) => getIssueNumber(r));
+      expect(iids).toEqual([2]);
+    });
+
+    it('getDrivableIssues includes issues with timed-out locks', () => {
+      createRecord(1, IssueState.Pending);
+      tracker.acquireProcessingLock(1, 'corr-1');
+
+      // Manually backdate the lock timestamp to exceed timeout
+      const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker.json'), 'utf-8'));
+      raw.issues['1'].processingLock.ts = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+      fs.writeFileSync(path.join(tmpDir, 'tracker.json'), JSON.stringify(raw, null, 2));
+      tracker = createTracker(tmpDir);
+
+      const result = tracker.getDrivableIssues(3);
+      expect(result).toHaveLength(1);
+    });
+
+    it('acquireProcessingLock overwrites timed-out lock', () => {
+      createRecord(1, IssueState.Pending);
+      tracker.acquireProcessingLock(1, 'corr-old');
+
+      // Backdate the lock
+      const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker.json'), 'utf-8'));
+      raw.issues['1'].processingLock.ts = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+      fs.writeFileSync(path.join(tmpDir, 'tracker.json'), JSON.stringify(raw, null, 2));
+      tracker = createTracker(tmpDir);
+
+      expect(tracker.acquireProcessingLock(1, 'corr-new')).toBe(true);
+      expect(tracker.get(1)!.processingLock!.correlationId).toBe('corr-new');
+    });
+
+    it('resetFull clears processingLock', () => {
+      createRecord(1, IssueState.Pending);
+      tracker.acquireProcessingLock(1, 'corr-1');
+      tracker.resetFull(1);
+      expect(tracker.get(1)!.processingLock).toBeUndefined();
+    });
+
+    it('resetForRetry clears processingLock', () => {
+      createRecord(1, IssueState.PhaseRunning);
+      tracker.markFailed(1, 'err', IssueState.PhaseRunning);
+      tracker.acquireProcessingLock(1, 'corr-1');
+      tracker.resetForRetry(1);
+      expect(tracker.get(1)!.processingLock).toBeUndefined();
+    });
+
+    it('pauseIssue clears processingLock', () => {
+      createRecord(1, IssueState.PhaseRunning);
+      tracker.acquireProcessingLock(1, 'corr-1');
+      tracker.pauseIssue(1, 'plan');
+      expect(tracker.get(1)!.processingLock).toBeUndefined();
+    });
+
+    it('returns false for non-existent issue', () => {
+      expect(tracker.acquireProcessingLock(999, 'corr-1')).toBe(false);
+    });
+  });
+});
