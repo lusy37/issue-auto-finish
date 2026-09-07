@@ -5,6 +5,9 @@ import { parse as parseEnv } from "dotenv";
 import { resolveConfigFilePath, type Config } from "../../config.js";
 import { envSchema, extractEnvSubset } from "../../config-schema.js";
 import { findExecutable, runProcess } from "../../utils/process.js";
+import { createCodexClient } from "../../ai-runner/CodexRunner.js";
+import { createAIRunner, type AIRunner } from "../../ai-runner/index.js";
+import { GitHubClient } from "../../clients/GitHubClient.js";
 const keys = [
   "GITHUB_API_URL",
   "GITHUB_TOKEN",
@@ -26,6 +29,51 @@ const keys = [
 ];
 export function createSetupRouter(config: Config) {
   const router = Router();
+  router.post("/api/settings/check-github", async (_req, res) => {
+    try {
+      const repository = await new GitHubClient(
+        config.github,
+      ).checkConnection();
+      res.json({
+        ok: true,
+        message: `已连接 ${repository.fullName}，默认分支：${repository.defaultBranch}`,
+      });
+    } catch (error) {
+      res.json({ ok: false, message: (error as Error).message });
+    }
+  });
+  let checkingConnection = false;
+  router.post("/api/settings/check-connection", async (_req, res) => {
+    if (checkingConnection) {
+      res.status(409).json({ error: "正在检查连接，请稍候" });
+      return;
+    }
+    checkingConnection = true;
+    let runner: AIRunner | undefined;
+    try {
+      runner = createAIRunner(config.ai);
+      res.once("close", () => runner?.killAll());
+      const result = await runner.run({
+        prompt: "这是连接检查。不要调用工具，只回复 OK。",
+        workDir: config.project.workDir,
+        mode: "plan",
+        timeoutMs: 30000,
+      });
+      const ok = result.success && result.output.trim().length > 0;
+      res.json({
+        ok,
+        message: ok
+          ? "Codex 已响应，当前模型连接可用"
+          : result.errorMessage ||
+            "Codex 未返回有效结果，请检查登录、网络和模型配置",
+      });
+    } catch (error) {
+      res.json({ ok: false, message: (error as Error).message });
+    } finally {
+      runner?.killAll();
+      checkingConnection = false;
+    }
+  });
   router.get("/api/settings", (_req, res) => {
     const file = resolveConfigFilePath();
     const values = fs.existsSync(file) ? parseEnv(fs.readFileSync(file)) : {};
@@ -130,6 +178,12 @@ export function createSetupRouter(config: Config) {
         }
       }),
     );
+    try {
+      createCodexClient(config.ai.binary);
+      checks.push({ name: "Codex SDK", ok: true, message: "执行程序已就绪；请用连接检查验证登录和模型" });
+    } catch (error) {
+      checks.push({ name: "Codex SDK", ok: false, message: (error as Error).message });
+    }
     res.json({ checks });
   });
   return router;

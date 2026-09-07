@@ -39,7 +39,13 @@ async function check() {
     await json<{ checks: typeof checks.value }>("/api/settings/check")
   ).checks;
 }
-
+async function checkConnection() {
+  const result = await json<{ ok: boolean; message: string }>(
+    "/api/settings/check-connection",
+    "POST",
+  );
+  message.value = (result.ok ? "✓ " : "✗ ") + result.message;
+}
 onMounted(() => run(load));
 </script>
 <template>
@@ -59,7 +65,23 @@ onMounted(() => run(load));
       ><button :disabled="busy">保存配置</button>
     </form>
     <button :disabled="busy" @click="run(check)">检查本机依赖</button>
-
+    <button
+      :disabled="busy"
+      @click="
+        run(async () => {
+          const result = await json<{ ok: boolean; message: string }>(
+            '/api/settings/check-github',
+            'POST',
+          );
+          message = result.message;
+        })
+      "
+    >
+      检查 GitHub 仓库连接
+    </button>
+    <button :disabled="busy" @click="run(checkConnection)">
+      检查 Codex 连接（实际调用）
+    </button>
     <p v-if="error" role="alert" class="mini-error">{{ error }}</p>
     <p role="status">{{ message }}</p>
     <ul>

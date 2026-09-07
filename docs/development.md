@@ -22,4 +22,5 @@ c1dc752 feat(config): 实现配置和环境检查
 5b8a8df feat(web): 搭建工作台框架与设置页
 f5d3a6b feat(github): 接入 Issue 查询与平台适配
 56b2c8e feat(task): 实现任务存储与工作台队列
+4686f3d feat(workspace): 实现工作区隔离与统一 Git 进程
 ```
