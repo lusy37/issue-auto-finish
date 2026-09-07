@@ -1,0 +1,105 @@
+import { BasePhase, PhaseContext } from './BasePhase.js';
+import { planModeVerifyPrompt, demandToPromptContext } from '../prompts/templates.js';
+import { VerifyReportParser } from '../verify/index.js';
+import type { VerifyReportResult } from '../verify/index.js';
+import type { PhaseCallbacks } from './PhaseCallbacks.js';
+import type { PhaseIntent } from '../orchestration/Intent.js';
+
+export interface VerifyRunResult {
+  verifyReport?: VerifyReportResult;
+}
+
+/**
+ * 验证阶段 — 执行验证后根据报告判定通过/失败。
+ *
+ * - 报告通过 → CompletedIntent
+ * - 报告未通过 → RequestRetryFromIntent('build')，让编排器走 verify-fix loop
+ *
+ * 旧版本通过 outcome.data.verifyReport 把领域语义透传给编排器，
+ * 新版本把 verify-fix 的判定逻辑内化到 VerifyPhase 自己。
+ */
+export class VerifyPhase extends BasePhase {
+  readonly phaseName = 'verify' as const;
+  private readonly reportParser = new VerifyReportParser();
+
+  getResultFiles() {
+    const filename = '02-verify-report.md';
+    return [{ filename, label: '验证报告' }];
+  }
+
+  async run(ctx: PhaseContext, callbacks?: PhaseCallbacks): Promise<PhaseIntent> {
+    const intent = await super.run(ctx, callbacks);
+    if (intent.kind !== 'completed') return intent;
+
+    const report = this.readVerifyReport();
+    if (!report) return intent;
+
+    const parsed = this.reportParser.parse(report);
+    this.applyTodolistCheck(parsed);
+
+    this.logger.info('Verify report parsed', {
+      passed: parsed.passed,
+      lintPassed: parsed.lintPassed,
+      buildPassed: parsed.buildPassed,
+      testPassed: parsed.testPassed,
+      todolistComplete: parsed.todolistComplete,
+      todolistStats: parsed.todolistStats,
+      failureCount: parsed.failureReasons.length,
+    });
+
+    if (parsed.passed) return intent;
+
+    return {
+      kind: 'requestRetryFrom',
+      targetPhaseId: 'build',
+      reason: 'verify-failed',
+      context: {
+        verifyFailures: parsed.failureReasons,
+        rawReport: parsed.rawReport,
+        todolistStats: parsed.todolistStats,
+      },
+      sessionId: intent.sessionId,
+    };
+  }
+
+  protected buildPrompt(ctx: PhaseContext): string {
+    const pc = demandToPromptContext(ctx.demand);
+    const promptCtx = {
+      issueTitle: pc.title,
+      issueDescription: pc.description,
+      issueIid: Number(pc.displayId),
+      workspace: ctx.workspace,
+    };
+    return planModeVerifyPrompt(promptCtx);
+  }
+
+  private applyTodolistCheck(parsed: VerifyReportResult): void {
+    if (!this.config.verifyFixLoop.todolistCheckEnabled) return;
+    if (parsed.todolistStats) return;
+
+    const planContent = this.readPlanFile();
+    if (!planContent) return;
+
+    const todoStats = this.reportParser.parseTodolistFromPlan(planContent);
+    if (todoStats.total === 0) return;
+
+    parsed.todolistStats = todoStats;
+    parsed.todolistComplete = todoStats.completed === todoStats.total;
+    if (!parsed.todolistComplete) {
+      parsed.failureReasons.push(
+        `Todolist 未全部完成(${todoStats.completed}/${todoStats.total})`,
+      );
+      parsed.passed = false;
+    }
+  }
+
+  private readVerifyReport(): string | null {
+    const files = this.getResultFiles();
+    if (files.length === 0) return null;
+    return this.plan.readFile(files[0].filename);
+  }
+
+  private readPlanFile(): string | null {
+    return this.plan.readFile('01-plan.md');
+  }
+}
