@@ -27,4 +27,5 @@ a1096e0 feat(ai): 接入 Codex SDK 与执行日志
 0b4e897 feat(plan): 实现计划持久化与审核历史
 08010e9 feat(plan): 实现只读规划与反馈上下文
 521eadc feat(build): 实现构建与项目上下文注入
+25b8c03 feat(verify): 实现验证与修复意图
 ```
