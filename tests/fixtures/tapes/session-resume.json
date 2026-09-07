@@ -1,0 +1,42 @@
+{
+  "metadata": {
+    "runner": "codex-sdk",
+    "phase": "build",
+    "model": "test-codex-model",
+    "recordedAt": "2025-06-01T14:00:00Z",
+    "promptHash": "session-resume",
+    "durationMs": 120000
+  },
+  "events": [
+    {
+      "type": "stream-event",
+      "event": { "type": "system", "content": { "subtype": "init", "session_id": "resume-session-1" }, "timestamp": "2025-06-01T14:00:00Z" },
+      "offsetMs": 100
+    },
+    {
+      "type": "stream-event",
+      "event": { "type": "assistant", "content": "Resuming from previous session. Continuing implementation.", "timestamp": "2025-06-01T14:00:01Z" },
+      "offsetMs": 1000
+    },
+    {
+      "type": "stream-event",
+      "event": { "type": "raw", "content": "Read(src/auth/AuthService.ts) — checking previous progress", "timestamp": "2025-06-01T14:00:05Z" },
+      "offsetMs": 5000
+    },
+    {
+      "type": "stream-event",
+      "event": { "type": "raw", "content": "Write(src/auth/AuthService.ts) — completing implementation", "timestamp": "2025-06-01T14:01:00Z" },
+      "offsetMs": 60000
+    },
+    {
+      "type": "stdout",
+      "data": "Implementation resumed and completed successfully.",
+      "offsetMs": 119000
+    },
+    {
+      "type": "exit",
+      "code": 0,
+      "offsetMs": 120000
+    }
+  ]
+}

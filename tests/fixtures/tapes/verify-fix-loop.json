@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "runner": "codex-sdk",
+    "phase": "verify",
+    "model": "test-codex-model",
+    "recordedAt": "2025-06-01T12:00:00Z",
+    "promptHash": "verify-fix",
+    "durationMs": 60000
+  },
+  "events": [
+    {
+      "type": "stream-event",
+      "event": { "type": "raw", "content": "Running tests...", "timestamp": "2025-06-01T12:00:02Z" },
+      "offsetMs": 2000
+    },
+    {
+      "type": "stream-event",
+      "event": { "type": "raw", "content": "FAIL tests/unit/order-service.test.ts", "timestamp": "2025-06-01T12:00:20Z" },
+      "offsetMs": 20000
+    },
+    {
+      "type": "file-write",
+      "path": ".claude-plan/issue-42/02-verify-report.md",
+      "content": "# 验证报告\n\n## 测试结果\n\n存在失败项。\n\n### 单元测试\n\n```\nFAIL tests/unit/order-service.test.ts\n  × calculateTotal with discount\n```\n\n## 待修复\n\n- [ ] 修复 calculateTotal 折扣边界条件\n- [ ] 添加空购物车校验\n",
+      "offsetMs": 30000
+    },
+    {
+      "type": "stdout",
+      "data": "Verification found 2 issues that need fixing.",
+      "offsetMs": 31000
+    },
+    {
+      "type": "exit",
+      "code": 0,
+      "offsetMs": 60000
+    }
+  ]
+}

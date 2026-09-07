@@ -1,0 +1,27 @@
+{
+  "metadata": {
+    "runner": "codex-sdk",
+    "phase": "plan",
+    "model": "test-codex-model",
+    "recordedAt": "2025-06-01T13:00:00Z",
+    "promptHash": "format-error",
+    "durationMs": 10000
+  },
+  "events": [
+    {
+      "type": "stdout",
+      "data": "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"err-session\"\n{\"type\":\"assistant\",\"message\":{\"role\":\"assis",
+      "offsetMs": 1000
+    },
+    {
+      "type": "stderr",
+      "data": "Connection reset by peer",
+      "offsetMs": 5000
+    },
+    {
+      "type": "exit",
+      "code": 1,
+      "offsetMs": 10000
+    }
+  ]
+}

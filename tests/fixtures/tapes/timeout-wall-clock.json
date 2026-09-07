@@ -1,0 +1,37 @@
+{
+  "metadata": {
+    "runner": "codex-sdk",
+    "phase": "build",
+    "model": "test-codex-model",
+    "recordedAt": "2025-06-01T11:00:00Z",
+    "promptHash": "timeout-scenario",
+    "durationMs": 1800000
+  },
+  "events": [
+    {
+      "type": "stream-event",
+      "event": { "type": "system", "content": { "subtype": "init" }, "timestamp": "2025-06-01T11:00:00Z" },
+      "offsetMs": 100
+    },
+    {
+      "type": "stream-event",
+      "event": { "type": "assistant", "content": "Starting implementation...", "timestamp": "2025-06-01T11:00:02Z" },
+      "offsetMs": 2000
+    },
+    {
+      "type": "stream-event",
+      "event": { "type": "raw", "content": "Write(src/service.ts) — creating service", "timestamp": "2025-06-01T11:10:00Z" },
+      "offsetMs": 600000
+    },
+    {
+      "type": "stderr",
+      "data": "AI runner timed out (wall-clock)",
+      "offsetMs": 1800000
+    },
+    {
+      "type": "exit",
+      "code": null,
+      "offsetMs": 1800000
+    }
+  ]
+}
