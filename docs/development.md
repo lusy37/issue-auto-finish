@@ -28,4 +28,5 @@ a1096e0 feat(ai): 接入 Codex SDK 与执行日志
 08010e9 feat(plan): 实现只读规划与反馈上下文
 521eadc feat(build): 实现构建与项目上下文注入
 25b8c03 feat(verify): 实现验证与修复意图
+fb21127 feat(uat): 实现真实浏览器验收与预览管理
 ```
