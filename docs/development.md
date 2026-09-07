@@ -23,4 +23,5 @@ c1dc752 feat(config): 实现配置和环境检查
 f5d3a6b feat(github): 接入 Issue 查询与平台适配
 56b2c8e feat(task): 实现任务存储与工作台队列
 4686f3d feat(workspace): 实现工作区隔离与统一 Git 进程
+a1096e0 feat(ai): 接入 Codex SDK 与执行日志
 ```
