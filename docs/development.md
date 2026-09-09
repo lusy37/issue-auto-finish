@@ -30,4 +30,5 @@ a1096e0 feat(ai): 接入 Codex SDK 与执行日志
 25b8c03 feat(verify): 实现验证与修复意图
 fb21127 feat(uat): 实现真实浏览器验收与预览管理
 fa5a509 feat(workbench): 接通主流程与实时审核工作台
+4cff134 test(recovery): 覆盖取消重试与会话恢复
 ```
