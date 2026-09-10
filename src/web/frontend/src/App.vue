@@ -15,11 +15,13 @@ import HeaderBar from '@/components/HeaderBar.vue';
 import StatsCards from '@/components/StatsCards.vue';
 import IssueTable from '@/components/IssueTable.vue';
 import BrowsePanel from '@/components/BrowsePanel.vue';
+import KnowledgePanel from '@/components/KnowledgePanel.vue';
+import DistillPanel from '@/components/DistillPanel.vue';
 import StartDialog from '@/components/StartDialog.vue';
 import DetailModal from '@/components/DetailModal.vue';
 import IssueDetailPage from '@/components/IssueDetailPage.vue';
 import DraftsPanel from '@/components/DraftsPanel.vue';
-import KnowledgePanel from '@/components/KnowledgePanel.vue';
+import AnalyticsPanel from '@/components/AnalyticsPanel.vue';
 import SettingsPanel from '@/components/SettingsPanel.vue';
 
 const systemStatus = ref<SystemStatus | null>(null);
@@ -175,8 +177,6 @@ onUnmounted(() => {
     <HeaderBar :connected="connected" :system-status="systemStatus" @open-settings="mainTab = 'settings'" />
 
     <main class="max-w-7xl mx-auto px-4 py-6">
-      <DraftsPanel v-if="mainTab==='drafts'" @created="switchToBrowse" />
-      <KnowledgePanel v-if="mainTab==='knowledge'" />
       <StatsCards
         :total="tasks.length"
         :active="activeCount"
@@ -186,8 +186,8 @@ onUnmounted(() => {
 
       <nav class="mb-4 flex flex-wrap gap-2 border-b pb-3" aria-label="工作台导航"><button v-for="tab in tabs" :key="tab.id" class="px-4 py-2 rounded" :class="mainTab===tab.id || (mainTab==='browse' && tab.id==='tracked') ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'" @click="mainTab=tab.id">{{tab.label}}</button></nav>
       <div v-if="mainTab==='tracked' || mainTab==='browse'" class="mb-4 flex gap-4"><button @click="mainTab='tracked'">已跟踪任务</button><button @click="switchToBrowse">浏览平台 Issue</button></div>
-
-
+      <DraftsPanel v-if="mainTab==='drafts'" @created="switchToBrowse" />
+      <AnalyticsPanel v-if="mainTab==='analytics'" />
       <!-- Tracked Issues Tab -->
       <IssueTable
         v-if="mainTab === 'tracked'"
@@ -211,10 +211,10 @@ onUnmounted(() => {
 
 
       <!-- Knowledge Tab -->
-
+      <KnowledgePanel v-if="mainTab === 'knowledge'" />
 
       <!-- Distill Tab -->
-
+      <DistillPanel v-if="mainTab === 'distill'" />
 
       <!-- System Use Case Tab -->
 
