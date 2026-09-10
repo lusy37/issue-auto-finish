@@ -19,6 +19,7 @@ import StartDialog from '@/components/StartDialog.vue';
 import DetailModal from '@/components/DetailModal.vue';
 import IssueDetailPage from '@/components/IssueDetailPage.vue';
 import DraftsPanel from '@/components/DraftsPanel.vue';
+import KnowledgePanel from '@/components/KnowledgePanel.vue';
 import SettingsPanel from '@/components/SettingsPanel.vue';
 
 const systemStatus = ref<SystemStatus | null>(null);
@@ -175,6 +176,7 @@ onUnmounted(() => {
 
     <main class="max-w-7xl mx-auto px-4 py-6">
       <DraftsPanel v-if="mainTab==='drafts'" @created="switchToBrowse" />
+      <KnowledgePanel v-if="mainTab==='knowledge'" />
       <StatsCards
         :total="tasks.length"
         :active="activeCount"

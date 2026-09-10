@@ -32,4 +32,5 @@ fb21127 feat(uat): 实现真实浏览器验收与预览管理
 fa5a509 feat(workbench): 接通主流程与实时审核工作台
 4cff134 test(recovery): 覆盖取消重试与会话恢复
 aceb87e test(delivery): 验证交付防重与失败恢复闭环
+51ba3a5 feat(demand): 接入需求拆分与草稿工作台
 ```
