@@ -18,6 +18,7 @@ import BrowsePanel from '@/components/BrowsePanel.vue';
 import StartDialog from '@/components/StartDialog.vue';
 import DetailModal from '@/components/DetailModal.vue';
 import IssueDetailPage from '@/components/IssueDetailPage.vue';
+import DraftsPanel from '@/components/DraftsPanel.vue';
 import SettingsPanel from '@/components/SettingsPanel.vue';
 
 const systemStatus = ref<SystemStatus | null>(null);
@@ -173,6 +174,7 @@ onUnmounted(() => {
     <HeaderBar :connected="connected" :system-status="systemStatus" @open-settings="mainTab = 'settings'" />
 
     <main class="max-w-7xl mx-auto px-4 py-6">
+      <DraftsPanel v-if="mainTab==='drafts'" @created="switchToBrowse" />
       <StatsCards
         :total="tasks.length"
         :active="activeCount"
