@@ -96,6 +96,8 @@ function buildPreviewInfo(number: number, orch: PipelineOrchestrator) {
 export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> {
   const { tracker, config: cfg, agentLogStore: logStore, orchestrator: orch, mainGit: git, github, supplementStore, poller, previewReaper, worktreeReaper } = deps;
   const router = Router();
+  // 在首次异步请求前占用编号，防止并发启动覆盖同一个任务。
+  const startingIssues = new Set<number>();
 
   function getLifecycleManager(pipelineMode?: string): ActionLifecycleManager {
     return createLifecycleManager(getPipelineDef(pipelineMode ?? 'plan-mode'));
@@ -448,40 +450,45 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     }
 
     const existing = tracker.get(body.issueIid);
-    if (existing) {
+    if (existing || startingIssues.has(body.issueIid)) {
       res.status(409).json({ error: `Issue #${body.issueIid} is already being tracked` });
       return;
     }
 
-    let demandSpec: DemandSpec;
-    try { demandSpec = githubIssueToDemandSpec(await github.getIssueDetail(body.issueIid)); }
-    catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
-
+    startingIssues.add(body.issueIid);
     try {
-      await github.addLabel(body.issueIid, 'auto-finish');
-    } catch (err) {
-      logger.warn('Failed to add auto-finish label', { error: (err as Error).message });
-    }
+      let demandSpec: DemandSpec;
+      try { demandSpec = githubIssueToDemandSpec(await github.getIssueDetail(body.issueIid)); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
 
-    const branchName = `${cfg.project.branchPrefix}-${body.issueIid}`;
-    const record = tracker.create({
-      state: IssueState.Pending,
-      branchName,
-      demandSpec,
-    });
+      try {
+        await github.addLabel(body.issueIid, 'auto-finish');
+      } catch (err) {
+        logger.warn('Failed to add auto-finish label', { error: (err as Error).message });
+      }
 
-    if (supplementStore && body.supplement) {
-      supplementStore.save(body.issueIid, {
-        requirements: String(body.supplement.requirements || ''),
-        acceptanceCriteria: String(body.supplement.acceptanceCriteria || ''),
-        scope: String(body.supplement.scope || ''),
-        constraints: String(body.supplement.constraints || ''),
-        references: String(body.supplement.references || ''),
-        freeText: String(body.supplement.freeText || ''),
+      const branchName = `${cfg.project.branchPrefix}-${body.issueIid}`;
+      const record = tracker.create({
+        state: IssueState.Pending,
+        branchName,
+        demandSpec,
       });
-    }
 
-    res.json({ success: true, record });
+      if (supplementStore && body.supplement) {
+        supplementStore.save(body.issueIid, {
+          requirements: String(body.supplement.requirements || ''),
+          acceptanceCriteria: String(body.supplement.acceptanceCriteria || ''),
+          scope: String(body.supplement.scope || ''),
+          constraints: String(body.supplement.constraints || ''),
+          references: String(body.supplement.references || ''),
+          freeText: String(body.supplement.freeText || ''),
+        });
+      }
+
+      res.json({ success: true, record });
+    } finally {
+      startingIssues.delete(body.issueIid);
+    }
   });
 
   // --- Review Gate endpoints ---
