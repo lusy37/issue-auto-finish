@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import express from "express";
-import { execFileSync } from "node:child_process";
+import { runProcess } from "../src/utils/process.js";
 import type { AIRunner, RunOptions } from "../src/ai-runner/AIRunner.js";
 import { registerAIRunner } from "../src/ai-runner/AIRunnerRegistry.js";
 import type {
@@ -16,18 +16,17 @@ const root = path.resolve(".iaf-mini/demo-github");
 const repo = path.join(root, "repo"),
   origin = path.join(root, "origin.git");
 fs.mkdirSync(root, { recursive: true });
-const git = (cwd: string, ...args: string[]) =>
-  execFileSync("git", args, {
-    cwd,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+const git = async (cwd: string, ...args: string[]) => {
+  const result = await runProcess("git", args, { cwd, timeoutMs: 60000 });
+  if (result.code !== 0) throw new Error(result.stderr || result.stdout || "演示仓库 Git 命令失败");
+  return result.stdout;
+};
 if (!fs.existsSync(path.join(repo, ".git"))) {
   fs.mkdirSync(repo, { recursive: true });
-  if (!fs.existsSync(origin)) git(root, "init", "--bare", origin);
-  git(repo, "init", "-b", "main");
-  git(repo, "config", "user.name", "Mini Demo");
-  git(repo, "config", "user.email", "demo@example.test");
+  if (!fs.existsSync(origin)) await git(root, "init", "--bare", origin);
+  await git(repo, "init", "-b", "main");
+  await git(repo, "config", "user.name", "Mini Demo");
+  await git(repo, "config", "user.email", "demo@example.test");
   fs.writeFileSync(path.join(repo, "README.md"), "# 本地演示项目\n");
   fs.writeFileSync(
     path.join(repo, ".gitignore"),
@@ -46,10 +45,10 @@ if (!fs.existsSync(path.join(repo, ".git"))) {
     path.join(repo, "acceptance.spec.ts"),
     "import {test,expect} from '@playwright/test';test('浏览器验收页面',async({page})=>{await page.goto('/');await expect(page.getByRole('heading')).toHaveText('修复完成');});\n",
   );
-  git(repo, "add", ".");
-  git(repo, "commit", "-m", "初始化演示项目");
-  git(repo, "remote", "add", "origin", origin);
-  git(repo, "push", "-u", "origin", "main");
+  await git(repo, "add", ".");
+  await git(repo, "commit", "-m", "初始化演示项目");
+  await git(repo, "remote", "add", "origin", origin);
+  await git(repo, "push", "-u", "origin", "main");
 }
 
 const platformPort = Number(process.env.IAF_DEMO_PLATFORM_PORT || 38080);
