@@ -48,7 +48,6 @@ const currentVerifyFixLoop = computed(() => {
   return number != null ? logs.getVerifyFixLoop(number) : undefined;
 });
 
-
 async function openIssueByIid(number: number) {
   try {
     const record = await api.fetchIssueDetail(number);
@@ -72,15 +71,6 @@ const { connected } = useSSE((eventName, rawPayload) => {
     if (d?.issueIid && detail.selectedIssue.value && getIssueIid(detail.selectedIssue.value) === d.issueIid) {
       detail.refreshDetail();
     }
-  }
-
-
-
-  // Distill events — auto-refresh distill panel if currently viewing it
-  if (eventName.startsWith('distill:')) {
-    // The DistillPanel handles its own refresh on mount; SSE events
-    // are a hint that data has changed. Emit no-op to let Vue reactivity
-    // handle it when the user is on the distill tab.
   }
 
   if (eventName === 'agent:output') {
@@ -202,25 +192,11 @@ onUnmounted(() => {
         @cancel="(number) => detail.doCancelIssue(number, refreshIssues)"
       />
 
-
-
-
-
-
-      <!-- Chat Tab -->
-
-
       <!-- Knowledge Tab -->
       <KnowledgePanel v-if="mainTab === 'knowledge'" />
 
       <!-- Distill Tab -->
       <DistillPanel v-if="mainTab === 'distill'" />
-
-      <!-- System Use Case Tab -->
-
-
-
-
 
       <!-- Settings Tab -->
       <SettingsPanel v-if="mainTab === 'settings'" :system-status="systemStatus" />

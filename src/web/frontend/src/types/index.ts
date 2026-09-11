@@ -1,9 +1,5 @@
-export type IssueState =
-  | 'pending' | 'skipped' | 'branch_created'
-  | 'phase_running' | 'phase_done'
-  | 'phase_waiting' | 'phase_approved'
-  | 'resolving_conflict'
-  | 'completed' | 'failed' | 'paused' | 'delivering' | 'cancelled';
+import type {IssueState} from '../../../../shared/workbench';
+export type {IssueState} from '../../../../shared/workbench';
 
 export type PipelineMode = string;
 

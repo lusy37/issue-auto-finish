@@ -1,3 +1,5 @@
+import type {DraftBatch} from '../shared/workbench.js';
+export type {TaskDraft,DraftBatch} from '../shared/workbench.js';
 import { replaceFileSync } from "../utils/atomicFile.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -12,22 +14,8 @@ const taskSchema = z.object({
   description: z.string().trim().min(1).max(10000),
   acceptanceCriteria: z.string().trim().min(1).max(5000),
 });
-export interface TaskDraft {
-  id: string;
-  title: string;
-  description: string;
-  acceptanceCriteria: string;
-  status: "draft" | "creating" | "created" | "failed" | "unknown";
-  issueIid?: number;
-  issueUrl?: string;
-  error?: string;
-}
-export interface DraftBatch {
-  id: string;
-  input: string;
-  createdAt: string;
-  tasks: TaskDraft[];
-}
+
+
 /** 草稿只负责确认和创建 Issue，不包含第二套任务执行引擎。 */
 export class DraftService {
   private mutex = new AsyncMutex();

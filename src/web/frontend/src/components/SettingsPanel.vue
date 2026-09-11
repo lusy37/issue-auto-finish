@@ -52,7 +52,7 @@ onMounted(() => run(load));
   <section class="mini-panel">
     <h2>设置</h2>
     <p>
-      单用户、单仓库，执行器使用Codex SDK。所有配置写入裁剪版数据目录。
+      单用户、单仓库，执行器使用Codex SDK。配置保存在当前项目的独立数据目录。
     </p>
     <form @submit.prevent="run(save)">
       <label v-for="(label, key) in labels" :key="key" class="block my-3"

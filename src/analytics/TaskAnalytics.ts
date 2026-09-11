@@ -1,3 +1,4 @@
+import type {TaskSummary} from '../shared/workbench.js';
 import type { IssueRecord } from "../tracker/IssueState.js";
 import { IssueState } from "../tracker/IssueState.js";
 /** 统计读取持久化记录，不依赖进程内计数器。 */
@@ -5,7 +6,7 @@ export function summarizeTasks(
   records: IssueRecord[],
   range: "7d" | "30d" | "all",
   now = Date.now(),
-) {
+): TaskSummary {
   const cutoff =
     range === "all" ? 0 : now - (range === "7d" ? 7 : 30) * 86400000;
   const tasks = records.filter((r) => Date.parse(r.createdAt) >= cutoff);

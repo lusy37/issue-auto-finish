@@ -1,22 +1,12 @@
+import type {UatResult} from '../shared/workbench.js';
+export type {UatResult} from '../shared/workbench.js';
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { runProcess } from "../utils/process.js";
 import { resolveDataDir, ensureDir } from "../paths.js";
-export interface UatResult {
-  runId: string;
-  issueIid: number;
-  passed: boolean;
-  passedTests: number;
-  failedTests: number;
-  skippedTests: number;
-  screenshots?: string[];
-  reportAvailable?: boolean;
-  startedAt: string;
-  finishedAt: string;
-  error?: string;
-}
+
 const active = new Map<number, AbortController>();
 export function cancelUat(issueIid?: number): void {
   for (const [number, controller] of active)
