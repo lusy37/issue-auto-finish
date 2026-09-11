@@ -1,0 +1,21 @@
+name: 工程回归
+on:
+  push:
+  pull_request:
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run e2e:install
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run web:build
+      - run: npm test -- --maxWorkers=2
+      - run: npm run test:e2e
+      - run: npm run test:windows

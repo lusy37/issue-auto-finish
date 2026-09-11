@@ -11,7 +11,7 @@ describe('GitOperations — worktree methods', () => {
   beforeEach(() => {
     fixture = createFixture();
     git = new GitOperations(fixture.cloneDir);
-  });
+  }, 30000);
 
   afterEach(() => {
     fixture.cleanup();

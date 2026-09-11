@@ -9,6 +9,8 @@ export default defineConfig({
   },
   test: {
     include: ['tests/**/*.test.ts'],
+    // 限制真实 Git 和浏览器回归的并行度，避免耗尽本机资源。
+    maxWorkers: 2,
     testTimeout: 30000,
     typecheck: {
       enabled: false,

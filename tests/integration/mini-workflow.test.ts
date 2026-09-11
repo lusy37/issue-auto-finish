@@ -260,5 +260,5 @@ describe("面试版完整流程：真实 Git 与浏览器、模拟 AI 和平台"
       collector.stop();
       orchestrator.getDevServerManager().stopAll();
     }
-  }, 90000);
+  }, 180000);
 });

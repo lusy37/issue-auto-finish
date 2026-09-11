@@ -36,4 +36,5 @@ aceb87e test(delivery): 验证交付防重与失败恢复闭环
 87a5422 feat(knowledge): 完善知识规则与经验版本管理
 ec414b1 feat(analytics): 完成蒸馏统计与六入口演示
 334fafc refactor: 精简共享契约和无调用的过渡代码
+47cc277 fix(task): 阻止同一 Issue 的并发重复启动
 ```

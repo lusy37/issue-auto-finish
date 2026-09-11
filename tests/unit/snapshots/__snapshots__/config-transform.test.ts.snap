@@ -1,0 +1,89 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`裁剪版配置 > 只有公开执行器及当前模块 1`] = `
+{
+  "ai": {
+    "binary": "",
+    "idleTimeoutMs": 1200000,
+    "mode": "codex",
+    "model": "",
+    "phaseTimeoutMs": 2700000,
+    "timeoutExtensionMs": 600000,
+    "timeoutGraceMs": 60000,
+    "timeoutMaxExtensions": 3,
+  },
+  "distill": {
+    "enabled": true,
+    "memoryConfidenceThreshold": 0.7,
+    "minDiariesForDistill": 3,
+  },
+  "e2e": {
+    "backendPortBase": 4000,
+    "baseUrl": "http://127.0.0.1:9000",
+    "configFile": "playwright.config.ts",
+    "enabled": true,
+    "frontendPortBase": 9000,
+    "timeoutMs": 300000,
+  },
+  "github": {
+    "apiUrl": "https://platform.example.test",
+    "repository": "demo/project",
+    "token": "test-token",
+  },
+  "issueNoteSync": {
+    "enabled": true,
+    "webBaseUrl": "http://127.0.0.1:3000",
+  },
+  "knowledge": {
+    "enabled": true,
+  },
+  "locale": "zh-CN",
+  "pipeline": {
+    "mode": "auto",
+  },
+  "poll": {
+    "discoveryIntervalMs": 60000,
+    "driveIntervalMs": 15000,
+    "maxConcurrent": 1,
+    "maxRetries": 3,
+  },
+  "preview": {
+    "backendCommand": "npm run dev:backend",
+    "enabled": true,
+    "frontendCommand": "npm run dev:frontend -- --port {port}",
+    "frontendDir": ".",
+    "host": "127.0.0.1",
+    "keepAfterComplete": false,
+    "reapIntervalMs": 300000,
+    "ttlMs": 86400000,
+  },
+  "project": {
+    "baseBranch": "main",
+    "branchPrefix": "feat/issue",
+    "gitRootDir": "C:/demo/repo",
+    "projectSubDir": "",
+    "workDir": "C:/demo/repo",
+    "worktreeBaseDir": "<mini>/worktrees",
+  },
+  "review": {
+    "autoApproveLabels": [],
+    "enabled": true,
+  },
+  "verifyFixLoop": {
+    "enabled": true,
+    "maxIterations": 3,
+    "todolistCheckEnabled": true,
+  },
+  "web": {
+    "enabled": true,
+    "frontendDistDir": "<frontend>/dist",
+    "host": "127.0.0.1",
+    "port": 3000,
+  },
+  "worktree": {
+    "cleanupEnabled": true,
+    "cleanupIntervalMs": 3600000,
+    "retentionMs": 604800000,
+  },
+}
+`;

@@ -1,0 +1,257 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Pipeline Definitions > PLAN_MODE_PIPELINE artifacts 1`] = `
+[
+  {
+    "artifacts": [
+      {
+        "editable": true,
+        "filename": "01-plan.md",
+        "label": "实施计划",
+      },
+    ],
+    "name": "plan",
+  },
+  {
+    "artifacts": [
+      {
+        "editable": false,
+        "filename": "review-feedback.md",
+        "label": "审核反馈",
+      },
+      {
+        "editable": false,
+        "filename": "review-history.json",
+        "label": "审核历史",
+      },
+    ],
+    "name": "review",
+  },
+  {
+    "artifacts": [
+      {
+        "editable": false,
+        "filename": "02-verify-report.md",
+        "label": "验证报告",
+      },
+    ],
+    "name": "verify",
+  },
+]
+`;
+
+exports[`Pipeline Definitions > PLAN_MODE_PIPELINE definition (snapshot) 1`] = `
+{
+  "mode": "plan-mode",
+  "phases": [
+    {
+      "artifacts": [
+        {
+          "editable": true,
+          "filename": "01-plan.md",
+          "label": "实施计划",
+        },
+      ],
+      "doneState": "phase_done",
+      "kind": "ai",
+      "label": "规划",
+      "name": "plan",
+      "startState": "phase_running",
+    },
+    {
+      "approvedState": "phase_approved",
+      "artifacts": [
+        {
+          "editable": false,
+          "filename": "review-feedback.md",
+          "label": "审核反馈",
+        },
+        {
+          "editable": false,
+          "filename": "review-history.json",
+          "label": "审核历史",
+        },
+      ],
+      "doneState": "phase_approved",
+      "kind": "gate",
+      "label": "审核",
+      "name": "review",
+      "retryable": false,
+      "startState": "phase_waiting",
+    },
+    {
+      "deploysPreview": true,
+      "doneState": "phase_done",
+      "kind": "ai",
+      "label": "实施",
+      "name": "build",
+      "startState": "phase_running",
+    },
+    {
+      "artifacts": [
+        {
+          "editable": false,
+          "filename": "02-verify-report.md",
+          "label": "验证报告",
+        },
+      ],
+      "doneState": "completed",
+      "kind": "ai",
+      "label": "验证",
+      "name": "verify",
+      "startState": "phase_running",
+    },
+  ],
+}
+`;
+
+exports[`Pipeline Definitions > PLAN_MODE_PIPELINE phase kinds 1`] = `
+[
+  {
+    "kind": "ai",
+    "name": "plan",
+  },
+  {
+    "kind": "gate",
+    "name": "review",
+  },
+  {
+    "kind": "ai",
+    "name": "build",
+  },
+  {
+    "kind": "ai",
+    "name": "verify",
+  },
+]
+`;
+
+exports[`Pipeline Definitions > PLAN_MODE_PIPELINE phase names 1`] = `
+[
+  "plan",
+  "review",
+  "build",
+  "verify",
+]
+`;
+
+exports[`Pipeline Definitions > getPhaseLabel returns localized labels 1`] = `
+[
+  {
+    "label": "规划",
+    "name": "plan",
+  },
+  {
+    "label": "审核",
+    "name": "review",
+  },
+  {
+    "label": "实施",
+    "name": "build",
+  },
+  {
+    "label": "验证",
+    "name": "verify",
+  },
+]
+`;
+
+exports[`Pipeline Definitions > getPipelineDef returns plan-mode def 1`] = `
+{
+  "mode": "plan-mode",
+  "phases": [
+    {
+      "artifacts": [
+        {
+          "editable": true,
+          "filename": "01-plan.md",
+          "label": "实施计划",
+        },
+      ],
+      "doneState": "phase_done",
+      "kind": "ai",
+      "label": "规划",
+      "name": "plan",
+      "startState": "phase_running",
+    },
+    {
+      "approvedState": "phase_approved",
+      "artifacts": [
+        {
+          "editable": false,
+          "filename": "review-feedback.md",
+          "label": "审核反馈",
+        },
+        {
+          "editable": false,
+          "filename": "review-history.json",
+          "label": "审核历史",
+        },
+      ],
+      "doneState": "phase_approved",
+      "kind": "gate",
+      "label": "审核",
+      "name": "review",
+      "retryable": false,
+      "startState": "phase_waiting",
+    },
+    {
+      "deploysPreview": true,
+      "doneState": "phase_done",
+      "kind": "ai",
+      "label": "实施",
+      "name": "build",
+      "startState": "phase_running",
+    },
+    {
+      "artifacts": [
+        {
+          "editable": false,
+          "filename": "02-verify-report.md",
+          "label": "验证报告",
+        },
+      ],
+      "doneState": "completed",
+      "kind": "ai",
+      "label": "验证",
+      "name": "verify",
+      "startState": "phase_running",
+    },
+  ],
+}
+`;
+
+exports[`Pipeline Definitions > getPipelineDef throws for unknown mode 1`] = `[PipelineNotFoundError: Unknown pipeline mode: nonexistent]`;
+
+exports[`Pipeline Definitions > getPlanFileLabel returns localized labels 1`] = `
+[
+  {
+    "filename": "01-plan.md",
+    "label": "实施计划",
+  },
+  {
+    "filename": "02-verify-report.md",
+    "label": "验证报告",
+  },
+  {
+    "filename": "review-feedback.md",
+    "label": "审核反馈",
+  },
+  {
+    "filename": "review-history.json",
+    "label": "审核历史",
+  },
+]
+`;
+
+exports[`Pipeline Definitions > getRegisteredModes includes plan-mode 1`] = `
+[
+  "plan-mode",
+]
+`;
+
+exports[`Pipeline Definitions > resolvePipelineMode defaults to plan-mode 1`] = `"plan-mode"`;
+
+exports[`Pipeline Definitions > resolvePipelineMode with explicit plan-mode 1`] = `"plan-mode"`;
+
+exports[`Pipeline Definitions > resolvePipelineMode with unknown explicit mode falls back 1`] = `"plan-mode"`;

@@ -1,0 +1,85 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`GitHubAdapter snapshots > converts basic issue without supplement 1`] = `
+{
+  "createdAt": "2026-03-01T08:00:00.000Z",
+  "demandId": "gh-42",
+  "description": "需要添加注册表单和后端 API",
+  "sourceRef": {
+    "displayId": "42",
+    "externalId": "42",
+    "source": "github-issue",
+  },
+  "supplement": undefined,
+  "title": "实现用户注册功能",
+}
+`;
+
+exports[`GitHubAdapter snapshots > converts issue with full supplement 1`] = `
+{
+  "createdAt": "2026-03-01T08:00:00.000Z",
+  "demandId": "gh-42",
+  "description": "需要添加注册表单和后端 API",
+  "sourceRef": {
+    "displayId": "42",
+    "externalId": "42",
+    "source": "github-issue",
+  },
+  "supplement": {
+    "acceptanceCriteria": "注册后自动登录",
+    "constraints": "不使用第三方认证服务",
+    "freeText": "注意安全性",
+    "references": "RFC 7519 JWT 规范",
+    "requirements": "需要支持邮箱和手机号注册",
+    "scope": "仅涉及 /auth 路由",
+  },
+  "title": "实现用户注册功能",
+}
+`;
+
+exports[`GitHubAdapter snapshots > converts issue with null supplement 1`] = `
+{
+  "createdAt": "2026-03-01T08:00:00.000Z",
+  "demandId": "gh-42",
+  "description": "需要添加注册表单和后端 API",
+  "sourceRef": {
+    "displayId": "42",
+    "externalId": "42",
+    "source": "github-issue",
+  },
+  "supplement": undefined,
+  "title": "实现用户注册功能",
+}
+`;
+
+exports[`GitHubAdapter snapshots > converts issue with partial supplement (empty strings filtered) 1`] = `
+{
+  "createdAt": "2026-03-01T08:00:00.000Z",
+  "demandId": "gh-42",
+  "description": "需要添加注册表单和后端 API",
+  "sourceRef": {
+    "displayId": "42",
+    "externalId": "42",
+    "source": "github-issue",
+  },
+  "supplement": {
+    "requirements": "基本需求",
+  },
+  "title": "实现用户注册功能",
+}
+`;
+
+exports[`GitHubAdapter snapshots > handles issue with empty description 1`] = `
+{
+  "createdAt": "2026-03-01T08:00:00.000Z",
+  "demandId": "gh-42",
+  "description": "",
+  "sourceRef": {
+    "displayId": "42",
+    "externalId": "42",
+    "source": "github-issue",
+  },
+  "supplement": undefined,
+  "title": "实现用户注册功能",
+}
+`;

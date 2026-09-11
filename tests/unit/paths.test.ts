@@ -5,7 +5,6 @@ import fs from 'node:fs';
 import {
   resolveDataDir,
   resolveLogsDir,
-  isNpmPackageMode,
   ensureDir,
   getGlobalDir,
 } from '../../src/paths.js';

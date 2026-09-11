@@ -1,0 +1,62 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Back-to-Back: tracker state update sequences > classic issue lifecycle state sequence 1`] = `
+[
+  "pending",
+  "branch_created",
+  "phase_running",
+  "phase_done",
+  undefined,
+  "phase_approved",
+  "phase_running",
+  "phase_done",
+  "phase_running",
+  "phase_done",
+  "completed",
+]
+`;
+
+exports[`Back-to-Back: tracker state update sequences > failure and retry state sequence 1`] = `
+[
+  "pending",
+  "branch_created",
+  "phase_running",
+  "failed",
+  "failedAt:phase_running",
+  "phase_running",
+  "attempts:1",
+]
+`;
+
+exports[`Back-to-Back: tracker state update sequences > github API call sequence for failure path 1`] = `[]`;
+
+exports[`Back-to-Back: tracker state update sequences > github API call sequence for label updates 1`] = `[]`;
+
+exports[`Back-to-Back: tracker state update sequences > pipeline lifecycle manager phase order 1`] = `
+[
+  {
+    "doneState": "phase_done",
+    "kind": "ai",
+    "name": "plan",
+    "startState": "phase_running",
+  },
+  {
+    "doneState": "phase_approved",
+    "kind": "gate",
+    "name": "review",
+    "startState": "phase_waiting",
+  },
+  {
+    "doneState": "phase_done",
+    "kind": "ai",
+    "name": "build",
+    "startState": "phase_running",
+  },
+  {
+    "doneState": "completed",
+    "kind": "ai",
+    "name": "verify",
+    "startState": "phase_running",
+  },
+]
+`;

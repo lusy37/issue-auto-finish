@@ -1,0 +1,31 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`PullRequestHelper snapshots > generatePRDescription > basic description without plan dir 1`] = `
+"## 关联 Issue
+
+- Issue: #42
+- 标题: 实现用户认证功能
+- 分支: \`feat/issue-42\`
+
+## Issue 描述
+
+需要添加 JWT 认证到 API 端点
+
+---
+*此 PR 由 Issue Auto-Finish 系统自动创建*"
+`;
+
+exports[`PullRequestHelper snapshots > generatePRDescription > description with empty issue description 1`] = `
+"## 关联 Issue
+
+- Issue: #100
+- 标题: Quick Fix
+- 分支: \`feat/issue-100\`
+
+## Issue 描述
+
+（无描述）
+
+---
+*此 PR 由 Issue Auto-Finish 系统自动创建*"
+`;
