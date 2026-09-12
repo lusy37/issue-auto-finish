@@ -19,3 +19,17 @@
 进程复验及构建日志保存于 `.iaf-mini/dependency-migration/`。本次验收范围是 Windows；Linux/macOS 未验证。
 
 依据：[Execa 进程终止](https://github.com/sindresorhus/execa/blob/v10.0.1/docs/termination.md)、[Execa 接口](https://github.com/sindresorhus/execa/blob/v10.0.1/docs/api.md)、[which](https://github.com/npm/node-which)。
+
+## 原子 JSON 写入
+
+引入 atomically 2.1.1，以 writeJsonAtomicSync 统一 BaseTracker、DraftService、VersionStore、DistillScheduler 和演示平台的写入。数据格式保持原样，继续同步保存；移除调用方的临时文件创建、写入后重命名，以及手写的占用重试循环。
+
+重试窗口显式设为 350 毫秒（库按单次文件操作计时），保留库默认 fsync。循环引用及 undefined 在创建临时文件之前失败。atomically 的失败清理可能异步完成，因此统一入口保留一段同步清理适配：失败时尝试删除本次临时文件，再上抛原始错误；清理失败不覆盖原始诊断。
+
+BaseTracker 保留启动清理，同时识别当前存储的新临时文件命名和旧版本的命名。业务错误仍附带 code、errno、syscall、path 和 cause。本次迁移只统一上述已有原子写入路径，不把文件写入当作跨文件事务，也不改变业务锁。
+
+2026-09-12 Windows 验证：类型检查、前后端构建通过；存储相关 66 项通过，完整回归 97 个文件、937 项通过。故障测试在独立 Node 进程中注入真实库调用的文件系统错误，覆盖 EPERM/EACCES/EBUSY 重试、持续占用的有限重试、EIO、部分写入后的 EDQUOT、旧数据保留和临时文件清理。Tracker 另验证错误包装与重启读取上次成功状态。
+
+源码统计以迁移前 c5a83ba 为基线：进程工具、预览及开发脚本净减少 106 行，原子写入工具与相关调用净减少 32 行，合计净减少 138 行。统计采用 Git 的新增/删除行差额，包含源码注释和空行，不包括依赖锁文件、测试与文档。
+
+依据：[atomically 接口与选项](https://github.com/fabiospampinato/atomically#usage)。

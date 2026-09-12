@@ -1,9 +1,9 @@
-import { replaceFileSync } from "../utils/atomicFile.js";
+import { writeJsonAtomicSync } from "../utils/atomicFile.js";
 /**
  * VersionStore — 知识条目版本历史管理。
  *
  * 为 memory 和 agent-rule 条目保留版本历史，支持知识退役追溯。
- * 简单 JSON 文件持久化到 data/distill/versions.json。
+ * JSON 文件持久化到显式配置目录下的 versions.json。
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -63,15 +63,6 @@ export class VersionStore {
   }
 
   private save(): void {
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    const tmpPath = path.join(
-      dir,
-      `.versions-${process.pid}-${Date.now()}.tmp`,
-    );
-    fs.writeFileSync(tmpPath, JSON.stringify(this.data, null, 2), "utf-8");
-    replaceFileSync(tmpPath, this.filePath);
+    writeJsonAtomicSync(this.filePath, this.data);
   }
 }

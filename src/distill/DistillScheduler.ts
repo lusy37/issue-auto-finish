@@ -1,4 +1,4 @@
-import { replaceFileSync } from "../utils/atomicFile.js";
+import { writeJsonAtomicSync } from "../utils/atomicFile.js";
 import type { DiaryStore } from "./DiaryStore.js";
 import type { MemoryDistiller } from "./MemoryDistiller.js";
 import type { AgentRuleDistiller } from "./AgentRuleDistiller.js";
@@ -47,13 +47,7 @@ export class DistillScheduler {
     } else this.runs = [];
   }
   private save() {
-    fs.mkdirSync(path.dirname(this.file), { recursive: true });
-    const tmp = this.file + ".tmp";
-    fs.writeFileSync(
-      tmp,
-      JSON.stringify({ format: "iaf-mini/v1", runs: this.runs }, null, 2),
-    );
-    replaceFileSync(tmp, this.file);
+    writeJsonAtomicSync(this.file, { format: "iaf-mini/v1", runs: this.runs });
   }
   async runDistill(options?: { force?: boolean }) {
     if (this.running) throw new Error("已有蒸馏任务正在执行");

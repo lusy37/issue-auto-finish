@@ -1,20 +1,22 @@
 import fs from "node:fs";
-const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
-/** Windows 的索引器可能短暂占用 JSON 文件；有限重试原子替换，绝不先删除旧文件。 */
-export function replaceFileSync(temporary: string, destination: string): void {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      fs.renameSync(temporary, destination);
-      return;
-    } catch (error) {
-      if (
-        attempt >= 5 ||
-        !["EPERM", "EACCES", "EBUSY"].includes(
-          (error as NodeJS.ErrnoException).code ?? "",
-        )
-      )
-        throw error;
-      Atomics.wait(waitBuffer, 0, 0, 10 * 2 ** attempt);
+import { writeFileSync } from "atomically";
+
+/** 同步持久化 JSON，成功落盘后调用方才推进状态；重试和原子替换由库完成。 */
+export function writeJsonAtomicSync(destination: string, data: unknown): void {
+  const content = JSON.stringify(data, null, 2);
+  if (content === undefined) throw new TypeError("无法保存未定义的 JSON 数据");
+  let temporary: string | undefined;
+  try {
+    writeFileSync(destination, content, {
+      encoding: "utf8",
+      timeout: 350,
+      tmpCreated: file => { temporary = file; },
+    });
+  } catch (error) {
+    // 库的失败清理可能异步完成；保持返回前尝试清理、且不覆盖原始异常的约定。
+    if (temporary) {
+      try { fs.rmSync(temporary, { force: true }); } catch { /* 仍被占用时由后续启动清理 */ }
     }
+    throw error;
   }
 }

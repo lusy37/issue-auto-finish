@@ -1,6 +1,6 @@
 import type {DraftBatch} from '../shared/workbench.js';
 export type {TaskDraft,DraftBatch} from '../shared/workbench.js';
-import { replaceFileSync } from "../utils/atomicFile.js";
+import { writeJsonAtomicSync } from "../utils/atomicFile.js";
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -33,9 +33,7 @@ export class DraftService {
     return path.join(this.directory, id + ".json");
   }
   private save(batch: DraftBatch) {
-    const file = this.file(batch.id);
-    fs.writeFileSync(file + ".tmp", JSON.stringify(batch, null, 2));
-    replaceFileSync(file + ".tmp", file);
+    writeJsonAtomicSync(this.file(batch.id), batch);
   }
   list(): DraftBatch[] {
     return fs

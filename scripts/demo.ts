@@ -1,3 +1,4 @@
+import { writeJsonAtomicSync } from "../src/utils/atomicFile.js";
 import fs from "node:fs";
 import path from "node:path";
 import express from "express";
@@ -64,10 +65,7 @@ const file = path.join(root, "platform.json");
 const data: PlatformData = fs.existsSync(file)
   ? JSON.parse(fs.readFileSync(file, "utf8"))
   : { issues: [], prs: [], notes: {}, failedBranches: [] };
-const save = () => {
-  fs.writeFileSync(file + ".tmp", JSON.stringify(data, null, 2));
-  fs.renameSync(file + ".tmp", file);
-};
+const save = () => writeJsonAtomicSync(file, data);
 function createIssue(title: string, description: string, labels: string = "") {
   const number =
       Math.max(

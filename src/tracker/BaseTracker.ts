@@ -1,4 +1,4 @@
-import { replaceFileSync } from "../utils/atomicFile.js";
+import { writeJsonAtomicSync } from "../utils/atomicFile.js";
 import fs from "node:fs";
 import path from "node:path";
 import { logger as rootLogger } from "../logger.js";
@@ -43,25 +43,9 @@ export abstract class BaseTracker<TRecord> {
   }
 
   protected save(): void {
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    const tmpPath = path.join(
-      dir,
-      `.${this.trackerName}-${process.pid}-${Date.now()}.tmp`,
-    );
     try {
-      fs.writeFileSync(
-        tmpPath,
-        JSON.stringify({ format: "iaf-mini/v1", ...this.data }, null, 2),
-        "utf-8",
-      );
-      replaceFileSync(tmpPath, this.filePath);
+      writeJsonAtomicSync(this.filePath, { format: "iaf-mini/v1", ...this.data });
     } catch (err) {
-      // 写入失败（如 EDQUOT/ENOSPC/EACCES）时清理可能产生的不完整 tmp 文件，
-      // 避免在数据目录里堆积破损的 .{trackerName}-*.tmp，让下次启动 cleanup 干净。
-      this.safeUnlinkTmp(tmpPath);
       const cause = err as NodeJS.ErrnoException;
       const wrapped = new Error(
         `Failed to persist ${this.trackerName} state to ${this.filePath}: ${cause.message}`,
@@ -69,13 +53,12 @@ export abstract class BaseTracker<TRecord> {
       wrapped.code = cause.code;
       wrapped.errno = cause.errno;
       wrapped.syscall = cause.syscall;
-      wrapped.path = cause.path ?? tmpPath;
+      wrapped.path = cause.path ?? this.filePath;
       wrapped.cause = cause;
       rootLogger
         .child(this.trackerName)
         .error("Failed to persist tracker data", {
           filePath: this.filePath,
-          tmpPath,
           code: cause.code,
           errno: cause.errno,
           syscall: cause.syscall,
@@ -85,16 +68,18 @@ export abstract class BaseTracker<TRecord> {
     }
   }
 
-  /** 启动时清理目录中遗留的 .{trackerName}-*.tmp（前次崩溃残留） */
+  /** 单实例启动时清理当前存储的库临时文件及迁移前的旧命名文件。 */
   private cleanupStaleTempFiles(): void {
     try {
       const dir = path.dirname(this.filePath);
       if (!fs.existsSync(dir)) return;
       const prefix = `.${this.trackerName}-`;
-      const suffix = ".tmp";
+      const atomicPrefix = path.basename(this.filePath) + ".tmp-";
       let removed = 0;
       for (const name of fs.readdirSync(dir)) {
-        if (name.startsWith(prefix) && name.endsWith(suffix)) {
+        const legacy = name.startsWith(prefix) && name.endsWith(".tmp");
+        const atomic = name.startsWith(atomicPrefix) && /^\d{10}[a-f0-9]{6}$/.test(name.slice(atomicPrefix.length));
+        if (legacy || atomic) {
           this.safeUnlinkTmp(path.join(dir, name));
           removed += 1;
         }
