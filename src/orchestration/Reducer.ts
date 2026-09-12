@@ -318,7 +318,7 @@ function reduceRequestRetryFrom(input: ReducerInput, phaseId: string): ReducerOu
 
     if (iterations > action.maxIterations) {
       const error: PhaseError = {
-        message: `${phaseId} retry-from loop exhausted after ${iterations} iterations`,
+        message: `验证失败，已用完 ${iterations - 1} 轮自动修复额度（上限 ${action.maxIterations}）`,
         retryable: 'hard-no-auto',
       };
       return {
@@ -421,6 +421,7 @@ export function applyGateAction(input: GateActionInput): GateActionOutput {
         startedAt: now,
         endedAt: now,
         outcome: 'gate-approved',
+        approvalSource: action.source ?? 'manual',
       };
 
       //   由 Orchestrator.computeNextPhaseId 决定重跑当前 phase。

@@ -8,6 +8,7 @@ import { findExecutable, runProcess } from "../../utils/process.js";
 import { createCodexClient } from "../../ai-runner/CodexRunner.js";
 import { createAIRunner, type AIRunner } from "../../ai-runner/index.js";
 import { GitHubClient } from "../../clients/GitHubClient.js";
+import { writeTextAtomicSync } from "../../utils/atomicFile.js";
 const keys = [
   "GITHUB_API_URL",
   "GITHUB_TOKEN",
@@ -26,6 +27,11 @@ const keys = [
   "PREVIEW_BACKEND_COMMAND",
   "PREVIEW_FRONTEND_COMMAND",
   "PREVIEW_FRONTEND_DIR",
+  "REVIEW_ENABLED",
+  "KNOWLEDGE_ENABLED",
+  "DISTILL_ENABLED",
+  "VERIFY_FIX_LOOP_ENABLED",
+  "VERIFY_FIX_MAX_ITERATIONS",
 ];
 export function createSetupRouter(config: Config) {
   const router = Router();
@@ -77,46 +83,36 @@ export function createSetupRouter(config: Config) {
   router.get("/api/settings", (_req, res) => {
     const file = resolveConfigFilePath();
     const values = fs.existsSync(file) ? parseEnv(fs.readFileSync(file)) : {};
+    const defaults: Record<string, string | undefined> = {
+      GITHUB_API_URL: config.github.apiUrl,
+      GITHUB_REPOSITORY: config.github.repository,
+      PROJECT_WORK_DIR: config.project.workDir,
+      GIT_ROOT_DIR: config.project.gitRootDir,
+      PROJECT_SUBDIR: config.project.projectSubDir,
+      BASE_BRANCH: config.project.baseBranch,
+      CODEX_BINARY: config.ai.binary,
+      AI_MODEL: config.ai.model,
+      AI_PHASE_TIMEOUT_MS: String(config.ai.phaseTimeoutMs),
+      UAT_CONFIG_FILE: config.e2e.configFile,
+      UAT_TIMEOUT_MS: String(config.e2e.timeoutMs),
+      E2E_BASE_URL: config.e2e.baseUrl,
+      PREVIEW_ENABLED: String(config.preview.enabled),
+      PREVIEW_BACKEND_COMMAND: config.preview.backendCommand,
+      PREVIEW_FRONTEND_COMMAND: config.preview.frontendCommand,
+      PREVIEW_FRONTEND_DIR: config.preview.frontendDir,
+      REVIEW_ENABLED: String(config.review.enabled),
+      KNOWLEDGE_ENABLED: String(config.knowledge.enabled),
+      DISTILL_ENABLED: String(config.distill.enabled),
+      VERIFY_FIX_LOOP_ENABLED: String(config.verifyFixLoop.enabled),
+      VERIFY_FIX_MAX_ITERATIONS: String(config.verifyFixLoop.maxIterations),
+    };
     res.json({
       values: Object.fromEntries(
         keys.map((k) => [
           k,
           k === "GITHUB_TOKEN"
             ? ""
-            : (values[k] ??
-              (k === "CODEX_BINARY"
-                ? config.ai.binary
-                : k === "AI_MODEL"
-                  ? config.ai.model
-                  : k === "AI_PHASE_TIMEOUT_MS"
-                    ? String(config.ai.phaseTimeoutMs)
-                    : k === "UAT_CONFIG_FILE"
-                      ? config.e2e.configFile
-                      : k === "UAT_TIMEOUT_MS"
-                        ? String(config.e2e.timeoutMs)
-                        : k === "E2E_BASE_URL"
-                          ? config.e2e.baseUrl
-                          : k === "PREVIEW_ENABLED"
-                            ? String(config.preview.enabled)
-                            : k === "BASE_BRANCH"
-                              ? config.project.baseBranch
-                              : k === "PROJECT_WORK_DIR"
-                                ? config.project.workDir
-                                : k === "GIT_ROOT_DIR"
-                                  ? config.project.gitRootDir
-                                  : k === "PROJECT_SUBDIR"
-                                    ? config.project.projectSubDir
-                                    : k === "GITHUB_API_URL"
-                                      ? config.github.apiUrl
-                                      : k === "GITHUB_REPOSITORY"
-                                        ? config.github.repository
-                                        : k === "PREVIEW_BACKEND_COMMAND"
-                                          ? config.preview.backendCommand
-                                          : k === "PREVIEW_FRONTEND_COMMAND"
-                                            ? config.preview.frontendCommand
-                                            : k === "PREVIEW_FRONTEND_DIR"
-                                              ? config.preview.frontendDir
-                                              : "")),
+            : (values[k] ?? defaults[k] ?? ""),
         ]),
       ),
       restartRequired: true,
@@ -124,6 +120,9 @@ export function createSetupRouter(config: Config) {
   });
   router.put("/api/settings", (req, res, next) => {
     try {
+      if (req.body.values?.WEB_ENABLED !== undefined) {
+        extractEnvSubset({ WEB_ENABLED: String(req.body.values.WEB_ENABLED) });
+      }
       const file = resolveConfigFilePath();
       const old = fs.existsSync(file) ? parseEnv(fs.readFileSync(file)) : {};
       const values: Record<string, string> = {
@@ -146,7 +145,8 @@ export function createSetupRouter(config: Config) {
           checked.error.issues.map((i) => `${i.path}: ${i.message}`).join("\n"),
         );
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(
+      delete values.WEB_ENABLED;
+      writeTextAtomicSync(
         file,
         Object.entries(values)
           .map(([k, v]) => `${k}='${v}'`)

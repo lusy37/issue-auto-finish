@@ -1,5 +1,6 @@
 /** 前后端共用的数据契约；仅包含类型，浏览器不会加载服务端执行逻辑。 */
 import type {IssueState as StoredIssueState} from '../tracker/IssueState.js';
+export type { PhaseHistoryEntry } from '../orchestration/OrchestrationState.js';
 export type IssueState = `${StoredIssueState}`;
 
 export interface TaskDraft {

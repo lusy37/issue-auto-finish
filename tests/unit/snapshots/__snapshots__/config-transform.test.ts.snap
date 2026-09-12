@@ -75,7 +75,6 @@ exports[`裁剪版配置 > 只有公开执行器及当前模块 1`] = `
     "todolistCheckEnabled": true,
   },
   "web": {
-    "enabled": true,
     "frontendDistDir": "<frontend>/dist",
     "host": "127.0.0.1",
     "port": 3000,

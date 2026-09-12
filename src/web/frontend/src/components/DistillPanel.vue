@@ -3,6 +3,7 @@ import { ref, onMounted } from "vue";
 import { json } from "@/api/mini";
 import { useAction } from "@/composables/useAction";
 const status = ref<{
+  enabled: boolean;
   running: boolean;
   runs: {
     id: string;
@@ -48,7 +49,8 @@ onMounted(() => run(load));
       日记 {{ status.diaryCount }} · 待蒸馏 {{ status.undistilledDiaryCount }} ·
       记忆 {{ status.memoryCount }} · 规则 {{ status.ruleCount }}
     </p>
-    <button :disabled="busy || status?.running" @click="run(distill)">
+    <p v-if="status && !status.enabled" role="status">经验蒸馏已关闭，请在设置中开启并重启服务。已有经验和日记仍保留。</p>
+    <button :disabled="busy || !status?.enabled || status.running" @click="run(distill)">
       {{ busy || status?.running ? "正在处理…" : "手动蒸馏" }}</button
     ><button :disabled="busy" @click="run(load)">刷新</button>
     <p v-if="error" class="mini-error" role="alert">{{ error }}</p>

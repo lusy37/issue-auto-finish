@@ -52,7 +52,7 @@ export {
   firstPhaseId,
 } from './Pipeline.js';
 
-export { PLAN_MODE_TRANSITIONS } from './Transitions.js';
+export { PLAN_MODE_TRANSITIONS, createPlanModeTransitions } from './Transitions.js';
 
 export type {
   ReducerInput,

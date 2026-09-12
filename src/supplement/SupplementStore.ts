@@ -1,8 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { z } from 'zod';
+import { writeJsonAtomicSync } from '../utils/atomicFile.js';
 import { logger as rootLogger } from '../logger.js';
 
 const logger = rootLogger.child('SupplementStore');
+const supplementSchema = z.object({
+  requirements: z.string(), acceptanceCriteria: z.string(), scope: z.string(),
+  constraints: z.string(), references: z.string(), freeText: z.string(), updatedAt: z.string(),
+});
 
 export interface SupplementInfo {
   requirements: string;
@@ -33,13 +39,12 @@ export class SupplementStore {
 
   get(issueIid: number): SupplementInfo | null {
     const fp = this.filePath(issueIid);
-    if (!fs.existsSync(fp)) return null;
     try {
       const raw = fs.readFileSync(fp, 'utf-8');
-      return JSON.parse(raw) as SupplementInfo;
+      return supplementSchema.parse(JSON.parse(raw));
     } catch (err) {
-      logger.error('Failed to read supplement', { issueIid, error: (err as Error).message });
-      return null;
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw new Error(`无法读取补充资料 ${fp}：${(err as Error).message}`, { cause: err });
     }
   }
 
@@ -49,7 +54,7 @@ export class SupplementStore {
       ...data,
       updatedAt: new Date().toISOString(),
     };
-    fs.writeFileSync(this.filePath(issueIid), JSON.stringify(info, null, 2), 'utf-8');
+    writeJsonAtomicSync(this.filePath(issueIid), supplementSchema.parse(info));
     logger.info('Supplement saved', { issueIid });
     return info;
   }

@@ -175,7 +175,6 @@ export function createTestConfig(overrides?: Partial<Config>): Config {
       ...overrides?.review,
     },
     web: {
-      enabled: false,
       host: '0.0.0.0',
       port: 3000,
       frontendDistDir: '/tmp/dist',
@@ -263,12 +262,12 @@ export function createTestConfig(overrides?: Partial<Config>): Config {
     },
     locale: overrides?.locale ?? 'zh-CN',
     knowledge: {
-      enabled: false,
+      enabled: true,
       path: overrides?.knowledge?.path,
       ...overrides?.knowledge,
     },
     distill: {
-      enabled: false,
+      enabled: true,
       intervalMs: 3600000,
       diarySummarize: true,
       minDiariesForDistill: 3,

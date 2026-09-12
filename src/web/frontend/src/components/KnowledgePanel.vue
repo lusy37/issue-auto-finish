@@ -2,6 +2,7 @@
 import { ref, onMounted } from "vue";
 import { json, type KnowledgeItem } from "@/api/mini";
 import { useAction } from "@/composables/useAction";
+defineProps<{ knowledgeEnabled?: boolean }>();
 const entries = ref<KnowledgeItem[]>([]),
   title = ref(""),
   content = ref(""),
@@ -71,6 +72,7 @@ onMounted(() =>
 <template>
   <section class="mini-panel">
     <h2>知识与经验</h2>
+    <p v-if="knowledgeEnabled === false" role="status">任务知识引用已关闭。你仍可管理资料，开启并重启服务后，任务才会引用这些知识与经验。</p>
     <p>
       本地知识、蒸馏记忆和通用 Markdown 规则。启用的规则会进入后续任务提示词。
     </p>

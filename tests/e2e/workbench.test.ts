@@ -1,5 +1,5 @@
 import { it, expect, vi } from "vitest";
-import { chromium, expect as browserExpect } from "@playwright/test";
+import { chromium, expect as browserExpect, type Request } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { envSchema, transformEnvToConfig } from "../../src/config-schema.js";
@@ -227,6 +227,12 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
     ).toBeVisible();
     await page.getByLabel("统计时间范围").selectOption("all");
     await page.getByRole("button", { name: "设置", exact: true }).click();
+    const flowLabels = ["启用计划审核", "任务引用知识与经验", "启用经验蒸馏", "验证失败后自动修复"];
+    for (const label of flowLabels) await browserExpect(page.getByRole("checkbox", { name: label, exact: true })).toBeChecked();
+    await browserExpect(page.getByLabel("最大自动修复轮数")).toHaveValue("3");
+    await page.getByLabel("最大自动修复轮数").fill("2");
+    for (const label of flowLabels) await page.getByRole("checkbox", { name: label, exact: true }).uncheck();
+    await browserExpect(page.getByLabel("最大自动修复轮数")).toBeDisabled();
     await browserExpect(page.getByLabel("Codex 程序路径（留空使用内置程序，Windows 需为 .exe）")).toHaveValue(
       "",
     );
@@ -235,18 +241,47 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
     await browserExpect(page.getByRole("status")).toContainText("配置已保存");
     await page.reload();
     await page.getByRole("button", { name: "设置", exact: true }).click();
+    for (const label of flowLabels) await browserExpect(page.getByRole("checkbox", { name: label, exact: true })).not.toBeChecked();
+    await browserExpect(page.getByLabel("最大自动修复轮数")).toHaveValue("2");
+    // 页面回显已保存值，当前服务仍按启动配置运行，直到重启。
+    const currentStatus = await (await page.request.get(base + "/api/system/status")).json();
+    expect(currentStatus.config).toMatchObject({ reviewEnabled: true, knowledgeEnabled: true, distillEnabled: true, verifyFixLoopEnabled: true, verifyFixMaxIterations: 3 });
     await browserExpect(page.getByLabel("Codex 程序路径（留空使用内置程序，Windows 需为 .exe）")).toHaveValue(
       "C:\\中文 工具\\codex.exe",
     );
+    const detailRequests: string[] = [];
+    const trackDetailRequest = (request: Request) => {
+      detailRequests.push(new URL(request.url()).pathname);
+    };
+    page.on("request", trackDetailRequest);
     await page.goto(base + "/detail?issue=1");
     await page.getByRole("button", { name: "审查", exact: true }).click();
     await browserExpect(
       page.getByRole("button", { name: "通过计划" }),
     ).toBeVisible();
+    // 覆盖一个完整轮询周期，防止隐藏的首页重复初始化和查询状态。
+    await page.waitForTimeout(11000);
+    expect(detailRequests.filter((url) => url === "/api/system/status")).toHaveLength(2);
+    expect(detailRequests.filter((url) => url === "/api/tasks")).toHaveLength(0);
     await page.getByRole("button", { name: "通过计划" }).click();
     await browserExpect
       .poll(() => tracker.get(1)?.state)
       .toBe(IssueState.PhaseApproved);
+    await browserExpect(
+      page.getByText("审查已通过", { exact: false }).first(),
+    ).toBeVisible();
+    await browserExpect(page.getByText("人工审核通过", { exact: true })).toBeVisible();
+    // 审核事件更新详情时，也不应触发首页的任务列表刷新。
+    expect(detailRequests.filter((url) => url === "/api/tasks")).toHaveLength(0);
+    page.off("request", trackDetailRequest);
+    const supplementFile = path.join(process.env.DATA_DIR!, 'supplements', '1.json');
+    fs.mkdirSync(path.dirname(supplementFile), { recursive: true });
+    fs.writeFileSync(supplementFile, '{损坏的补充资料');
+    await page.reload();
+    await page.getByRole("button", { name: "补充信息", exact: true }).click();
+    await browserExpect(page.getByRole("alert")).toContainText("补充资料读取失败");
+    await browserExpect(page.getByRole("button", { name: "编辑", exact: true })).toHaveCount(0);
+    expect(fs.readFileSync(supplementFile, 'utf8')).toBe('{损坏的补充资料');
     await page.reload();
     await page.getByRole("button", { name: "审查", exact: true }).click();
     await browserExpect(
@@ -295,6 +330,22 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
       path: path.join(dir, "工作台统计.png"),
       fullPage: true,
     });
+    // 给测试服务注入关闭配置，覆盖关闭视图；真实设置的重启语义在上方单独验证。
+    config.knowledge.enabled = false;
+    config.distill.enabled = false;
+    await page.reload();
+    await page.getByRole("button", { name: "知识与经验", exact: true }).click();
+    await browserExpect(page.getByText("任务知识引用已关闭。", { exact: false })).toBeVisible();
+    await browserExpect(page.getByRole("heading", { name: "测试经验 custom" })).toBeVisible();
+    await page.getByRole("button", { name: "蒸馏", exact: true }).click();
+    await browserExpect(page.getByText("经验蒸馏已关闭", { exact: false })).toBeVisible();
+    await browserExpect(page.getByRole("button", { name: "手动蒸馏" })).toBeDisabled();
+    await browserExpect(page.locator("article").first()).toContainText("已完成");
+    config.distill.enabled = true;
+    await page.reload();
+    await page.getByRole("button", { name: "蒸馏", exact: true }).click();
+    await browserExpect(page.getByRole("button", { name: "手动蒸馏" })).toBeEnabled();
+    await browserExpect(page.locator("article").first()).toContainText("已完成");
     expect(errors).toEqual([]);
     fs.writeFileSync(
       path.join(root, "latest.json"),

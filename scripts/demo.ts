@@ -1,4 +1,5 @@
-import { writeJsonAtomicSync } from "../src/utils/atomicFile.js";
+import { writeJsonAtomicSync, writeTextAtomicSync } from "../src/utils/atomicFile.js";
+import { parse as parseEnv } from "dotenv";
 import fs from "node:fs";
 import path from "node:path";
 import express from "express";
@@ -430,7 +431,16 @@ registerAIRunner("codex", {
   binaryEnvKey: "CODEX_BINARY",
   capabilities: { nativePlanMode: true },
 });
+const configFile = path.join(root, ".env");
+const saved = fs.existsSync(configFile) ? parseEnv(fs.readFileSync(configFile)) : {};
+// 演示重启保留流程开关；平台、仓库和执行器仍使用演示配置。
+const flowSettings = Object.fromEntries(
+  ["REVIEW_ENABLED", "KNOWLEDGE_ENABLED", "DISTILL_ENABLED", "VERIFY_FIX_LOOP_ENABLED", "VERIFY_FIX_MAX_ITERATIONS"]
+    .filter(key => saved[key] !== undefined)
+    .map(key => [key, saved[key]]),
+);
 const values = {
+  ...flowSettings,
   GITHUB_API_URL: platformUrl,
   GITHUB_TOKEN: "local-demo",
   GITHUB_REPOSITORY: "demo/repo",
@@ -448,9 +458,9 @@ const values = {
   AI_MODEL: "本地模拟响应",
 };
 Object.assign(process.env, values, {
-  IAF_CONFIG_PATH: path.join(root, ".env"),
+  IAF_CONFIG_PATH: configFile,
 });
-fs.writeFileSync(
+writeTextAtomicSync(
   process.env.IAF_CONFIG_PATH!,
   Object.entries(values)
     .map(([k, v]) => `${k}='${v}'`)

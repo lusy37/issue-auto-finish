@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
+import { writeJsonAtomicSync, writeTextAtomicSync } from '../utils/atomicFile.js';
 import { logger as rootLogger } from '../logger.js';
 import type {
   KnowledgeEntry,
@@ -12,6 +14,20 @@ import type {
 import type { ProjectKnowledge } from './ProjectKnowledge.js';
 
 const logger = rootLogger.child('KnowledgeStore');
+
+const indexSchema = z.object({
+  version: z.literal(1),
+  lastAnalyzedAt: z.string().optional(),
+  entries: z.array(z.object({
+    id: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+    type: z.enum(['project-meta', 'custom', 'diary', 'memory', 'agent-rule']),
+    title: z.string(),
+    tags: z.array(z.string()),
+    source: z.object({ url: z.string().optional(), kind: z.literal('local').optional() }).passthrough().optional(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  }).passthrough()),
+}).passthrough();
 
 export class KnowledgeStore {
   private dataDir: string;
@@ -27,15 +43,14 @@ export class KnowledgeStore {
 
   list(type?: KnowledgeEntryType): KnowledgeEntryMeta[] {
     const idx = this.loadIndex();
-    if (!type) return idx.entries;
-    return idx.entries.filter(e => e.type === type);
+    return structuredClone(type ? idx.entries.filter(e => e.type === type) : idx.entries);
   }
 
   get(id: string): KnowledgeEntry | null {
     const idx = this.loadIndex();
     const meta = idx.entries.find(e => e.id === id);
     if (!meta) return null;
-    return { ...meta, content: this.readContent(id) };
+    return { ...structuredClone(meta), content: this.readContent(id) };
   }
 
   create(input: {
@@ -46,7 +61,7 @@ export class KnowledgeStore {
     source?: KnowledgeEntry['source'];
   }): KnowledgeEntry {
     this.ensureDirs();
-    const idx = this.loadIndex();
+    const idx = structuredClone(this.loadIndex());
 
     const entry: KnowledgeEntry = {
       id: randomUUID(),
@@ -71,7 +86,7 @@ export class KnowledgeStore {
     id: string,
     patch: Partial<Pick<KnowledgeEntry, 'title' | 'content' | 'tags' | 'source'>>,
   ): KnowledgeEntry | null {
-    const idx = this.loadIndex();
+    const idx = structuredClone(this.loadIndex());
     const metaIdx = idx.entries.findIndex(e => e.id === id);
     if (metaIdx < 0) return null;
 
@@ -94,15 +109,19 @@ export class KnowledgeStore {
   }
 
   delete(id: string): boolean {
-    const idx = this.loadIndex();
+    const idx = structuredClone(this.loadIndex());
     const before = idx.entries.length;
     idx.entries = idx.entries.filter(e => e.id !== id);
     if (idx.entries.length === before) return false;
 
-    const filePath = path.join(this.entriesDir, id + '.md');
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-
     this.saveIndex(idx);
+    const filePath = path.join(this.entriesDir, id + '.md');
+    try {
+      fs.rmSync(filePath, { force: true });
+    } catch (error) {
+      // 索引已提交，保留删除结果；正文残留可按日志定位后清理。
+      logger.warn('知识已删除，但正文清理失败', { id, filePath, error: (error as Error).message });
+    }
     logger.info('Knowledge entry deleted', { id });
     return true;
   }
@@ -110,17 +129,17 @@ export class KnowledgeStore {
   search(query: string): KnowledgeEntryMeta[] {
     const idx = this.loadIndex();
     const lower = query.toLowerCase();
-    return idx.entries.filter(e =>
+    return structuredClone(idx.entries.filter(e =>
       e.title.toLowerCase().includes(lower)
       || e.tags.some(t => t.toLowerCase().includes(lower)),
-    );
+    ));
   }
 
   getProjectMeta(): KnowledgeEntry | null {
     const idx = this.loadIndex();
     const meta = idx.entries.find(e => e.type === 'project-meta');
     if (!meta) return null;
-    return { ...meta, content: this.readContent(meta.id) };
+    return { ...structuredClone(meta), content: this.readContent(meta.id) };
   }
 
   upsertProjectMeta(content: string, knowledge?: ProjectKnowledge): KnowledgeEntry {
@@ -139,7 +158,7 @@ export class KnowledgeStore {
   }
 
   setLastAnalyzedAt(time: string): void {
-    const idx = this.loadIndex();
+    const idx = structuredClone(this.loadIndex());
     idx.lastAnalyzedAt = time;
     this.saveIndex(idx);
   }
@@ -166,7 +185,7 @@ export class KnowledgeStore {
   getAllEntries(): KnowledgeEntry[] {
     const idx = this.loadIndex();
     return idx.entries.map(meta => ({
-      ...meta,
+      ...structuredClone(meta),
       content: this.readContent(meta.id),
     }));
   }
@@ -184,13 +203,16 @@ export class KnowledgeStore {
     if (this.index) return this.index;
 
     this.ensureDirs();
-    if (fs.existsSync(this.indexPath)) {
-      try {
-        const raw = fs.readFileSync(this.indexPath, 'utf-8');
-        this.index = JSON.parse(raw) as KnowledgeIndex;
-        return this.index;
-      } catch {
-        logger.warn('Failed to parse knowledge index, starting fresh');
+    try {
+      const raw = fs.readFileSync(this.indexPath, 'utf-8');
+      this.index = indexSchema.parse(JSON.parse(raw));
+      return this.index;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw new Error(`无法读取知识索引 ${this.indexPath}：${(error as Error).message}`, { cause: error });
+      }
+      if (fs.readdirSync(this.entriesDir).some(file => file.endsWith('.md'))) {
+        throw new Error(`知识索引缺失但正文仍存在，请恢复索引：${this.indexPath}`);
       }
     }
 
@@ -200,19 +222,22 @@ export class KnowledgeStore {
 
   private saveIndex(idx: KnowledgeIndex): void {
     this.ensureDirs();
-    fs.writeFileSync(this.indexPath, JSON.stringify(idx, null, 2), 'utf-8');
-    this.index = idx;
+    writeJsonAtomicSync(this.indexPath, idx);
+    this.index = structuredClone(idx);
   }
 
   private readContent(id: string): string {
     const filePath = path.join(this.entriesDir, id + '.md');
-    if (!fs.existsSync(filePath)) return '';
-    return fs.readFileSync(filePath, 'utf-8');
+    try {
+      return fs.readFileSync(filePath, 'utf-8');
+    } catch (error) {
+      throw new Error(`无法读取知识正文 ${filePath}：${(error as Error).message}`, { cause: error });
+    }
   }
 
   private writeContent(id: string, content: string): void {
     this.ensureDirs();
-    fs.writeFileSync(path.join(this.entriesDir, id + '.md'), content, 'utf-8');
+    writeTextAtomicSync(path.join(this.entriesDir, id + '.md'), content);
   }
 
   private toMeta(entry: KnowledgeEntry): KnowledgeEntryMeta {

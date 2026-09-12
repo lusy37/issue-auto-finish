@@ -412,10 +412,10 @@ describe('IssuePoller', () => {
   });
 
   describe('auto-approve waiting issues', () => {
-    it('auto-approves PhaseWaiting issue when label matches', async () => {
+    it.each([true, false])('审核开关为 %s 时，已等待任务的标签规则只在开启时执行', async enabled => {
       const cfg = createTestConfig({
         poll: { intervalMs: 60000, discoveryIntervalMs: 60000, driveIntervalMs: 15000, maxRetries: 3, maxConcurrent: 3 },
-        review: { enabled: true, autoApproveLabels: ['skip-review'] },
+        review: { enabled, autoApproveLabels: ['skip-review'] },
       });
       const waitingRecord = {
         demandSpec: {
@@ -444,7 +444,8 @@ describe('IssuePoller', () => {
       // PR4 之后 IssuePoller 应通过正统的 orchestrator.applyGateAction 进行批准，
       // 由 Reducer + TrackerStateStore 统一维护 orchestrationState/phaseProgress/phaseHistory，
       // 而不是直接调 tracker.updateState（老路径会绕过 phaseProgress 同步，导致前端样式错误）。
-      expect(orchestrator.applyGateAction).toHaveBeenCalledWith(42, { action: 'approve' });
+      if (enabled) expect(orchestrator.applyGateAction).toHaveBeenCalledWith(42, { action: 'approve', source: 'label' });
+      else expect(orchestrator.applyGateAction).not.toHaveBeenCalled();
       p.stop();
     });
 

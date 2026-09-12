@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import type { IssueRecord, ProgressData, SupplementInfo, AgentLogEntry, SystemStatus, ReviewRound } from '@/types';
 import type { VerifyFixLoopState } from '@/composables/useAgentLogs';
-import { getIssueIid, getIssueTitle } from '@/types';
+import { getIssueIid, getIssueTitle, getReviewApprovalSource } from '@/types';
 import { usePipeline } from '@/composables/usePipeline';
 import { formatTime } from '@/utils/formatters';
 import * as api from '@/api/client';
@@ -25,6 +25,7 @@ const props = defineProps<{
   supplement: SupplementInfo;
   supplementForm: SupplementInfo;
   supplementLoading: boolean;
+  supplementError?: string;
   supplementEditing: boolean;
   supplementSaving: boolean;
   hasSupplementData: boolean;
@@ -209,10 +210,11 @@ function openDetailPage() {
 
           <!-- Review Gate -->
           <ReviewGatePanel
-            v-if="issue.state === 'phase_waiting' || reviewHistory.length > 0"
+            v-if="issue.state === 'phase_waiting' || reviewHistory.length > 0 || getReviewApprovalSource(issue)"
             :review-submitting="reviewSubmitting"
             :review-feedback="reviewFeedback"
             :review-history="reviewHistory"
+            :approval-source="getReviewApprovalSource(issue)"
             :issue-state="issue.state"
             :current-phase="issue.currentPhase"
             :plan-doc-content="planDocContent"
@@ -227,6 +229,7 @@ function openDetailPage() {
             :supplement="supplement"
             :supplement-form="supplementForm"
             :loading="supplementLoading"
+            :error="supplementError"
             :editing="supplementEditing"
             :saving="supplementSaving"
             :has-data="hasSupplementData"

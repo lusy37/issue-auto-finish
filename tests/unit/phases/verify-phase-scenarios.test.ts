@@ -2,7 +2,7 @@
  * VerifyPhase 报告解析场景测试 — 使用 ScriptedAIRunner。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { VerifyPhase } from '../../../src/phases/VerifyPhase.js';
@@ -123,6 +123,17 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
     expect(intent.kind).toBe('requestRetryFrom');
     if (intent.kind !== 'requestRetryFrom') throw new Error('Expected requestRetryFrom intent');
     expect(intent.context?.rawReport).toBeDefined();
+  });
+
+  it('关闭自动修复后，验证失败保留报告并禁止自动重试', async () => {
+    const runner = new ScriptedAIRunner([
+      successScript(undefined, writeArtifact(ISSUE_IID, '02-verify-report.md', FAILING_REPORT)),
+    ]);
+    const phase = createPhase(runner, { verifyFixLoop: { enabled: false, maxIterations: 3 } });
+    const intent = await phase.run(buildPhaseCtx());
+    expect(intent).toMatchObject({ kind: 'failed', error: { retryable: 'hard-no-auto', rawOutput: FAILING_REPORT } });
+    expect(readFileSync(path.join(dataDir, '.claude-plan', `issue-${ISSUE_IID}`, '02-verify-report.md'), 'utf8')).toBe(FAILING_REPORT);
+    expect(runner.runCalls).toHaveLength(1);
   });
 
   it('should return failed intent when AI fails', async () => {

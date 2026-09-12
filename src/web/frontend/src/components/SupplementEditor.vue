@@ -5,6 +5,7 @@ const props = defineProps<{
   supplement: SupplementInfo;
   supplementForm: SupplementInfo;
   loading: boolean;
+  error?: string;
   editing: boolean;
   saving: boolean;
   hasData: boolean;
@@ -28,7 +29,7 @@ function updateField(field: keyof SupplementInfo, value: string) {
       <h3 class="text-base font-semibold text-gray-700">{{ $t('supplement.title') }}</h3>
       <div class="flex items-center space-x-2">
         <button
-          v-if="!editing"
+          v-if="!editing && !loading && !error"
           class="px-2 py-1 text-xs bg-blue-100 text-blue-600 rounded hover:bg-blue-200"
           @click="emit('edit')"
         >{{ $t('supplement.edit') }}</button>
@@ -47,6 +48,7 @@ function updateField(field: keyof SupplementInfo, value: string) {
     </div>
 
     <div v-if="loading" class="py-4 text-center text-gray-400 text-sm">{{ $t('supplement.loading') }}</div>
+    <div v-else-if="error" role="alert" class="py-4 text-red-600 text-sm">补充资料读取失败：{{ error }}。请修复文件后重新打开详情。</div>
 
     <div v-else-if="!editing">
       <div v-if="hasData" class="space-y-2 text-sm">

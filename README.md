@@ -32,6 +32,22 @@ Codex 使用官方 SDK 与内置原生程序；CODEX_BINARY 留空即可，模�
 
 新增带 auto-finish 标签的 Issue 可被轮询发现；启动服务前已有的 Issue 首轮标为跳过，需在工作台手动启动。审核驳回会把上次计划和反馈带入新一轮规划，通过后才开始实现。
 
+## 流程与知识设置
+
+Web 工作台固定开启，无关闭开关。设置页提供以下选项，保存后**重启服务生效**；运行中的任务不会因保存配置立即改变行为。
+
+| 设置 | 默认 | 关闭或修改后的行为 |
+| --- | --- | --- |
+| 启用计划审核 | 开启 | 新进入审核节点的完整计划保存后按配置自动通过；已有待审任务仍等待明确操作 |
+| 任务引用知识与经验 | 开启 | 停止给新 AI 请求附加项目知识、经验规则；资料管理、安装及构建测试命令仍可用 |
+| 启用经验蒸馏 | 开启 | 禁止新的手动蒸馏，保留原有日记、知识和历史；日记采集继续 |
+| 验证失败后自动修复 | 开启 | 验证失败后停止，保留报告，等待人工处理 |
+| 最大自动修复轮数 | 3 | 范围 1～10，表示首次验证失败后追加的修复轮数；重启继续累计已有次数 |
+
+知识引用与蒸馏互相独立。旧 `WEB_ENABLED=true` 会提示清理；`false` 会明确报错，请删除该配置。演示模式重启会保留上述流程设置，平台、仓库和 AI 仍固定使用本地演示配置。
+
+设置 `KNOWLEDGE_PATH` 时，启动、项目资料页面及 AI 使用同一文件；只编辑表单字段不会清空其他资料。显式文件缺失或损坏会报错，默认位置首次缺失则允许创建。知识、补充资料和配置保存使用原子文件替换；正文与索引仍是两个文件，不承诺跨文件一起回滚。实现与验证记录见 [修复计划](docs/config-knowledge-storage-repair-plan.md)。
+
 ## 开发与检查
 
 ~~~powershell
@@ -64,3 +80,5 @@ npm run test:codex
 详细说明：[开发记录](docs/development.md)、[架构与功能对照](docs/architecture.md)、[精简依据](docs/simplification.md)、[验收记录](docs/validation.md)。
 
 精简后已再次执行真实 GitHub、Codex 和 Windows Chrome 全流程：[Issue #5](https://github.com/lusy37/issue-auto-finish-sandbox/issues/5) → [PR #6](https://github.com/lusy37/issue-auto-finish-sandbox/pull/6)，正式 UAT 7 项通过，重启核对通过。旧 mini 实例重复领取造成的标签干扰及恢复处置见 [本次真实复验记录](docs/live-uat-20260912.md)。
+
+配置、知识读写和文件保存修复后，Windows 本机回归 **958 项通过**，类型检查、前后端构建、变更文件 lint 和 Chrome 工作台端到端通过。本轮 AI/GitHub 使用模拟，未重新调用真实服务。行为说明、统计及验证边界见 [修复实施记录](docs/config-knowledge-storage-repair-plan.md#七实施与验收结果)。

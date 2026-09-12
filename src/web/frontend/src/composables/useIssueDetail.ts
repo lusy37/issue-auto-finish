@@ -19,6 +19,7 @@ export function useIssueDetail() {
   const detailSupplement = ref<SupplementInfo>(emptySupplementForm());
   const detailSupplementForm = ref<SupplementInfo>(emptySupplementForm());
   const detailSupplementLoading = ref(false);
+  const detailSupplementError = ref('');
   const detailSupplementEditing = ref(false);
   const detailSupplementSaving = ref(false);
 
@@ -96,13 +97,17 @@ export function useIssueDetail() {
 
   async function fetchSupplement(number: number) {
     detailSupplementLoading.value = true;
+    detailSupplementError.value = '';
     try {
       detailSupplement.value = await api.fetchSupplement(number);
-    } catch { /* ignore */ }
+    } catch (error) {
+      detailSupplementError.value = (error as Error).message;
+    }
     finally { detailSupplementLoading.value = false; }
   }
 
   function enterSupplementEdit() {
+    if (detailSupplementLoading.value || detailSupplementError.value) return;
     detailSupplementForm.value = { ...detailSupplement.value };
     detailSupplementEditing.value = true;
   }
@@ -298,6 +303,7 @@ export function useIssueDetail() {
     detailSupplement,
     detailSupplementForm,
     detailSupplementLoading,
+    detailSupplementError,
     detailSupplementEditing,
     detailSupplementSaving,
     reviewFeedback,

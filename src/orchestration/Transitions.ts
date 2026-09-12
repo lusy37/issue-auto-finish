@@ -1,13 +1,15 @@
 import type { TransitionRule } from './Pipeline.js';
 
 
-export const PLAN_MODE_TRANSITIONS: readonly TransitionRule[] = Object.freeze([
+/** 每次执行使用服务启动时的配置，历史次数仍由状态机累计。 */
+export function createPlanModeTransitions(maxIterations = 3): readonly TransitionRule[] {
+  return Object.freeze([
   // 1. verify-fix loop 最高优先级
   {
     from: 'verify',
     on: 'requestRetryFrom',
     match: (intent) => intent.kind === 'requestRetryFrom' && intent.targetPhaseId === 'build',
-    action: { kind: 'retry-from', targetPhaseId: 'build', maxIterations: 3, resetAttempts: false },
+    action: { kind: 'retry-from', targetPhaseId: 'build', maxIterations, resetAttempts: false },
   },
   // 2. 任意阶段 awaitGate
   {
@@ -49,3 +51,6 @@ export const PLAN_MODE_TRANSITIONS: readonly TransitionRule[] = Object.freeze([
     action: { kind: 'advance' },
   },
 ]);
+}
+
+export const PLAN_MODE_TRANSITIONS = createPlanModeTransitions();

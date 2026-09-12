@@ -99,6 +99,7 @@ export async function main(): Promise<void> {
       confidenceThreshold: config.distill.memoryConfidenceThreshold,
     });
     const distillScheduler = new DistillScheduler({
+      enabled: config.distill.enabled,
       diaryStore,
       memoryDistiller,
       agentRuleDistiller,

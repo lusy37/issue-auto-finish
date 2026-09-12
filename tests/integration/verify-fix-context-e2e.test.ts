@@ -279,7 +279,7 @@ describe('verify-fix loop 端到端：context 透传到 BuildPhase prompt', () =
     if (final.kind === 'pipeline-failed') {
       expect(final.retryable).toBe('manual');
       expect(final.failedAt).toBe('verify');
-      expect(final.error?.message).toMatch(/retry-from loop exhausted/);
+      expect(final.error?.message).toContain('已用完 3 轮自动修复额度');
     }
 
     // verify 共调用 4 次：3 次失败回退 build + 第 4 次触发 maxIterations 上限

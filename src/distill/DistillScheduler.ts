@@ -17,6 +17,7 @@ export interface DistillRun {
   result?: unknown;
 }
 export interface DistillSchedulerDeps {
+  enabled?: boolean;
   diaryStore: DiaryStore;
   memoryDistiller: MemoryDistiller;
   agentRuleDistiller: AgentRuleDistiller;
@@ -50,6 +51,7 @@ export class DistillScheduler {
     writeJsonAtomicSync(this.file, { format: "iaf-mini/v1", runs: this.runs });
   }
   async runDistill(options?: { force?: boolean }) {
+    if (this.deps.enabled === false) throw new Error('经验蒸馏已关闭，请在设置中开启并重启服务');
     if (this.running) throw new Error("已有蒸馏任务正在执行");
     this.running = true;
     const run: DistillRun = {
@@ -79,7 +81,7 @@ export class DistillScheduler {
   }
   getStatus() {
     return {
-      enabled: true,
+      enabled: this.deps.enabled !== false,
       running: this.running,
       runs: this.runs,
       diaryCount: this.deps.diaryStore.count(),

@@ -309,6 +309,7 @@ export abstract class BasePhase {
     return files.map(f => ({ filename: f.filename, label: f.label }));
   }
 protected async resolveRules(_ctx: PhaseContext): Promise<string | null> {
+    if (!this.config.knowledge.enabled) return null;
     const store = new KnowledgeStore(path.join(resolveDataDir(), 'knowledge'));
     const rules = store.getAllEntries().filter(e => e.type === 'custom' || (e.type === 'agent-rule' && e.tags.includes('enabled')));
     const project = getProjectKnowledge();

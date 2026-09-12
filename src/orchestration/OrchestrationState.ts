@@ -127,6 +127,8 @@ export interface PhaseHistoryEntry {
   readonly outcome: PhaseHistoryOutcome;
   readonly sessionId?: string;
   readonly errorMessage?: string;
+  /** 未提供来源的历史审批按人工操作展示。 */
+  readonly approvalSource?: 'manual' | 'label' | 'configuration';
   /** verify-fix loop 第几轮（仅适用于 verify 阶段） */
   readonly fixIteration?: number;
   /**
@@ -165,6 +167,6 @@ export type PhaseHistoryOutcome =
 
 
 export type GateAction =
-  | { readonly action: 'approve' }
+  | { readonly action: 'approve'; readonly source?: 'manual' | 'label' | 'configuration' }
   | { readonly action: 'reject'; readonly feedback: string }
   | { readonly action: 'supplement'; readonly context: string };

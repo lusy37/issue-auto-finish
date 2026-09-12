@@ -1,9 +1,6 @@
-import fs from "node:fs";
-import path from "node:path";
 import { z } from "zod";
-import { resolveDataDir } from "../paths.js";
 import { KNOWLEDGE_DEFAULTS } from "./KnowledgeDefaults.js";
-import { loadKnowledge } from "./KnowledgeLoader.js";
+import { loadKnowledge, saveKnowledge } from "./KnowledgeLoader.js";
 
 const text = z.string().max(10000);
 export const profileSchema = z.object({
@@ -18,7 +15,7 @@ export const profileSchema = z.object({
 });
 export type ProjectProfile = z.infer<typeof profileSchema>;
 
-/** 工作台只编辑演示需要的项目上下文，其余知识字段使用当前格式默认值。 */
+/** 工作台读取当前有效来源，只编辑表单字段，保留其他项目知识。 */
 export function readProjectProfile(): ProjectProfile {
   const knowledge = loadKnowledge() ?? KNOWLEDGE_DEFAULTS;
   return {
@@ -35,7 +32,7 @@ export function readProjectProfile(): ProjectProfile {
 
 export function writeProjectProfile(input: unknown): ProjectProfile {
   const profile = profileSchema.parse(input);
-  const knowledge = structuredClone(KNOWLEDGE_DEFAULTS);
+  const knowledge = structuredClone(loadKnowledge() ?? KNOWLEDGE_DEFAULTS);
   knowledge.generatedAt = new Date().toISOString();
   knowledge.businessContext.purpose = profile.description;
   knowledge.structure.primaryLanguage = profile.language;
@@ -50,9 +47,6 @@ export function writeProjectProfile(input: unknown): ProjectProfile {
   knowledge.agentKnowledge.conventions = profile.rules
     .split("\n")
     .filter(Boolean);
-  const file = path.join(resolveDataDir(), "knowledge", "knowledge.json");
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(knowledge, null, 2));
-  loadKnowledge(file);
+  saveKnowledge(knowledge);
   return profile;
 }

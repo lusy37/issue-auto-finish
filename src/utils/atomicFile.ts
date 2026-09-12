@@ -5,6 +5,11 @@ import { writeFileSync } from "atomically";
 export function writeJsonAtomicSync(destination: string, data: unknown): void {
   const content = JSON.stringify(data, null, 2);
   if (content === undefined) throw new TypeError("无法保存未定义的 JSON 数据");
+  writeTextAtomicSync(destination, content);
+}
+
+/** 文本与 JSON 共用同一套原子替换、失败清理和重试规则。 */
+export function writeTextAtomicSync(destination: string, content: string): void {
   let temporary: string | undefined;
   try {
     writeFileSync(destination, content, {

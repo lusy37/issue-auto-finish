@@ -845,6 +845,9 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
         locale: cfg.locale,
         knowledgeEnabled: cfg.knowledge.enabled,
         distillEnabled: cfg.distill.enabled,
+        reviewEnabled: cfg.review.enabled,
+        verifyFixLoopEnabled: cfg.verifyFixLoop.enabled,
+        verifyFixMaxIterations: cfg.verifyFixLoop.maxIterations,
       },
       issues: {
         total: allIssues.length,

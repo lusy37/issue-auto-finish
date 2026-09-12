@@ -16,6 +16,7 @@ export interface PromptContext {
   issueIid: number;
   supplementText?: string;
   workspace?: WorkspaceLayout;
+  knowledgeEnabled?: boolean;
 }
 
 function planDir(number: number): string {
@@ -32,7 +33,7 @@ const PLAN_OUTPUT_CONSTRAINT = [
 /**
  * Build template variable map from knowledge config (or defaults).
  */
-export function getKnowledgeForPrompt(): Record<string, string> {
+export function getKnowledgeForPrompt(enabled = true): Record<string, string> {
   const k: ProjectKnowledge = getProjectKnowledge() ?? KNOWLEDGE_DEFAULTS;
 
   const codeStyleParts: string[] = [];
@@ -43,11 +44,11 @@ export function getKnowledgeForPrompt(): Record<string, string> {
   }
   codeStyleParts.push(`${k.codeStyle.lineWidth}字符行宽`);
   codeStyleParts.push('命名规范等');
-  if (k.codeStyle.additionalRules?.length) {
+  if (enabled && k.codeStyle.additionalRules?.length) {
     codeStyleParts.push(...k.codeStyle.additionalRules);
   }
 
-  const knownIssueLines = k.knownIssues.map(issue => `- ${issue.description}${issue.advice ? `，${issue.advice}` : ''}`);
+  const knownIssueLines = enabled ? k.knownIssues.map(issue => `- ${issue.description}${issue.advice ? `，${issue.advice}` : ''}`) : [];
 
   return {
     dependencyCheckPath: k.toolchain.dependencyCheckPath ?? 'node_modules/.bin/eslint',
@@ -61,7 +62,7 @@ export function getKnowledgeForPrompt(): Record<string, string> {
     knownIssuesSection: knownIssueLines.length > 0
       ? knownIssueLines.join('\n')
       : '- 无已知预存问题',
-    codeStyleDescription: codeStyleParts.join('、'),
+    codeStyleDescription: enabled ? codeStyleParts.join('、') : '遵循项目现有代码风格',
     // E2E related
     e2eDir: k.structure.e2eDir ?? 'e2e',
     e2eTool: k.structure.e2eTool ?? 'E2E',
@@ -96,7 +97,7 @@ export function demandToPromptContext(demand: DemandSpec): {
 
 export function planModeVerifyPrompt(ctx: PromptContext): string {
   const pd = planDir(ctx.issueIid);
-  const kv = getKnowledgeForPrompt();
+  const kv = getKnowledgeForPrompt(ctx.knowledgeEnabled);
   const base = t('prompt.planModeVerify', {
     number: ctx.issueIid,
     title: ctx.issueTitle,
@@ -127,7 +128,7 @@ export function planPrompt(ctx: PromptContext): string {
 
 export function buildPrompt(ctx: PromptContext): string {
   const pd = planDir(ctx.issueIid);
-  const kv = getKnowledgeForPrompt();
+  const kv = getKnowledgeForPrompt(ctx.knowledgeEnabled);
   const base = t('prompt.build', {
     number: ctx.issueIid,
     title: ctx.issueTitle,

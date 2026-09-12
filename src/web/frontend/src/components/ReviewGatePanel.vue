@@ -12,6 +12,7 @@ const props = defineProps<{
   gatePhaseName?: string;
   planDocContent?: string;
   planDiff?: { diff: string; hasChanges: boolean };
+  approvalSource?: 'manual' | 'label' | 'configuration';
 }>();
 
 const reviewFeedback = defineModel<string>('reviewFeedback', { required: true });
@@ -246,6 +247,9 @@ function formatTimestamp(ts: string): string {
       </span>
     </div>
 
+    <p v-if="approvalSource" class="text-sm text-gray-600 mb-3">
+      {{ approvalSource === 'configuration' ? '按配置自动通过（计划审核已关闭）' : approvalSource === 'label' ? '按标签规则自动通过' : '人工审核通过' }}
+    </p>
     <!-- Review History (read-only) -->
     <div v-if="reviewHistory.length > 0">
       <div class="flex items-center mb-2">

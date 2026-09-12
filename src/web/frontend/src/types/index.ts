@@ -1,4 +1,5 @@
 import type {IssueState} from '../../../../shared/workbench';
+import type { PhaseHistoryEntry } from '../../../../shared/workbench';
 export type {IssueState} from '../../../../shared/workbench';
 
 export type PipelineMode = string;
@@ -30,11 +31,14 @@ export interface IssueRecord {
   progress?: ProgressData;
   /** tracker 中的真实阶段进度（单一数据源） */
   phaseProgress?: Record<string, PhaseProgress>;
+  phaseHistory?: PhaseHistoryEntry[];
   stateCategory?: string;
 }
 
 export const getIssueIid = (r: IssueRecord): number => Number(r.demandSpec.sourceRef.displayId);
 export const getIssueTitle = (r: IssueRecord): string => r.demandSpec.title;
+export const getReviewApprovalSource = (r: IssueRecord) => r.phaseHistory?.slice().reverse()
+  .find(entry => entry.phaseId === 'review' && entry.outcome === 'gate-approved')?.approvalSource;
 
 export interface PhaseProgress {
   status: PhaseStatus;
@@ -75,6 +79,9 @@ export interface SystemStatus {
     e2eEnabled: boolean;
     knowledgeEnabled: boolean;
     distillEnabled: boolean;
+    reviewEnabled: boolean;
+    verifyFixLoopEnabled: boolean;
+    verifyFixMaxIterations: number;
     worktreeCleanupEnabled?: boolean;
     worktreeRetentionMs?: number;
   };

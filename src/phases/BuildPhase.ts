@@ -21,6 +21,7 @@ export class BuildPhase extends BasePhase {
       issueDescription: pc.description,
       issueIid: Number(pc.displayId),
       workspace: ctx.workspace,
+      knowledgeEnabled: this.config.knowledge.enabled,
     });
 
     if (ctx.fixContext) {

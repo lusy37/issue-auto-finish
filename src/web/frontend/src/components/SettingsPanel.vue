@@ -6,6 +6,12 @@ const values = ref<Record<string, string>>({}),
   message = ref(""),
   checks = ref<{ name: string; ok: boolean; message: string }[]>([]);
 const { busy, error, run } = useAction();
+const featureLabels: Record<string, string> = {
+  REVIEW_ENABLED: "启用计划审核",
+  KNOWLEDGE_ENABLED: "任务引用知识与经验",
+  DISTILL_ENABLED: "启用经验蒸馏",
+  VERIFY_FIX_LOOP_ENABLED: "验证失败后自动修复",
+};
 const labels: Record<string, string> = {
   GITHUB_API_URL: "GitHub API 地址",
   GITHUB_TOKEN: "GitHub Token（留空保留原值）",
@@ -55,6 +61,20 @@ onMounted(() => run(load));
       单用户、单仓库，执行器使用Codex SDK。配置保存在当前项目的独立数据目录。
     </p>
     <form @submit.prevent="run(save)">
+      <fieldset class="my-4 border rounded p-4">
+        <legend>流程与知识</legend>
+        <label v-for="(label, key) in featureLabels" :key="key" class="block my-3">
+          <input v-model="values[key]" type="checkbox" true-value="true" false-value="false" :aria-label="label" />
+          {{ label }}
+        </label>
+        <label class="block my-3">最大自动修复轮数
+          <input :value="values.VERIFY_FIX_MAX_ITERATIONS" @input="values.VERIFY_FIX_MAX_ITERATIONS = ($event.target as HTMLInputElement).value" type="number" min="1" max="10" step="1"
+            :disabled="values.VERIFY_FIX_LOOP_ENABLED === 'false'" aria-label="最大自动修复轮数" />
+        </label>
+        <p class="text-sm text-gray-500">次数为初次验证失败后追加的修复轮数，范围 1～10。以上设置保存后重启生效。</p>
+        <p class="text-sm text-gray-500">关闭审核后，新计划保存完成会自动继续实现；已等待审核的任务仍需手动处理。</p>
+        <p class="text-sm text-gray-500">关闭知识引用或蒸馏不会删除资料。知识引用决定任务是否使用经验，蒸馏决定是否生成新经验。</p>
+      </fieldset>
       <label v-for="(label, key) in labels" :key="key" class="block my-3"
         >{{ label
         }}<input

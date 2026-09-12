@@ -44,6 +44,18 @@ export class VerifyPhase extends BasePhase {
 
     if (parsed.passed) return intent;
 
+    if (!this.config.verifyFixLoop.enabled) {
+      return {
+        kind: 'failed',
+        sessionId: intent.sessionId,
+        error: {
+          message: `验证失败，自动修复已关闭：${parsed.failureReasons.join('；')}`,
+          rawOutput: parsed.rawReport,
+          retryable: 'hard-no-auto',
+        },
+      };
+    }
+
     return {
       kind: 'requestRetryFrom',
       targetPhaseId: 'build',
@@ -64,6 +76,7 @@ export class VerifyPhase extends BasePhase {
       issueDescription: pc.description,
       issueIid: Number(pc.displayId),
       workspace: ctx.workspace,
+      knowledgeEnabled: this.config.knowledge.enabled,
     };
     return planModeVerifyPrompt(promptCtx);
   }

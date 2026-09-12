@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import type { SystemStatus } from '@/types';
-import { getIssueIid, getIssueTitle } from '@/types';
+import { getIssueIid, getIssueTitle, getReviewApprovalSource } from '@/types';
 import * as api from '@/api/client';
 import { usePipeline, loadPipelineMeta } from '@/composables/usePipeline';
 import { useSSE } from '@/composables/useSSE';
@@ -398,6 +398,7 @@ onUnmounted(() => {
               :review-submitting="detail.reviewSubmitting.value"
               :review-feedback="detail.reviewFeedback.value"
               :review-history="detail.reviewHistory.value"
+              :approval-source="getReviewApprovalSource(detail.selectedIssue.value)"
               :issue-state="detail.selectedIssue.value.state"
               :current-phase="detail.selectedIssue.value.currentPhase"
               :plan-doc-content="detail.planDocContent.value"
@@ -417,6 +418,7 @@ onUnmounted(() => {
               :supplement="detail.detailSupplement.value"
               :supplement-form="detail.detailSupplementForm.value"
               :loading="detail.detailSupplementLoading.value"
+              :error="detail.detailSupplementError.value"
               :editing="detail.detailSupplementEditing.value"
               :saving="detail.detailSupplementSaving.value"
               :has-data="detail.hasSupplementData(detail.detailSupplement.value)"

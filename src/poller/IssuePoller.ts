@@ -216,6 +216,7 @@ export class IssuePoller {
   }
 
   private maybeAutoApproveWaiting(): void {
+    if (!this.config.review.enabled) return;
     const autoLabels = this.config.review.autoApproveLabels;
     if (!autoLabels.length) return;
 
@@ -256,7 +257,7 @@ export class IssuePoller {
         });
 
         // 统一更新编排状态、阶段进度与历史，并发出 review:approved 事件
-        await this.orchestrator.applyGateAction(number, { action: 'approve' });
+        await this.orchestrator.applyGateAction(number, { action: 'approve', source: 'label' });
 
         try {
           await this.github.createIssueNote(

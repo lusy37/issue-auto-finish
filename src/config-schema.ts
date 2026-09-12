@@ -25,6 +25,9 @@ function envBoolean(defaultValue: string = "false") {
     .transform((v) => v === "true");
 }
 
+/** 用户可编辑的功能开关只接受明确的 true / false。 */
+const featureToggle = () => z.enum(['true', 'false']).default('true').transform(v => v === 'true');
+
 /** Integer env var with optional min/max bounds. */
 function envInt(defaultValue: string, opts?: { min?: number; max?: number }) {
   let schema = z.coerce.number().int();
@@ -114,11 +117,10 @@ export const envSchema = z.object({
   MAX_CONCURRENT_ISSUES: envInt("1", { min: 1 }),
 
   // --- Review ---
-  REVIEW_ENABLED: envBoolean("true"),
+  REVIEW_ENABLED: featureToggle(),
   REVIEW_AUTO_APPROVE_LABELS: z.string().optional().default(""),
 
   // --- Web ---
-  WEB_ENABLED: envBoolean("true"),
   WEB_HOST: z.string().optional().default("127.0.0.1"),
   WEB_PORT: envPort("3000"),
   FRONTEND_DIST_DIR: z.string().optional(),
@@ -162,11 +164,11 @@ export const envSchema = z.object({
   LOCALE: z.enum(["zh-CN", "en"]).optional().default("zh-CN"),
 
   // --- Knowledge ---
-  KNOWLEDGE_ENABLED: envBoolean("true"),
+  KNOWLEDGE_ENABLED: featureToggle(),
   KNOWLEDGE_PATH: z.string().optional(),
 
   // --- Distill (知识蒸馏) ---
-  DISTILL_ENABLED: envBoolean("true"),
+  DISTILL_ENABLED: featureToggle(),
   DISTILL_MIN_DIARIES_FOR_DISTILL: envInt("3", { min: 1 }),
   DISTILL_MEMORY_CONFIDENCE_THRESHOLD: z.coerce
     .number()
@@ -176,7 +178,7 @@ export const envSchema = z.object({
     .default(0.7),
 
   // --- Verify-Fix Loop (验证-修复循环) ---
-  VERIFY_FIX_LOOP_ENABLED: envBoolean("true"),
+  VERIFY_FIX_LOOP_ENABLED: featureToggle(),
   VERIFY_FIX_MAX_ITERATIONS: envInt("3", { min: 1, max: 10 }),
   VERIFY_TODOLIST_CHECK_ENABLED: envBoolean("true"),
 });
@@ -195,6 +197,10 @@ export type ParsedEnv = z.infer<typeof envSchema>;
 export function extractEnvSubset(
   env: Record<string, string | undefined>,
 ): Record<string, string | undefined> {
+  if (env.WEB_ENABLED) {
+    if (env.WEB_ENABLED !== 'true') throw new Error('Web 工作台固定开启，请删除 WEB_ENABLED 配置；地址和端口仍可配置。');
+    console.warn('WEB_ENABLED 已停用：Web 工作台固定开启，请清理此配置。');
+  }
   const keys = Object.keys(envSchema.shape) as (keyof typeof envSchema.shape)[];
   const subset: Record<string, string | undefined> = {};
   for (const key of keys) {
@@ -266,7 +272,6 @@ export function transformEnvToConfig(env: ParsedEnv, dirname: string) {
         .filter(Boolean),
     },
     web: {
-      enabled: env.WEB_ENABLED,
       host: env.WEB_HOST,
       port: webPort,
       frontendDistDir:

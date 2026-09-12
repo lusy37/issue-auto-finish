@@ -5,7 +5,7 @@ import type { IssueProcessingContext, OrchestratorDeps, PhaseLoopResult } from '
 import {
   Orchestrator,
   buildPipeline,
-  PLAN_MODE_TRANSITIONS,
+  createPlanModeTransitions,
 } from '../../orchestration/index.js';
 import { StandardPhaseRunner } from '../StandardPhaseRunner.js';
 import { isShuttingDown } from '../../shutdown/ShutdownSignal.js';
@@ -30,7 +30,7 @@ export async function executePhaseLoop(
     {
       e2e: isE2eEnabledForIssue(issueIid, deps.tracker, deps.config),
     },
-    PLAN_MODE_TRANSITIONS,
+    createPlanModeTransitions(deps.config.verifyFixLoop.maxIterations),
   );
 
 
@@ -87,9 +87,15 @@ export async function executePhaseLoop(
         }
       },
       onGateWaiting: (_iid, state) => {
-        if (state.phaseId === 'review' && deps.shouldAutoApprove(ctx.issue.labels ?? [])) {
+        if (state.phaseId !== 'review') return undefined;
+        if (!deps.config.review.enabled) {
+          if (!wtPlan.isArtifactReady('01-plan.md')) throw new Error('完整计划尚未保存，不能按配置自动通过审核');
+          logger.info('计划已保存，按配置自动通过审核', { number: issueIid });
+          return { action: 'approve', source: 'configuration' };
+        }
+        if (deps.shouldAutoApprove(ctx.issue.labels ?? [])) {
           logger.info('Auto-approving review gate by label match', { number: issueIid });
-          return { action: 'approve' };
+          return { action: 'approve', source: 'label' };
         }
         return undefined;
       },

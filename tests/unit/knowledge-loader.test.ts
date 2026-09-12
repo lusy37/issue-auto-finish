@@ -66,9 +66,8 @@ describe('KnowledgeLoader', () => {
       expect(result!.toolchain.installCommand).toBe(KNOWLEDGE_DEFAULTS.toolchain.installCommand);
     });
 
-    it('returns null when file does not exist', () => {
-      const result = loadKnowledge('/nonexistent/knowledge.json');
-      expect(result).toBeNull();
+    it('显式知识路径不存在时给出明确错误', () => {
+      expect(() => loadKnowledge(path.join(tmpDir, 'missing.json'))).toThrow('无法读取项目知识');
     });
 
     it('拒绝损坏的项目知识文件', () => {
