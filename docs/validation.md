@@ -38,3 +38,9 @@ Windows 专项在 Windows 实机执行，非跳过结果。各增量命令、执
 保留正常闭环、审核驳回、重复触发、验证失败回构建、修复上限、取消、超时、重启恢复、交付失败重试、PR 复用、草稿创建结果未知、蒸馏失败等场景。新增并发启动 HTTP 测试验证相同编号只创建一次，平台查询失败后可重试。
 
 原始运行数据包含本机路径和日志，位于已忽略的 .iaf-mini；提交的 evidence 文件只包含核验所需摘要，配置令牌不纳入 Git。Windows CI 文件已准备，本地工程未推送远程，不能把本机结果称为远程 CI 通过。
+
+## 底层依赖迁移复验（2026-09-12）
+
+在进程提交 8d06997、存储提交 d2852b1 后，Windows / Node 22.18.0 / 本机 Chrome 验收通过：npm run typecheck、npm run build、npm run web:build、npm test（937 项）、npm run test:e2e（1 项）、npm run test:windows（1 项，已包含在完整回归中）。
+
+新增进程树取消/超时、实时中文输出和长日志、程序查找、原子写入占用/配额/部分写入故障检查。仅验收 Windows；本次未重新进行真实 Codex 或 GitHub 外部交付。详见 [迁移说明](dependency-migration.md) 和 [机器可读证据](evidence/dependency-migration.json)。

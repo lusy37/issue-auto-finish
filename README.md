@@ -55,6 +55,8 @@ npm run test:codex
 
 工程开发在 main 上按功能提交，2026-09-05 至 2026-09-11 对应七个开发阶段，日期按指定学习日程回排，不使用 Git 阶段标签。业务任务使用独立 worktree 和分支，通过 PR 交付；完成后不自动合并。此工程的 Git 历史保存在本地，专用测试仓库的 Issue/PR 是独立验收产物。
 
-本次完整回归 925 项通过，另通过 Chrome 工作台端到端、Windows 专项和真实 Codex 检查。真实流程产物：[Issue #3](https://github.com/lusy37/issue-auto-finish-sandbox/issues/3)、[PR #4](https://github.com/lusy37/issue-auto-finish-sandbox/pull/4)。
+初次实现验收的完整回归 925 项通过，另通过 Chrome 工作台端到端、Windows 专项和真实 Codex 检查。真实流程产物：[Issue #3](https://github.com/lusy37/issue-auto-finish-sandbox/issues/3)、[PR #4](https://github.com/lusy37/issue-auto-finish-sandbox/pull/4)。
+
+底层依赖迁移后，Windows 本机完整回归 **937 项通过**，类型检查、前后端构建、Chrome 工作台端到端及 Windows 专项均通过。本次未复跑真实 Codex/GitHub 验收。相关源码与脚本净减少 138 行，见 [迁移记录](docs/dependency-migration.md)。
 
 详细说明：[开发记录](docs/development.md)、[架构与功能对照](docs/architecture.md)、[精简依据](docs/simplification.md)、[验收记录](docs/validation.md)。

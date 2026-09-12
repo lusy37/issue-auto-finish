@@ -1,0 +1,109 @@
+{
+  "verifiedAt": "2026-09-12T10:07:06.341Z",
+  "sourceCommit": "d2852b13997fded4f3c1a9f69a6bf01804bb576e",
+  "baseline": "c5a83ba",
+  "platform": "win32",
+  "node": "v22.18.0",
+  "browser": "本机 Chrome",
+  "dependencies": {
+    "execa": "10.0.1",
+    "which": "6.0.1",
+    "atomically": "2.1.1"
+  },
+  "checks": [
+    {
+      "command": "npm run typecheck",
+      "log": "atomic-typecheck.log",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run build",
+      "log": "build.log",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run web:build",
+      "log": "web-build.log",
+      "exitCode": 0
+    },
+    {
+      "command": "npm test -- --silent",
+      "log": "full-test.log",
+      "exitCode": 0,
+      "files": 97,
+      "tests": 937
+    },
+    {
+      "command": "npm run test:e2e -- --silent",
+      "log": "e2e.log",
+      "exitCode": 0,
+      "files": 1,
+      "tests": 1
+    },
+    {
+      "command": "npm run test:windows -- --silent",
+      "log": "windows.log",
+      "exitCode": 0,
+      "files": 1,
+      "tests": 1
+    }
+  ],
+  "localLogDirectory": ".iaf-mini/dependency-migration/",
+  "sourceChanges": [
+    {
+      "file": "scripts/demo.ts",
+      "added": 2,
+      "removed": 4
+    },
+    {
+      "file": "scripts/dev-all.mjs",
+      "added": 0,
+      "removed": 52
+    },
+    {
+      "file": "scripts/dev-all.ts",
+      "added": 30,
+      "removed": 0
+    },
+    {
+      "file": "src/demand/DraftService.ts",
+      "added": 2,
+      "removed": 4
+    },
+    {
+      "file": "src/deploy/DevServerManager.ts",
+      "added": 17,
+      "removed": 42
+    },
+    {
+      "file": "src/distill/DistillScheduler.ts",
+      "added": 2,
+      "removed": 8
+    },
+    {
+      "file": "src/distill/VersionStore.ts",
+      "added": 3,
+      "removed": 12
+    },
+    {
+      "file": "src/tracker/BaseTracker.ts",
+      "added": 8,
+      "removed": 23
+    },
+    {
+      "file": "src/utils/atomicFile.ts",
+      "added": 18,
+      "removed": 16
+    },
+    {
+      "file": "src/utils/process.ts",
+      "added": 43,
+      "removed": 102
+    }
+  ],
+  "netSourceLinesRemoved": 138,
+  "limitations": [
+    "仅 Windows 本机验收；未执行 Linux/macOS 回归",
+    "本次未重新调用真实 Codex 或向真实 GitHub 创建交付产物；已有真实验收记录单独保留"
+  ]
+}
