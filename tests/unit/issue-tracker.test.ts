@@ -51,6 +51,30 @@ describe('IssueTracker', () => {
     return record;
   }
 
+  describe('加载记录校验', () => {
+    it.each([
+      { name: '空记录', record: null, reason: '缺少需求来源' },
+      { name: '缺失 sourceRef', record: { demandSpec: {} }, reason: '缺少需求来源' },
+      { name: '来源不受支持', record: { demandSpec: { sourceRef: { source: 'user-input' } } }, reason: '任务来源必须为 GitHub Issue' },
+      { name: '状态无效', record: { demandSpec: { sourceRef: { source: 'github-issue' } }, state: 'unknown' }, reason: '任务状态无效' },
+    ])('$name 时提供可定位的格式错误并保留原文件', ({ record, reason }) => {
+      const filePath = path.join(tmpDir, 'tracker.json');
+      const content = JSON.stringify({ format: 'iaf-mini/v1', issues: { '42': record } });
+      fs.writeFileSync(filePath, content);
+
+      let failure: unknown;
+      try { createTracker(tmpDir); } catch (error) { failure = error; }
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toBeInstanceOf(TypeError);
+      const message = (failure as Error).message;
+      expect(message).toContain('任务 42');
+      expect(message).toContain(reason);
+      expect(message).toContain(filePath);
+      expect(message).not.toMatch(/旧任务|面试版/);
+      expect(fs.readFileSync(filePath, 'utf8')).toBe(content);
+    });
+  });
+
   describe('isStalled', () => {
     it('returns false for non-existent issue', () => {
       expect(tracker.isStalled(999)).toBe(false);

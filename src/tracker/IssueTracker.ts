@@ -21,10 +21,20 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
     const filename = 'tracker.json';
     super(dataDir, filename, 'issues', 'tracker');
     this.lifecycleManagers = lifecycleManagers;
-    for (const record of this.getAllRecords()) {
-      if (!record.demandSpec || record.demandSpec.sourceRef.source !== 'github-issue' || !(Object.values(IssueState) as string[]).includes(record.state)) throw new Error('不支持旧任务数据，请使用面试版独立数据目录');
+    const validStates = new Set(Object.values(IssueState));
+    for (const [issueIid, record] of Object.entries(this.collection)) {
+      const source = record?.demandSpec?.sourceRef?.source;
+      const reason = !source
+        ? '缺少需求来源'
+        : source !== 'github-issue'
+          ? '任务来源必须为 GitHub Issue'
+          : !validStates.has(record.state)
+            ? '任务状态无效'
+            : undefined;
+      if (reason) {
+        throw new Error(`任务 ${issueIid} 的数据格式无效：${reason}。请检查文件：${this.filePath}`);
+      }
     }
-
   }
 
   private lifecycleFor(record: IssueRecord): ActionLifecycleManager {
