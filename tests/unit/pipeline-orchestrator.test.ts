@@ -143,13 +143,13 @@ describe('PipelineOrchestrator', () => {
       trackerStore.set(number, { ...cur, ...extra, state, updatedAt: new Date().toISOString() });
     });
     mockTracker.setOrchestrationState.mockImplementation(
-      (number: number, orchestrationState: any, legacyState: any, extra?: any) => {
+      (number: number, orchestrationState: any, trackerState: any, extra?: any) => {
         const cur = trackerStore.get(number) ?? { issueIid: number, attempts: 0 };
         trackerStore.set(number, {
           ...cur,
           ...extra,
           orchestrationState,
-          state: legacyState,
+          state: trackerState,
           updatedAt: new Date().toISOString(),
         });
       },
@@ -385,28 +385,6 @@ describe('PipelineOrchestrator', () => {
       const finalRecord = mockTracker.get(issue.number);
       expect(finalRecord?.state).toBe(IssueState.Completed);
       expect(finalRecord?.prUrl).toEqual(expect.any(String));
-    });
-  });
-
-  describe('determineResumePhaseIndex (via ActionLifecycleManager)', () => {
-    it('returns 0 for Pending state in plan-mode', () => {
-      const lm = createLifecycleManager(getPipelineDef('plan-mode'));
-      expect(lm.determineResumePhaseIndex(IssueState.Pending)).toBe(0);
-    });
-
-    it('returns correct index for PhaseDone with currentPhase in plan-mode', () => {
-      const lm = createLifecycleManager(getPipelineDef('plan-mode'));
-      expect(lm.determineResumePhaseIndex(IssueState.PhaseDone, undefined, 'plan')).toBe(1);
-    });
-
-    it('returns index after gate for PhaseApproved in plan-mode', () => {
-      const lm = createLifecycleManager(getPipelineDef('plan-mode'));
-      expect(lm.determineResumePhaseIndex(IssueState.PhaseApproved, undefined, 'review')).toBe(2);
-    });
-
-    it('resumes from failedAtState on retry', () => {
-      const lm = createLifecycleManager(getPipelineDef('plan-mode'));
-      expect(lm.determineResumePhaseIndex(IssueState.Failed, IssueState.PhaseRunning, 'build')).toBe(2);
     });
   });
 

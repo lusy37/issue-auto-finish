@@ -11,7 +11,6 @@ import type {
 } from '../orchestration/index.js';
 import {
   recordToOrchestrationState,
-  recordToPhaseHistory,
   orchestrationStateToTrackerUpdate,
 } from './StateAdapter.js';
 
@@ -32,7 +31,7 @@ export class TrackerStateStore implements OrchestratorStateStore {
     const state: OrchestrationState =
       record.orchestrationState ?? recordToOrchestrationState(record);
     const history: PhaseHistoryEntry[] =
-      record.phaseHistory ?? recordToPhaseHistory(record);
+      record.phaseHistory ?? [];
     return {
       state,
       history,

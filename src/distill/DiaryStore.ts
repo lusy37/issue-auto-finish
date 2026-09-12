@@ -1,7 +1,7 @@
 /**
  * DiaryStore — 日记持久化存储。
  *
- * 继承 BaseTracker<DiaryEntry>，JSON 文件持久化到 data/distill/diaries.json。
+ * 继承 BaseTracker<DiaryEntry>，JSON 文件持久化到传入数据目录下的 diaries.json。
  */
 import { BaseTracker } from '../tracker/BaseTracker.js';
 import type { DiaryEntry } from './types.js';

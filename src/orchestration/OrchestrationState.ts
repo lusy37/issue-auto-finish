@@ -1,11 +1,11 @@
 import type { PhaseError, GateReason } from './Intent.js';
 
 /**
- * 编排状态（OrchestrationState）— 取代旧的 IssueState 枚举。
+ * 编排状态（OrchestrationState）— 描述编排器当前运行位置，并投影到 IssueRecord。
  *
  * 设计原则：
- * - 顶层 8 种 union，每种状态用 `kind` 字段标识。
- * - 位置信息（哪个阶段）统一编码在 `phaseId` 字段，不再有「currentPhase 隐式字段」。
+ * - 各状态使用 `kind` 字段区分。
+ * - 位置信息（哪个阶段）统一编码在 `phaseId` 字段。
  * - 终态与位置无关：`pipeline-completed` 不依赖「最后一个阶段是哪个」，
  *   编排器在最后一个阶段返回 `completed` Intent 时计算得到。
  * - 全部为不可变值对象（readonly）。

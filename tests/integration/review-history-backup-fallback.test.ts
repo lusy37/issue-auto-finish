@@ -172,16 +172,16 @@ describe('集成测试：review-history API 在 worktree 缺失时 fallback 到 
 
   it('worktree 与 backup 都有反馈时，合并 + 按时间排序 + 重新编号', async () => {
     // worktree 反馈（更晚）
-    const primaryPlanDir = path.join(
+    const planDir = path.join(
       cfg.project.worktreeBaseDir,
       'issue-42',
       cfg.project.projectSubDir,
       '.claude-plan',
       'issue-42',
     );
-    fs.mkdirSync(primaryPlanDir, { recursive: true });
+    fs.mkdirSync(planDir, { recursive: true });
     fs.writeFileSync(
-      path.join(primaryPlanDir, 'review-history.json'),
+      path.join(planDir, 'review-history.json'),
       JSON.stringify([
         { round: 1, feedback: 'worktree-later', timestamp: '2024-03-05T00:00:00Z' },
       ], null, 2),

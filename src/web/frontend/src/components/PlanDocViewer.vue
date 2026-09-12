@@ -32,7 +32,6 @@ const { t } = useI18n();
 const NOT_FOUND_HINTS: Record<string, () => string> = {
   'review-feedback.md': () => t('planDoc.noReviewFeedback'),
   '02-verify-report.md': () => t('planDoc.verifyNotGenerated'),
-  '04-verify-report.md': () => t('planDoc.verifyNotGenerated'),
 };
 
 async function loadDoc(filename: string) {

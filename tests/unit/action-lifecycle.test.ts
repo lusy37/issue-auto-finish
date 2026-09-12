@@ -154,65 +154,6 @@ describe('ActionLifecycleManager', () => {
       });
     });
 
-    describe('determineResumePhaseIndex — plan-mode', () => {
-      it('Pending → 0', () => {
-        expect(lm.determineResumePhaseIndex(IssueState.Pending)).toBe(0);
-      });
-
-      it('BranchCreated → 0', () => {
-        expect(lm.determineResumePhaseIndex(IssueState.BranchCreated)).toBe(0);
-      });
-
-      it('PhaseRunning + plan → 0', () => {
-        expect(lm.determineResumePhaseIndex(IssueState.PhaseRunning, undefined, 'plan')).toBe(0);
-      });
-
-      it('PhaseDone + plan → 1', () => {
-        expect(lm.determineResumePhaseIndex(IssueState.PhaseDone, undefined, 'plan')).toBe(1);
-      });
-
-      it('PhaseWaiting + review → 1', () => {
-        expect(lm.determineResumePhaseIndex(IssueState.PhaseWaiting, undefined, 'review')).toBe(1);
-      });
-
-      it('PhaseApproved + review → 2', () => {
-        expect(lm.determineResumePhaseIndex(IssueState.PhaseApproved, undefined, 'review')).toBe(2);
-      });
-
-      it('PhaseRunning + build → 2', () => {
-        expect(lm.determineResumePhaseIndex(IssueState.PhaseRunning, undefined, 'build')).toBe(2);
-      });
-
-      it('PhaseDone + build → 3', () => {
-        expect(lm.determineResumePhaseIndex(IssueState.PhaseDone, undefined, 'build')).toBe(3);
-      });
-
-      it('PhaseRunning + verify → 3', () => {
-        expect(lm.determineResumePhaseIndex(IssueState.PhaseRunning, undefined, 'verify')).toBe(3);
-      });
-
-      it('Completed → 4', () => {
-        expect(lm.determineResumePhaseIndex(IssueState.Completed)).toBe(4);
-      });
-
-      it('Failed + failedAtState=PhaseRunning + currentPhase=build → 2', () => {
-        expect(lm.determineResumePhaseIndex(IssueState.Failed, IssueState.PhaseRunning, 'build')).toBe(2);
-      });
-
-      it('Failed + failedAtState=PhaseRunning + currentPhase=plan → 0', () => {
-        expect(lm.determineResumePhaseIndex(IssueState.Failed, IssueState.PhaseRunning, 'plan')).toBe(0);
-      });
-
-      it('Failed + failedAtState=PhaseRunning + currentPhase=verify → 3', () => {
-        expect(lm.determineResumePhaseIndex(IssueState.Failed, IssueState.PhaseRunning, 'verify')).toBe(3);
-      });
-
-      it('Failed + failedAtState=PhaseRunning + currentPhase=undefined → fallback to last match', () => {
-        // 向后兼容：缺少 currentPhase 时回退到旧的从后向前扫描逻辑
-        expect(lm.determineResumePhaseIndex(IssueState.Failed, IssueState.PhaseRunning, undefined)).toBe(3);
-      });
-    });
-
     describe('getPhasePreState', () => {
       it('plan → BranchCreated', () => {
         expect(lm.getPhasePreState('plan')).toBe(IssueState.BranchCreated);

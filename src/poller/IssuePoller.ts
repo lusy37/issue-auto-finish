@@ -240,9 +240,7 @@ export class IssuePoller {
     for (const record of records) {
       try {
 
-        // 不应被 review 的 autoApproveLabels 误触发。修复前：直接写死 currentPhase='review'，
-
-        // 下次 drive 时 determineResumePhaseIndex 错误地从 build 重新开始，PR 永远出不来。
+        // 标签自动审核只作用于 review 阶段。
         if (record.currentPhase !== 'review') {
           continue;
         }
@@ -257,7 +255,7 @@ export class IssuePoller {
           matchedLabels: matched,
         });
 
-        // orchestrationState / phaseProgress / phaseHistory，并发出 review:approved 兼容事件
+        // 统一更新编排状态、阶段进度与历史，并发出 review:approved 事件
         await this.orchestrator.applyGateAction(number, { action: 'approve' });
 
         try {

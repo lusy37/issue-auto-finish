@@ -86,7 +86,7 @@ describe('handleFailure', () => {
     );
   });
 
-  it('handles backward compatibility when resetGeneration is undefined', async () => {
+  it('尚未重置的任务按初始代数处理失败', async () => {
     // Old records have no resetGeneration field
     (deps.tracker.get as ReturnType<typeof vi.fn>).mockReturnValue({
       state: IssueState.PhaseRunning,

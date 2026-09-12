@@ -41,16 +41,16 @@ export interface IssueLifecycle {
   attempts: number;
   lastError?: string;
   failedAtState?: IssueState;
-  /** 最后一次错误是否可重试。undefined 视为可重试（向后兼容旧记录） */
+  /** 最后一次错误是否可重试。未指定时允许重试，仍受次数上限约束 */
   lastErrorRetryable?: boolean;
   /** 中止时的阶段名（Paused 状态下有值） */
   pausedAtPhase?: string;
-  /** 持久化处理锁，防止 poller 并发拾取同一 issue。向后兼容：旧记录无此字段 = 无锁 */
+  /** 持久化处理锁，防止 poller 并发拾取同一 issue；未设置时表示无锁 */
   processingLock?: {
     correlationId: string;
     ts: string;
   };
-  /** 每次 resetFull() 递增，用于检测并发重置 vs 重置后的正常失败。向后兼容：旧记录无此字段 = 0 */
+  /** 每次 resetFull() 递增，用于识别并发重置；尚未重置时按 0 处理 */
   resetGeneration?: number;
 }
 
@@ -68,7 +68,6 @@ export interface IssueBranch {
 export interface IssueFeatureFlags {
   /** undefined = follow system setting */
   issueNoteSyncEnabled?: boolean;
-  /** undefined = follow system setting */
 }
 
 /** 部署/预览信息 */
@@ -143,7 +142,7 @@ export interface PhaseProgress {
   startedAt?: string;
   completedAt?: string;
   error?: string;
-  /** AI 会话 ID，用于断点续跑（--resume） */
+  /** AI 会话 ID，用于通过 Runner 恢复执行 */
   sessionId?: string;
 }
 
@@ -194,8 +193,6 @@ export function deriveOrchestrationState(record: IssueRecord): OrchestrationStat
   }
 }
 
-
-export function derivePhaseHistory(record: IssueRecord): PhaseHistoryEntry[] { return record.phaseHistory ?? []; }
 
 function deriveGateReason(phaseId: string): GateReason {
   switch (phaseId) {

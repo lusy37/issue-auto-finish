@@ -373,6 +373,28 @@ describe('API Routes — git fallback for plan files', () => {
     );
   });
 
+  it('从 Git 读取当前验证报告', async () => {
+    fbTracker.get.mockReturnValue(createTestRecord());
+    fbMockGit.showFile.mockImplementation(async (_branch, filename) =>
+      filename.endsWith('/02-verify-report.md') ? '# 当前验证报告' : null);
+    const res = await fbReq('GET', '/api/issues/42/plans/02-verify-report.md');
+    expect(res.status).toBe(200);
+    expect(res.body).toContain('当前验证报告');
+  });
+
+  it('只有旧名称报告时，当前验证报告保持未生成状态', async () => {
+    fbTracker.get.mockReturnValue(createTestRecord());
+    fbMockGit.showFile.mockImplementation(async (_branch, filename) =>
+      filename.endsWith('/04-verify-report.md') ? '# 其他报告' : null);
+    const res = await fbReq('GET', '/api/issues/42/plans/02-verify-report.md');
+    expect(res.status).toBe(404);
+  });
+
+  it('拒绝请求流水线未声明的报告文件名', async () => {
+    const res = await fbReq('GET', '/api/issues/42/plans/04-verify-report.md');
+    expect(res.status).toBe(400);
+  });
+
   it('returns 404 when both worktree and git have no plan file', async () => {
     fbTracker.get.mockReturnValue(undefined);
     fbMockGit.showFile.mockResolvedValue(null);

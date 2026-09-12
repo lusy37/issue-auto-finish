@@ -13,7 +13,7 @@ export abstract class BaseTracker<TRecord> {
   protected readonly filePath: string;
   protected data: Record<string, Record<string, TRecord>>;
 
-  /** JSON 根字段名（如 'issues' 或 'batches'）*/
+  /** JSON 根字段名（如 'issues' 或 'diaries'）*/
   protected readonly collectionKey: string;
   protected readonly trackerName: string;
 
@@ -33,12 +33,12 @@ export abstract class BaseTracker<TRecord> {
     if (!fs.existsSync(this.filePath)) return { [this.collectionKey]: {} };
     const parsed = JSON.parse(fs.readFileSync(this.filePath, "utf8"));
     if (
-      parsed.format !== "iaf-mini/v1" ||
+      parsed?.format !== "iaf-mini/v1" ||
       !parsed[this.collectionKey] ||
       typeof parsed[this.collectionKey] !== "object" ||
       Array.isArray(parsed[this.collectionKey])
     )
-      throw new Error("不支持此任务数据格式，请使用 .iaf-mini 新数据目录");
+      throw new Error(`存储数据格式无效：需要 iaf-mini/v1 格式及 ${this.collectionKey} 对象。请检查文件：${this.filePath}`);
     return { [this.collectionKey]: parsed[this.collectionKey] };
   }
 
@@ -68,18 +68,16 @@ export abstract class BaseTracker<TRecord> {
     }
   }
 
-  /** 单实例启动时清理当前存储的库临时文件及迁移前的旧命名文件。 */
+  /** 单实例启动时清理当前存储由 atomically 生成的残留临时文件。 */
   private cleanupStaleTempFiles(): void {
     try {
       const dir = path.dirname(this.filePath);
       if (!fs.existsSync(dir)) return;
-      const prefix = `.${this.trackerName}-`;
       const atomicPrefix = path.basename(this.filePath) + ".tmp-";
       let removed = 0;
       for (const name of fs.readdirSync(dir)) {
-        const legacy = name.startsWith(prefix) && name.endsWith(".tmp");
         const atomic = name.startsWith(atomicPrefix) && /^\d{10}[a-f0-9]{6}$/.test(name.slice(atomicPrefix.length));
-        if (legacy || atomic) {
+        if (atomic) {
           this.safeUnlinkTmp(path.join(dir, name));
           removed += 1;
         }

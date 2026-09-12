@@ -1,6 +1,6 @@
 # 项目开发约定
 
-本项目是单用户、单实例、单仓库的面试展示工作台，使用 Vue、TypeScript、Express 和本地 JSON。开发沟通、新增注释与文档使用中文。
+本项目是单用户、单实例、单仓库的 AI Issue 开发工作台，使用 Vue、TypeScript、Express 和本地 JSON。开发沟通、新增注释与文档使用中文。
 
 - 核心阶段为 plan、review、build、verify、uat，成功后执行交付和经验采集。
 - `orchestration` 负责状态、意图和纯状态转换；`orchestrator` 负责调用和副作用，两者均保留。

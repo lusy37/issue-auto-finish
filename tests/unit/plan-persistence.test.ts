@@ -46,7 +46,7 @@ describe('PlanPersistence', () => {
       expect(first).toBe(second);
     });
 
-    it('upgrades a legacy .gitignore that only contains .phase-prompt.md', () => {
+    it('补齐只有 .phase-prompt.md 的忽略配置', () => {
       const dir = path.join(tmpDir, '.claude-plan');
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(path.join(dir, '.gitignore'), '.phase-prompt.md\n', 'utf-8');

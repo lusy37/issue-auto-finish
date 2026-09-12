@@ -355,9 +355,7 @@ function reduceRequestRetryFrom(input: ReducerInput, phaseId: string): ReducerOu
  * intent.context 是宽松的 Record<string, unknown>（避免编排核心绑死阶段语义），
  * 这里负责把它收敛为 RetryFromContext 类型，供编排器在下轮调度时透传。
  *
- * 兼容两种 key 命名：
- * - `verifyFailures`（VerifyPhase 当前实现）
- * - `failures`（旧测试用例与潜在自定义阶段）
+ * 验证失败原因使用 VerifyPhase 生成的 `verifyFailures` 字段。
  *
  * 返回 undefined 表示无法识别有效上下文（不写 historyEntry，避免污染）。
  */
@@ -365,8 +363,7 @@ function extractRetryFromContext(intent: RequestRetryFromIntent): RetryFromConte
   const ctx = intent.context;
   if (!ctx || typeof ctx !== 'object') return undefined;
 
-  const rawFailures = (ctx as Record<string, unknown>).verifyFailures
-    ?? (ctx as Record<string, unknown>).failures;
+  const rawFailures = ctx.verifyFailures;
   const verifyFailures = Array.isArray(rawFailures)
     ? rawFailures.filter((x): x is string => typeof x === 'string')
     : [];

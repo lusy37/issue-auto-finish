@@ -22,6 +22,22 @@ describe("BaseTracker 持久化边界", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  it.each([null, [], {}, { format: "unknown", diaries: {} }, { format: "iaf-mini/v1", diaries: [] }])(
+    "拒绝无效存储结构 %j，并保留原文件",
+    data => {
+      const filePath = path.join(dir, "diaries.json");
+      const content = JSON.stringify(data);
+      fs.writeFileSync(filePath, content);
+      let failure: unknown;
+      try { new DiaryStore(dir); } catch (error) { failure = error; }
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toBeInstanceOf(TypeError);
+      expect((failure as Error).message).toContain("存储数据格式无效");
+      expect((failure as Error).message).toContain(filePath);
+      expect(fs.readFileSync(filePath, "utf8")).toBe(content);
+    },
+  );
+
   it("保存失败时包装错误并保留 code、errno、syscall、path 和 cause", () => {
     const store = new DiaryStore(dir);
     const error = Object.assign(new Error("磁盘配额不足"), {
@@ -47,9 +63,9 @@ describe("BaseTracker 持久化边界", () => {
     expect(restarted.get("未保存")).toBeUndefined();
   });
 
-  it("启动清理本 Tracker 的新旧临时文件，并保留其他文件", () => {
-    const stale = [".diary-store-12345-1700000000000.tmp", "diaries.json.tmp-1234567890abcdef"];
-    const keep = [".other-tracker-1.tmp", "other.json.tmp-1234567890abcdef", "diaries.json.tmp-backup"];
+  it("启动只清理本 Tracker 的 atomically 临时文件，并保留其他文件", () => {
+    const stale = ["diaries.json.tmp-1234567890abcdef"];
+    const keep = [".diary-store-12345-1700000000000.tmp", ".other-tracker-1.tmp", "other.json.tmp-1234567890abcdef", "diaries.json.tmp-backup"];
     for (const name of [...stale, ...keep]) fs.writeFileSync(path.join(dir, name), "{}");
     new DiaryStore(dir);
     for (const name of stale) expect(fs.existsSync(path.join(dir, name))).toBe(false);

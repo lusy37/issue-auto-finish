@@ -28,7 +28,7 @@ export class CodexRunner implements AIRunner {
 
   constructor(private readonly binary = '', private readonly model?: string) {}
 
-  /** 会话标识是不透明值，前缀防止恢复迁移前的 Claude 会话。 */
+  /** 会话标识是不透明值；仅接受本执行器命名空间内的非空标识。 */
   canResumeSession(sessionId: string): boolean {
     return sessionId.startsWith(SESSION_PREFIX) && sessionId.length > SESSION_PREFIX.length;
   }

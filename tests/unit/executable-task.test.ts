@@ -1,10 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   issueStateToUnified,
-  taskStatusToUnified,
   issueToExecutableTask,
-  braindumpTaskToExecutableTask,
-  unifiedStatusToCategory,
   issueStateCategory,
   type UnifiedTaskStatus,
 } from '../../src/tracker/ExecutableTask.js';
@@ -28,20 +25,6 @@ function makeIssueRecord(overrides?: Partial<IssueRecord>): IssueRecord {
       description: '',
       createdAt: now,
     },
-    ...overrides,
-  };
-}
-
-function makeBraindumpTask(overrides?: Partial<BraindumpTask>): BraindumpTask {
-  return {
-    id: 'task-1',
-    index: 0,
-    title: 'Task 1',
-    description: 'Do something',
-    dependsOn: [],
-    branchName: 'braindump/batch-1/task-1',
-    status: TaskStatus.Pending,
-    attempts: 0,
     ...overrides,
   };
 }
@@ -142,36 +125,6 @@ describe('UnifiedTaskStatus completeness', () => {
     for (const s of expected) {
       expect(results.has(s), `${s} should be reachable`).toBe(true);
     }
-  });
-});
-
-describe('unifiedStatusToCategory', () => {
-  it('maps running → active', () => {
-    expect(unifiedStatusToCategory('running')).toBe('active');
-  });
-
-  it('maps preparing → active', () => {
-    expect(unifiedStatusToCategory('preparing')).toBe('active');
-  });
-
-  it('maps merging → active', () => {
-    expect(unifiedStatusToCategory('merging')).toBe('active');
-  });
-
-  it('maps waiting → blocked', () => {
-    expect(unifiedStatusToCategory('waiting')).toBe('blocked');
-  });
-
-  it('maps completed → completed', () => {
-    expect(unifiedStatusToCategory('completed')).toBe('completed');
-  });
-
-  it('maps failed → failed', () => {
-    expect(unifiedStatusToCategory('failed')).toBe('failed');
-  });
-
-  it('maps idle → idle', () => {
-    expect(unifiedStatusToCategory('idle')).toBe('idle');
   });
 });
 

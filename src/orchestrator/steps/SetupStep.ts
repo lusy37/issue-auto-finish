@@ -78,7 +78,7 @@ export async function executeSetup(
     );
   }
 
-  // 同步阶段进度到 tracker（处理旧记录无 phaseProgress 的情况）
+  // 首次执行时初始化 tracker 阶段进度，恢复执行时保留已有进度
   if (!record.phaseProgress) {
     deps.tracker.initPhaseProgress(issue.number, pipelineDef);
   }

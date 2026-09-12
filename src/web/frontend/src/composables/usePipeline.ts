@@ -118,7 +118,7 @@ export function usePipeline() {
     if (issue.phaseProgress?.[phase]) {
       return issue.phaseProgress[phase].status;
     }
-    // 降级：旧记录无 phaseProgress 时使用 progress.json 或 meta 推导
+    // 阶段进度尚未提供时，从进度文件或流水线元数据推导展示状态
     if (issue.progress?.phases?.[phase]) {
       return issue.progress.phases[phase].status;
     }

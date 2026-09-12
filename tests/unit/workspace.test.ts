@@ -1,16 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import fs from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
-import {
-  loadWorkspaceConfig,
-  buildSingleRepoWorkspace,
-  getAllRepos,
-  isMultiRepo,
-} from '../../src/workspace/WorkspaceConfig.js';
-import type { WorkspaceConfig } from '../../src/workspace/WorkspaceConfig.js';
-import { buildWorkspaceSection } from '../../src/prompts/templates.js';
-import type { WorkspaceLayout } from '../../src/prompts/templates.js';
+import { describe, it, expect } from 'vitest';
+import { buildSingleRepoWorkspace } from '../../src/workspace/WorkspaceConfig.js';
 
 describe('buildSingleRepoWorkspace', () => {
   it('creates workspace config from project settings', () => {

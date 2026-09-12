@@ -3,10 +3,7 @@ import type { ActionLifecycleManager } from '../lifecycle/ActionLifecycleManager
 import { getIssueNumber, getTitle } from './IssueRecordHelper.js';
 
 /**
- * UnifiedTaskStatus — 所有任务类型共享的通用状态枚举。
- *
- * 与 IssueState/BatchStatus/TaskStatus 共存，不替代它们。
- * 用于跨任务类型的通用逻辑（如统一 dashboard、统一恢复）。
+ * 工作台展示使用的任务状态，由当前 Issue 生命周期投影。
  */
 export type UnifiedTaskStatus =
   | 'idle'          // 尚未开始
@@ -18,10 +15,7 @@ export type UnifiedTaskStatus =
   | 'failed';       // 失败
 
 /**
- * ExecutableTask — 所有可执行任务的统一接口。
- *
- * IssueRecord 投影为工作台任务接口，
- * 用于跨任务类型的通用操作。
+ * IssueRecord 投影为工作台列表和详情使用的任务接口。
  */
 export interface ExecutableTask {
   /** 任务类型标识 */
@@ -42,7 +36,7 @@ export interface ExecutableTask {
   readonly updatedAt: string;
   /** 特性分支名 */
   readonly branchName?: string;
-  /** 原始状态值（IssueState 或 TaskStatus） */
+  /** 原始 IssueState 状态值 */
   readonly sourceState?: string;
   /** 过滤分类：active/completed/failed/blocked/idle/skipped */
   readonly stateCategory?: string;
@@ -93,51 +87,7 @@ export function issueStateToUnified(actionStatus: string): UnifiedTaskStatus {
 }
 
 /**
- * TaskStatus → UnifiedTaskStatus 映射。
- */
-export function taskStatusToUnified(status: string): UnifiedTaskStatus {
-  switch (status) {
-    case 'pending':
-    case 'blocked':
-      return 'idle';
-    case 'running':
-      return 'running';
-    case 'done':
-      return 'preparing';  // done but not yet merged
-    case 'merging':
-    case 'conflict_resolving':
-      return 'merging';
-    case 'merged':
-      return 'completed';
-    case 'failed':
-      return 'failed';
-    default:
-      return 'idle';
-  }
-}
-
-/** 从 UnifiedTaskStatus 派生 stateCategory（用于前端过滤） */
-export function unifiedStatusToCategory(status: UnifiedTaskStatus): string {
-  switch (status) {
-    case 'running':
-    case 'preparing':
-    case 'merging':
-      return 'active';
-    case 'waiting':
-      return 'blocked';
-    case 'completed':
-      return 'completed';
-    case 'failed':
-      return 'failed';
-    case 'idle':
-    default:
-      return 'idle';
-  }
-}
-
-/**
- * 为 Issue 计算 stateCategory（精确版，使用 ActionLifecycleManager）。
- * 比 unifiedStatusToCategory 更精准，能区分 skipped 等状态。
+ * 根据 Issue 生命周期计算工作台过滤分类，区分完成、失败、跳过和等待。
  */
 export function issueStateCategory(record: IssueRecord, lm: ActionLifecycleManager): string {
   if (lm.isTerminal(record.state)) {
@@ -158,7 +108,7 @@ export function issueToExecutableTask(
 ): ExecutableTask {
   const actionState = lm.resolve(record.state, record.currentPhase);
 
-  // 阶段进度快照：优先使用 tracker 中的真实进度，旧记录降级为推导
+  // 阶段进度快照：使用已持久化的进度；尚未初始化进度时由任务状态推导
   const phaseDefs = lm.getPhaseDefs();
   let phaseProgress: ExecutableTask['phaseProgress'];
   if (record.phaseProgress) {

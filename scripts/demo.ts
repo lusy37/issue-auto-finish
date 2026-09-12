@@ -457,7 +457,7 @@ fs.writeFileSync(
     .join("\n"),
 );
 console.log(
-  `本地演示工作台：http://127.0.0.1:${values.WEB_PORT}\n模拟 AI 与平台，真实 Git 和浏览器；旧数据不读取。`,
+  `本地演示工作台：http://127.0.0.1:${values.WEB_PORT}\n模拟 AI 与平台，真实 Git 和浏览器。`,
 );
 try {
   await main();

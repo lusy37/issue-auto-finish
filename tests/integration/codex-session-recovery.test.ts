@@ -52,10 +52,10 @@ it('中断后重建状态适配器，实际从进度文件恢复 SDK 会话', as
   expect(resumed.run).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'codex:thread-42', continueSession: true }));
 });
 
-it.each(['中断', '驳回'])('迁移前的%s会话使用完整计划上下文重新开始', async reason => {
+it.each(['中断', '驳回'])('%s会话标识无效时，使用完整计划上下文重新开始', async reason => {
   plan.updatePhaseProgress('plan', reason === '中断' ? 'failed' : 'completed');
-  plan.updatePhaseSessionId('plan', 'legacy-claude-session');
-  if (reason === '驳回') plan.writeReviewFeedback('增加测试', '上一轮完整计划', 'legacy-claude-session');
+  plan.updatePhaseSessionId('plan', 'invalid-session-id');
+  if (reason === '驳回') plan.writeReviewFeedback('增加测试', '上一轮完整计划', 'invalid-session-id');
   const ai = runner();
   ai.run.mockResolvedValue({ success: true, output: '完整实施计划。'.repeat(12), sessionId: 'codex:new-thread', exitCode: 0 });
   await phase(ai).run(ctx);

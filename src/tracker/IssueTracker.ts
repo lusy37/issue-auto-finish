@@ -94,13 +94,13 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
   /**
    * 把编排核心的 OrchestrationState 持久化到 record.orchestrationState。
    *
-   * 同时同步派生写入旧 IssueRecord 字段（state/currentPhase/...）用于上层显示与 Poller。
+   * 同时同步 IssueRecord 的状态字段（state/currentPhase/...），供工作台展示与轮询使用。
    * `extra` 用于附加领域字段（prUrl、attempts 等）。
    */
   setOrchestrationState(
     issueIid: number,
     nextOrchestrationState: OrchestrationState,
-    legacyState: IssueState,
+    trackerState: IssueState,
     extra?: Partial<IssueRecord>,
   ): void {
     const record = this.collection[this.key(issueIid)];
@@ -109,9 +109,9 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
     }
     if (record.state === IssueState.Cancelled) return;
     record.orchestrationState = nextOrchestrationState;
-    record.state = legacyState;
+    record.state = trackerState;
     record.updatedAt = new Date().toISOString();
-    if (legacyState === IssueState.Completed) {
+    if (trackerState === IssueState.Completed) {
       record.lastError = undefined;
       record.failedAtState = undefined;
     }
@@ -119,7 +119,7 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
       Object.assign(record, extra);
     }
     this.save();
-    eventBus.emitTyped('issue:stateChanged', { issueIid, state: legacyState, record });
+    eventBus.emitTyped('issue:stateChanged', { issueIid, state: trackerState, record });
   }
 
   /** 追加一条 phaseHistory 条目（编排核心调用） */

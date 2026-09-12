@@ -5,18 +5,13 @@ import type { VerifyReportResult } from '../verify/index.js';
 import type { PhaseCallbacks } from './PhaseCallbacks.js';
 import type { PhaseIntent } from '../orchestration/Intent.js';
 
-export interface VerifyRunResult {
-  verifyReport?: VerifyReportResult;
-}
-
 /**
  * 验证阶段 — 执行验证后根据报告判定通过/失败。
  *
  * - 报告通过 → CompletedIntent
  * - 报告未通过 → RequestRetryFromIntent('build')，让编排器走 verify-fix loop
  *
- * 旧版本通过 outcome.data.verifyReport 把领域语义透传给编排器，
- * 新版本把 verify-fix 的判定逻辑内化到 VerifyPhase 自己。
+ * 验证阶段解析报告并返回阶段意图，由编排器执行有限修复循环。
  */
 export class VerifyPhase extends BasePhase {
   readonly phaseName = 'verify' as const;

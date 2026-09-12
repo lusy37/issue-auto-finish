@@ -30,7 +30,7 @@ describe('Config', () => {
   }
 
   // -----------------------------------------------------------------------
-  // Existing tests (backward-compatible)
+  // 基础配置读取与校验
   // -----------------------------------------------------------------------
 
   it('loadConfig includes worktreeBaseDir field', async () => {

@@ -70,7 +70,6 @@ describe('IssueTracker', () => {
       expect(message).toContain('任务 42');
       expect(message).toContain(reason);
       expect(message).toContain(filePath);
-      expect(message).not.toMatch(/旧任务|面试版/);
       expect(fs.readFileSync(filePath, 'utf8')).toBe(content);
     });
   });

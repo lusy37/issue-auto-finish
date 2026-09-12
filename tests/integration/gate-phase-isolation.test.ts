@@ -11,16 +11,8 @@ import {
 } from '../helpers/mock-factories.js';
 
 /**
- * 回归测试：Bug 3 — gate phase 隔离
- *
- * 历史 bug：approve-plan / reject-plan / skip-review
- * 这五个入口都把 currentPhase 硬编码为 'review'。当 issue 处于其它 gate（release/uat）的
- * PhaseWaiting 时，调用这些入口会把 currentPhase 错误地覆盖为 'review'，
- * 下次 drive 时 determineResumePhaseIndex 误认为流水线该从 review 之后开始，
- * 进而触发 build 重跑或最终无法产出 PR。
- *
- * 修复后这些入口必须严格校验 record.currentPhase === gatePhase.name，
- * 否则返回 400 错误（不修改任何状态）。
+ * 审核入口必须校验当前阶段，拒绝操作其他阶段的等待状态，
+ * 避免错误推进编排流程或覆盖阶段信息。
  */
 
 function createTestRecord(overrides?: Partial<IssueRecord>): IssueRecord {

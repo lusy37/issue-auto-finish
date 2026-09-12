@@ -9,20 +9,6 @@ import { InvalidStateError } from '../errors/InvalidOperationError.js';
 
 const logger = rootLogger.child('WorkspaceManager');
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-/** Per-repo runtime context within an issue workspace. */
-
-
-/** Full workspace context for an issue — replaces the old single WorktreeContext. */
-
-
-// ---------------------------------------------------------------------------
-// WorkspaceManager
-// ---------------------------------------------------------------------------
-
 export class WorkspaceManager {
   private wsConfig: WorkspaceConfig;
   private worktreeBaseDir: string;

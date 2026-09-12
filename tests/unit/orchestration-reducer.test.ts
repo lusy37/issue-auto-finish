@@ -223,7 +223,7 @@ describe('Reducer: requestRetryFrom intent → verify-fix loop', () => {
     expect(out.historyEntry.retryFromContext).toBeUndefined();
   });
 
-  it('FAIL-2 context: 兼容旧 key `failures` 也能被识别', () => {
+  it('FAIL-2 context: 过滤非字符串失败原因，保留有效修复上下文', () => {
     const out = applyIntent(
       makeInput({
         state: { kind: 'running', phaseId: 'verify' },
@@ -232,8 +232,8 @@ describe('Reducer: requestRetryFrom intent → verify-fix loop', () => {
           targetPhaseId: 'build',
           reason: 'verify-failed',
           context: {
-            failures: ['fail-A'],
-            rawReport: 'legacy',
+            verifyFailures: ['fail-A', null, 42, { message: '无效结构' }],
+            rawReport: '验证失败报告',
           },
         },
       }),

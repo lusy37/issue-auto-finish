@@ -160,7 +160,7 @@ export class PlanPersistence {
     return fs.readdirSync(this.planDir).map((f) => path.join(PLAN_DIR, `issue-${this.issueIid}`, f));
   }
 
-  /** 根据当前流水线创建进度，不再提供旧分析／设计流程的默认值。 */
+  /** 根据当前流水线定义创建初始阶段进度。 */
   createInitialProgress(displayId: number, title: string, branchName: string, def: PipelineDef): ProgressData {
     const phases: Record<string, PhaseProgress> = {};
     for (const spec of def.phases) phases[spec.name] = { status: 'pending' };
@@ -179,9 +179,8 @@ export class PlanPersistence {
    * @param planSnapshot 驳回时 01-plan.md 的完整内容，用于支持"本轮 vs 上轮"对比
    *                     和知识库蒸馏。当 01-plan.md 不存在时传 undefined（首轮异常路径）。
    * @param reviewedSessionId 驳回时 plan 阶段使用的 AI session id；
-   *                     用于下一轮 plan 重跑时优先 `--resume` 续聊（仅在 runner
-   *                     `planModeResumable=true` 时生效）。无法获取时传 undefined，
-   *                     不影响功能正确性（自动 fallback 到 prompt 注入）。
+   *                     供下一轮 plan 调用在执行器支持时恢复会话。无法获取时传 undefined，
+   *                     下一轮通过提示词注入计划与反馈。
    */
   writeReviewFeedback(content: string, planSnapshot?: string, reviewedSessionId?: string): void {
     this.ensureDir();

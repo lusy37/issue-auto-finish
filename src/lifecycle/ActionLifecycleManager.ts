@@ -18,7 +18,7 @@ export class ActionLifecycleManager {
   private readonly actionToState: Map<string, IssueState>;
   /** phase name → { startState, doneState, approvedState? } */
   private readonly phaseStatesMap: Map<string, { startState: IssueState; doneState: IssueState; approvedState?: IssueState }>;
-  /** Ordered phase indices by IssueState for determineResumePhaseIndex */
+  /** 当前流水线定义，用于查询阶段与展示状态。 */
   private readonly def: PipelineDef;
 
   constructor(def: PipelineDef) {
@@ -113,7 +113,7 @@ export class ActionLifecycleManager {
 
     const mapped = this.stateToAction.get(state);
     if (mapped) return mapped;
-    // Fallback: unknown states (from another pipeline mode) treated as idle
+    // 无具体阶段信息且未命中固定映射时，展示为初始状态。
     return { action: 'init', status: 'idle' };
   }
 
@@ -188,50 +188,7 @@ export class ActionLifecycleManager {
     }
   }
 
-  // ─── Phase navigation (替代 determineStartIndex + getPhasePreState) ───
-
-  /**
-   * 确定从哪个阶段索引恢复执行（替代 PipelineOrchestrator.determineStartIndex）。
-   *
-   * 从后向前扫描 phases，匹配 currentState 或 failedAtState。
-   * 支持通用状态 PhaseRunning/PhaseDone + currentPhase 的组合。
-   */
-  determineResumePhaseIndex(currentState: IssueState, failedAtState?: IssueState, currentPhase?: string): number {
-    const target = failedAtState || currentState;
-    const phases = this.def.phases;
-
-    // 通用阶段状态：通过 currentPhase 名称匹配
-    if ((target === IssueState.PhaseRunning || target === IssueState.PhaseDone) && currentPhase) {
-      const idx = phases.findIndex(p => p.name === currentPhase);
-      if (idx >= 0) {
-        return target === IssueState.PhaseDone ? idx + 1 : idx;
-      }
-    }
-    if ((target === IssueState.PhaseWaiting || target === IssueState.PhaseApproved) && currentPhase) {
-      const idx = phases.findIndex(p => p.name === currentPhase);
-      if (idx >= 0) {
-        if (target === IssueState.PhaseApproved) {
-          const spec = phases[idx];
-          // AI phase with approvedState: re-execute same phase (detection done, execution pending)
-          return (spec.kind === 'ai' && spec.approvedState) ? idx : idx + 1;
-        }
-        return idx;
-      }
-    }
-
-    for (let i = phases.length - 1; i >= 0; i--) {
-      const spec = phases[i];
-
-      if (spec.kind === 'gate' && spec.approvedState === target) {
-        return i + 1;
-      }
-
-      if (spec.startState === target || spec.doneState === target) {
-        return spec.doneState === target ? i + 1 : i;
-      }
-    }
-    return 0;
-  }
+  // ─── 阶段前驱查询 ───
 
   /**
    * 获取某个 phase 的前驱状态（即重置到该 phase 需要设置的状态）。

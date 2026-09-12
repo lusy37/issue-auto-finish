@@ -104,7 +104,7 @@ describe('集成测试：plan-diff API 基于 review-history snapshot 展示本�
     process.env.DATA_DIR = path.join(tmpDir, 'data');
     fs.mkdirSync(process.env.DATA_DIR, { recursive: true });
 
-    // 模拟 multi-repo workspace 实际路径：含 primary/ 子目录
+    // 模拟单仓 worktree 下配置项目子目录的实际路径
     workDir = path.join(
       cfg.project.worktreeBaseDir,
       'issue-42',
@@ -216,10 +216,10 @@ describe('集成测试：plan-diff API 基于 review-history snapshot 展示本�
     expect(body.diff).toBe('');
   });
 
-  it('review-history 存在但缺少 planSnapshot（旧数据）返回 hasChanges=false', async () => {
+  it('审核历史存在但未保存计划快照时返回 hasChanges=false', async () => {
     const planDir = path.join(workDir, '.claude-plan', 'issue-42');
     fs.mkdirSync(planDir, { recursive: true });
-    // 旧数据：history 项没有 planSnapshot 字段
+    // 计划文件缺失时允许记录反馈，history 项不含 planSnapshot
     fs.writeFileSync(
       path.join(planDir, 'review-history.json'),
       JSON.stringify([

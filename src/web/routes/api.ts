@@ -505,9 +505,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       return;
     }
 
-    // PhaseWaiting 被这个面向 review 的 API 错误地操作（之前 bug：写死 currentPhase='review'
-
-    // 下次 drive 时 determineResumePhaseIndex 错误地从 build 重新开始，PR 永远出不来）。
+    // 审核入口只处理当前流水线的审核阶段，避免覆盖其他阶段。
     const def = getIssuePipelineDef(number);
     const lm = createLifecycleManager(def);
     const gateSpec = lm.getGatePhase();
@@ -1036,10 +1034,6 @@ async function readPlanFileFromGit(
   return mainGit.showFile(record.branchName, gitPath);
 }
 
-const VERIFY_REPORT_FALLBACKS: Record<string, string> = {
-  '02-verify-report.md': '04-verify-report.md',
-};
-
 async function readPlanFile(
   issueIid: number,
   filename: string,
@@ -1056,14 +1050,7 @@ async function readPlanFile(
       return null;
     }
   }
-  const content = await readPlanFileFromGit(issueIid, filename, config, tracker, mainGit);
-  if (content !== null) return content;
-
-  const fallback = VERIFY_REPORT_FALLBACKS[filename];
-  if (fallback) {
-    return readPlanFile(issueIid, fallback, config, tracker, mainGit);
-  }
-  return null;
+  return readPlanFileFromGit(issueIid, filename, config, tracker, mainGit);
 }
 
 async function readProgress(

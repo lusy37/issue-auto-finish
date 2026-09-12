@@ -4,10 +4,8 @@ import type { PhaseIntent } from './Intent.js';
  * 流水线定义（Pipeline）— 纯数据。
  *
  * 关键设计：
- * - 阶段定义（PhaseSpec）不再持有 `startState/doneState/approvedState`，
- *   这些字段被淘汰，状态由 OrchestrationState + Reducer 计算。
- * - 流水线的「编排规则」用 `transitions` 显式声明，
- *   verify-fix loop 不再藏在 VerifyFixStrategy 内部，而是 Pipeline.transitions 中的一条规则。
+ * - 阶段描述与运行状态分离，状态由 OrchestrationState 和 Reducer 计算。
+ * - transitions 显式声明阶段转换和验证失败后的有限修复规则。
  * - 每个 Orchestrator 实例持有自己的 Pipeline 副本，无全局 registry 副作用。
  */
 export interface Pipeline {
@@ -22,7 +20,7 @@ export interface PipelineProfile {
   readonly e2e: boolean;
 }
 
-/** 阶段元信息 — 不再含状态字段 */
+/** 阶段元信息，与运行状态分开定义 */
 export interface PhaseSpec {
   readonly id: string;
   readonly label: string;

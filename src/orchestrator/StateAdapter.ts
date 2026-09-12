@@ -3,7 +3,6 @@ import type { OrchestrationState } from '../orchestration/index.js';
 
 export {
   deriveOrchestrationState as recordToOrchestrationState,
-  derivePhaseHistory as recordToPhaseHistory,
 } from '../tracker/IssueState.js';
 
 

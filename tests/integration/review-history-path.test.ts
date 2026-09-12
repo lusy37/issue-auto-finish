@@ -1,11 +1,4 @@
-/**
- * 集成测试：GET /api/issues/:number/review-history 能正确读取 multi-repo
- * workspace 模式下的 worktree 路径（含 primary/ 子目录）。
- *
- * 回归 Bug：WorkspaceManager 已升级为
- *   {worktreeBaseDir}/issue-{number}/{projectSubDir}
- * 而 api.ts 旧路径计算少了 primary/，导致 review-history 永远返回 []。
- */
+/** 验证单仓 worktree 在项目根目录和子目录下均能读取审核历史。 */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import express from 'express';
 import http from 'node:http';
@@ -85,7 +78,7 @@ function createWaitingIssueRecord(number: number): IssueRecord {
   } as IssueRecord;
 }
 
-describe('集成测试：multi-repo workspace 路径下 review-history 正确读取', () => {
+describe('集成测试：单仓 worktree 路径下 review-history 正确读取', () => {
   let tmpDir: string;
   let server: http.Server;
   let baseUrl: string;
@@ -94,10 +87,10 @@ describe('集成测试：multi-repo workspace 路径下 review-history 正确读
   let originalDataDir: string | undefined;
 
   beforeEach(async () => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-history-multirepo-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-history-path-'));
     cfg = buildTestConfig(tmpDir);
 
-    // 隔离 DATA_DIR，避免读到真实 ~/.issue-auto-finish/data/review-backups/
+    // 隔离 DATA_DIR，避免读取真实运行目录的审核备份
     originalDataDir = process.env.DATA_DIR;
     process.env.DATA_DIR = path.join(tmpDir, 'data');
     fs.mkdirSync(process.env.DATA_DIR, { recursive: true });
@@ -154,22 +147,22 @@ describe('集成测试：multi-repo workspace 路径下 review-history 正确读
   });
 
   it('当 worktree 实际位于 issue-{number}/{subdir} 时，能读出审核历史', async () => {
-    // 模拟 WorkspaceManager 的实际目录结构（含 primary/ 子目录）
-    const primaryPlanDir = path.join(
+    // 模拟 WorkspaceManager 的实际目录结构（含配置的项目子目录）
+    const planDir = path.join(
       cfg.project.worktreeBaseDir,
       'issue-42',
       cfg.project.projectSubDir,
       '.claude-plan',
       'issue-42',
     );
-    fs.mkdirSync(primaryPlanDir, { recursive: true });
+    fs.mkdirSync(planDir, { recursive: true });
 
     const history = [
       { round: 1, feedback: '第 1 轮反馈：需要补错误处理', timestamp: '2024-01-01T00:00:00Z' },
       { round: 2, feedback: '第 2 轮反馈：还要补单测', timestamp: '2024-01-02T00:00:00Z' },
     ];
     fs.writeFileSync(
-      path.join(primaryPlanDir, 'review-history.json'),
+      path.join(planDir, 'review-history.json'),
       JSON.stringify(history, null, 2),
       'utf-8',
     );
@@ -183,21 +176,22 @@ describe('集成测试：multi-repo workspace 路径下 review-history 正确读
     expect(arr[1].feedback).toContain('第 2 轮反馈');
   });
 
-  it('当只有 legacy 路径（无 primary/）存在时，仍能兼容读出', async () => {
-    const legacyPlanDir = path.join(
+  it('项目直接位于仓库根目录时，能读出审核历史', async () => {
+    cfg.project.projectSubDir = '';
+    const planDir = path.join(
       cfg.project.worktreeBaseDir,
       'issue-42',
       cfg.project.projectSubDir,
       '.claude-plan',
       'issue-42',
     );
-    fs.mkdirSync(legacyPlanDir, { recursive: true });
+    fs.mkdirSync(planDir, { recursive: true });
 
     const history = [
-      { round: 1, feedback: 'legacy 路径反馈', timestamp: '2024-01-01T00:00:00Z' },
+      { round: 1, feedback: '项目根目录反馈', timestamp: '2024-01-01T00:00:00Z' },
     ];
     fs.writeFileSync(
-      path.join(legacyPlanDir, 'review-history.json'),
+      path.join(planDir, 'review-history.json'),
       JSON.stringify(history, null, 2),
       'utf-8',
     );
@@ -207,6 +201,6 @@ describe('集成测试：multi-repo workspace 路径下 review-history 正确读
     expect(Array.isArray(res.body)).toBe(true);
     const arr = res.body as Array<{ round: number; feedback: string }>;
     expect(arr).toHaveLength(1);
-    expect(arr[0].feedback).toBe('legacy 路径反馈');
+    expect(arr[0].feedback).toBe('项目根目录反馈');
   });
 });

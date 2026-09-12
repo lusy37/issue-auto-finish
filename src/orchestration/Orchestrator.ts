@@ -242,7 +242,7 @@ export class Orchestrator {
    * 3. 这里读出来，让 Orchestrator 在下一轮 build 调度时透传给 PhaseRunner，
    *    最终由 BuildPhase 拼接到 prompt 让 AI 看到具体失败原因
    *
-   * 若 history 没有 retryFromContext（旧记录或解析失败），回退到空 failures/空报告。
+   * 若阶段历史未携带有效重试上下文，使用空失败列表和空报告。
    */
   private findLastVerifyFailureContext(
     history: readonly PhaseHistoryEntry[],
