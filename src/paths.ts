@@ -5,7 +5,7 @@ const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-/** 面试版只使用独立数据目录。 */
+/** 使用独立数据目录。 */
 export function getGlobalDir(): string {
   return path.resolve(
     process.env.IAF_MINI_HOME || path.join(projectRoot, ".iaf-mini", "github"),

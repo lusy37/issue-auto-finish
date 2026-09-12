@@ -30,7 +30,7 @@ export { ConfigValidationError } from "./config-schema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/** 只读取显式配置或面试版独立配置，不探测旧目录。 */
+/** 只读取显式配置或独立配置，不探测旧目录。 */
 export function resolveConfigFilePath(configPath?: string): string {
   return path.resolve(
     configPath ??

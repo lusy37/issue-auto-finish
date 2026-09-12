@@ -44,3 +44,9 @@ Windows 专项在 Windows 实机执行，非跳过结果。各增量命令、执
 在进程提交 8d06997、存储提交 d2852b1 后，Windows / Node 22.18.0 / 本机 Chrome 验收通过：npm run typecheck、npm run build、npm run web:build、npm test（937 项）、npm run test:e2e（1 项）、npm run test:windows（1 项，已包含在完整回归中）。
 
 新增进程树取消/超时、实时中文输出和长日志、程序查找、原子写入占用/配额/部分写入故障检查。仅验收 Windows；本次未重新进行真实 Codex 或 GitHub 外部交付。详见 [迁移说明](dependency-migration.md) 和 [机器可读证据](evidence/dependency-migration.json)。
+
+## 遗留兼容清理复验（2026-09-12）
+
+实现提交 e4fb2f2：类型检查、前后端构建、完整 924 项回归与 Chrome 工作台端到端 1 项通过。Windows 专项已包含在完整回归中。本次删除废弃方法对应的 25 项测试，新增 8 项存储与报告检查，测试数量变化不代表删除当前流程的覆盖。
+
+未复跑真实 Codex/GitHub 外部交付。详见 [盘点与验收](compatibility-audit.md) 和 [验收摘要](evidence/compatibility-audit.json)。

@@ -59,4 +59,6 @@ npm run test:codex
 
 底层依赖迁移后，Windows 本机完整回归 **937 项通过**，类型检查、前后端构建、Chrome 工作台端到端及 Windows 专项均通过。本次未复跑真实 Codex/GitHub 验收。相关源码与脚本净减少 138 行，见 [迁移记录](docs/dependency-migration.md)。
 
+遗留兼容清理后，本机完整回归 **924 项通过**，类型检查、前后端构建和 Chrome 工作台验收通过。删除范围、保留依据及测试数量变化见 [兼容代码盘点](docs/compatibility-audit.md)。
+
 详细说明：[开发记录](docs/development.md)、[架构与功能对照](docs/architecture.md)、[精简依据](docs/simplification.md)、[验收记录](docs/validation.md)。

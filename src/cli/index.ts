@@ -9,7 +9,7 @@ import { createCodexClient } from "../ai-runner/CodexRunner.js";
 import { findExecutable, runProcess } from "../utils/process.js";
 const program = new Command()
   .name("issue-auto-finish")
-  .description("AI Issue 面试展示工作台");
+  .description("AI Issue 展示工作台");
 program
   .command("start")
   .description("以前台方式启动工作台")

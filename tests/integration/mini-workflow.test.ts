@@ -45,7 +45,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("面试版完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
+describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
   it("驳回重做 → 修复 → Chromium 验收 → 交付失败仅重试交付 → 日记与统计", async () => {
     const origin = path.join(dir, "origin.git"),
       repo = path.join(dir, "repo");

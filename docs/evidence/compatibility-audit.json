@@ -1,0 +1,78 @@
+{
+  "recordedAt": "2026-09-12T10:53:01.331Z",
+  "baseline": "764d574",
+  "implementationCommit": "e4fb2f26aafab9afc3f010c5c6ba199ed03ec29c",
+  "platform": "win32",
+  "node": "v22.18.0",
+  "browserChannel": "chrome",
+  "sourceChanges": {
+    "added": 45,
+    "removed": 186,
+    "netRemoved": 141,
+    "scope": "src 与 scripts，含注释与空行，不含测试、文档和依赖锁文件"
+  },
+  "checks": [
+    {
+      "id": "typecheck",
+      "command": "npm run typecheck",
+      "exitCode": 0,
+      "log": ".iaf-mini/compatibility-audit/typecheck.log",
+      "sha256": "331735c23b01e6889203d925a3b01abf3f9b44b0929b871db476866ae1a401a7"
+    },
+    {
+      "id": "related",
+      "command": "npm test -- <14 个相关测试文件>",
+      "testFiles": 14,
+      "tests": 249,
+      "exitCode": 0,
+      "log": ".iaf-mini/compatibility-audit/related.log",
+      "sha256": "cb77608cc031b659c6047c0356cbf891e729268e110485478cd82613f14e397e"
+    },
+    {
+      "id": "test",
+      "command": "npm test",
+      "testFiles": 97,
+      "tests": 924,
+      "exitCode": 0,
+      "log": ".iaf-mini/compatibility-audit/test.log",
+      "sha256": "e69063367d860b77d80c75a8161991e7b09cac6671b348fff86df29336eb1602"
+    },
+    {
+      "id": "build",
+      "command": "npm run build",
+      "exitCode": 0,
+      "log": ".iaf-mini/compatibility-audit/build.log",
+      "sha256": "6a1fbb7519a90482663b061c4a1d67be3be96f9c75418789b8241d375805a8d0"
+    },
+    {
+      "id": "web-build",
+      "command": "npm run web:build",
+      "exitCode": 0,
+      "log": ".iaf-mini/compatibility-audit/web-build.log",
+      "sha256": "6c96e7da514f7acef98c1d5211ae50566adc45e0cb75fe172d70c8be8b0bfd8b"
+    },
+    {
+      "id": "e2e",
+      "command": "npm run test:e2e",
+      "testFiles": 1,
+      "tests": 1,
+      "exitCode": 0,
+      "log": ".iaf-mini/compatibility-audit/e2e.log",
+      "sha256": "bfce4a34c87b729749199c4622f0d1f682673517e13de698141d879587411c72"
+    }
+  ],
+  "windowsSpecific": {
+    "passed": true,
+    "includedIn": "npm test",
+    "testFile": "tests/integration/windows-preview.test.ts",
+    "tests": 1
+  },
+  "testCountChange": {
+    "before": 941,
+    "removedObsoleteHelpers": 25,
+    "addedStorageAndReports": 8,
+    "after": 924
+  },
+  "liveCodexExecuted": false,
+  "liveGitHubDeliveryExecuted": false
+}
