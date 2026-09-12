@@ -1,5 +1,4 @@
-import { spawnProcess as spawn, stopProcess } from '../utils/process.js';
-import { ChildProcess } from 'node:child_process';
+import { spawnProcess as spawn, stopProcess, type ManagedProcess } from '../utils/process.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { PortPair } from './PortAllocator.js';
@@ -10,8 +9,8 @@ import { resolveDataDir } from '../paths.js';
 const logger = rootLogger.child('DevServerManager');
 
 interface ServerSet {
-  backend: ChildProcess;
-  frontend: ChildProcess;
+  backend: ManagedProcess;
+  frontend: ManagedProcess;
   ports: PortPair;
   workDir: string;
   startedAt: string;
@@ -75,19 +74,17 @@ export class DevServerManager {
       cwd: wtCtx.workDir,
       env: backendEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
-      // POSIX 使用进程组；Windows 隐藏后台进程避免创建独立控制台。
-      detached: process.platform !== 'win32',
     });
 
-    backend.on('error', error => { startupError=error; this.stopServers(wtCtx.issueIid); });
-    backend.unref();
-    backend.stdout?.on('data', (data: Buffer) => {
+    backend.nodeChildProcess.on('error', error => { startupError=error; this.stopServers(wtCtx.issueIid); });
+    backend.nodeChildProcess.unref();
+    backend.nodeChildProcess.stdout?.on('data', (data: Buffer) => {
       if (!backendLog.writableEnded) backendLog.write(tsLine('stdout', data));
     });
-    backend.stderr?.on('data', (data: Buffer) => {
+    backend.nodeChildProcess.stderr?.on('data', (data: Buffer) => {
       if (!backendLog.writableEnded) backendLog.write(tsLine('stderr', data));
     });
-    backend.on('exit', (code) => {
+    backend.nodeChildProcess.on('exit', (code) => {
       logger.info('Backend process exited', { issueIid: wtCtx.issueIid, code });
       this.stopServers(wtCtx.issueIid);
     });
@@ -106,18 +103,17 @@ export class DevServerManager {
       cwd: frontendDir,
       env: frontendEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
-      detached: process.platform !== 'win32',
     });
 
-    frontend.on('error', error => { startupError=error; this.stopServers(wtCtx.issueIid); });
-    frontend.unref();
-    frontend.stdout?.on('data', (data: Buffer) => {
+    frontend.nodeChildProcess.on('error', error => { startupError=error; this.stopServers(wtCtx.issueIid); });
+    frontend.nodeChildProcess.unref();
+    frontend.nodeChildProcess.stdout?.on('data', (data: Buffer) => {
       if (!frontendLog.writableEnded) frontendLog.write(tsLine('stdout', data));
     });
-    frontend.stderr?.on('data', (data: Buffer) => {
+    frontend.nodeChildProcess.stderr?.on('data', (data: Buffer) => {
       if (!frontendLog.writableEnded) frontendLog.write(tsLine('stderr', data));
     });
-    frontend.on('exit', (code) => {
+    frontend.nodeChildProcess.on('exit', (code) => {
       logger.info('Frontend process exited', { issueIid: wtCtx.issueIid, code });
       this.stopServers(wtCtx.issueIid);
     });
@@ -136,7 +132,7 @@ export class DevServerManager {
 
     await new Promise((r) => setTimeout(r, this.options.startupGraceMs ?? 10_000));
     if(startupError)throw startupError;
-    if(backend.exitCode!==null || frontend.exitCode!==null){this.stopServers(wtCtx.issueIid);throw new Error('预览进程已退出，请查看预览日志');}
+    if(backend.nodeChildProcess.exitCode!==null || frontend.nodeChildProcess.exitCode!==null){this.stopServers(wtCtx.issueIid);throw new Error('预览进程已退出，请查看预览日志');}
     logger.info('Dev servers startup grace period done', { issueIid: wtCtx.issueIid });
   }
 
@@ -146,8 +142,8 @@ export class DevServerManager {
 
     logger.info('Stopping dev servers', { issueIid, ports: set.ports });
 
-    killProcess(set.backend, `backend #${issueIid}`);
-    killProcess(set.frontend, `frontend #${issueIid}`);
+    stopProcess(set.backend);
+    stopProcess(set.frontend);
     set.backendLog.end();
     set.frontendLog.end();
 
@@ -164,7 +160,7 @@ export class DevServerManager {
     const set = this.servers.get(issueIid);
     if (!set) return { running: false };
     return {
-      running: set.backend.exitCode===null && set.frontend.exitCode===null,
+      running: set.backend.nodeChildProcess.exitCode===null && set.frontend.nodeChildProcess.exitCode===null,
       ports: set.ports,
       startedAt: set.startedAt,
     };
@@ -172,26 +168,5 @@ export class DevServerManager {
 
   getRunningIssues(): number[] {
     return [...this.servers.keys()];
-  }
-}
-
-function killProcess(proc: ChildProcess, label: string): void {
-  try {
-    if (proc.killed || proc.exitCode !== null) return;
-    const pid = proc.pid;
-    if (!pid) return;
-
-    // Windows 必须先用 taskkill 枚举子树；提前终止父进程会留下孙进程。
-    if (process.platform === 'win32') { stopProcess(proc); return; }
-    try { process.kill(-pid, 'SIGTERM'); } catch { stopProcess(proc, 'SIGTERM'); }
-
-    setTimeout(() => {
-      if (!proc.killed && proc.exitCode === null) {
-        logger.warn(`Force killing ${label}`);
-        try { process.kill(-pid, 'SIGKILL'); } catch { stopProcess(proc, 'SIGKILL'); }
-      }
-    }, 5_000);
-  } catch (err) {
-    logger.warn(`Failed to kill ${label}`, { error: (err as Error).message });
   }
 }

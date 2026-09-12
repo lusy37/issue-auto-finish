@@ -6,7 +6,7 @@
 
 ## 快速演示
 
-需要 Node.js 22、Git 和可用浏览器。本次验收使用 Windows、Chrome；依赖版本由 package-lock.json 锁定。
+需要 Node.js ≥22.12、Git 和可用浏览器。本次验收使用 Windows、Chrome；依赖版本由 package-lock.json 锁定。
 
 ~~~powershell
 cd E:\Edge_Load\issue-auto-finish

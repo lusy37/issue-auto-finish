@@ -1,72 +1,33 @@
-import fs from "node:fs";
-import path from "node:path";
-import {
-  spawn as nativeSpawn,
-  type ChildProcess,
-  type SpawnOptions,
-} from "node:child_process";
-import crossSpawn from "cross-spawn";
+import { execa, type Options } from "execa";
+import which from "which";
 
-/** 统一 Windows 的脚本扩展名及参数转义，禁止调用方拼接命令。 */
-export const spawnProcess: typeof nativeSpawn = ((
-  binary: string,
-  args: string[] = [],
-  options: SpawnOptions = {},
-) =>
-  crossSpawn(binary, args, {
-    windowsHide: true,
+type ProcessOptions = Pick<Options, "cwd" | "env" | "timeout" | "cancelSignal"> & { stdio?: "inherit" | "ignore" | ["ignore", "pipe", "pipe"] };
+
+/** 统一进程树生命周期；业务调用方只传程序及参数，不拼接 shell 命令。 */
+export function spawnProcess(binary: string, args: string[] = [], options: ProcessOptions = {}) {
+  return execa(binary, args, {
     ...options,
-  })) as typeof nativeSpawn;
+    windowsHide: true,
+    killDescendants: true,
+    reject: false,
+    buffer: false,
+    extendEnv: false,
+    env: options.env ?? process.env,
+    stdio: options.stdio ?? ["ignore", "pipe", "pipe"],
+  });
+}
+
+export type ManagedProcess = ReturnType<typeof spawnProcess>;
 
 export function findExecutable(binary: string): string | undefined {
-  const dirs =
-    path.isAbsolute(binary) || binary.includes("/") || binary.includes("\\")
-      ? [""]
-      : (process.env.PATH ?? "").split(path.delimiter);
-  const extensions =
-    process.platform === "win32" && !path.extname(binary)
-      ? ["", ".exe", ".com", ".cmd", ".bat"]
-      : [""];
-  for (const dir of dirs)
-    for (const ext of extensions) {
-      const candidate = path.resolve(dir, binary + ext);
-      try {
-        if (fs.statSync(candidate).isFile()) return candidate;
-      } catch {
-        /* 继续查找 */
-      }
-    }
-  return undefined;
+  return which.sync(binary, { nothrow: true }) ?? undefined;
 }
 
-/** Windows 需要同时终止 npm/AI 启动的子进程，避免残留端口。 */
-export function stopProcess(
-  child: ChildProcess,
-  signal: NodeJS.Signals = "SIGTERM",
-): void {
-  if (!child.pid || child.exitCode !== null) return;
-  if (process.platform === "win32") {
-    const killer = nativeSpawn(
-      "taskkill",
-      ["/PID", String(child.pid), "/T", "/F"],
-      { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
-    );
-    if (process.env.IAF_PROCESS_DEBUG) {
-      console.log("终止进程", child.pid);
-      killer.stdout?.on("data", (d) => console.log(d.toString()));
-      killer.stderr?.on("data", (d) => console.log(d.toString()));
-    }
-    const fallback = () => {
-      if (child.exitCode === null) child.kill("SIGKILL");
-    };
-    killer.on("error", fallback);
-    killer.on("exit", (code) => {
-      if (code !== 0) fallback();
-    });
-  } else child.kill(signal);
+export function stopProcess(child: ManagedProcess): void {
+  if (child.pid && child.nodeChildProcess.exitCode === null) child.kill();
 }
 
-export function runProcess(
+export async function runProcess(
   binary: string,
   args: string[],
   options: {
@@ -77,48 +38,28 @@ export function runProcess(
     onOutput?: (text: string) => void;
   },
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    if (options.signal?.aborted) {
-      reject(new Error("操作已取消"));
-      return;
-    }
-    const child = spawnProcess(binary, args, {
-      cwd: options.cwd,
-      env: options.env ?? process.env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "",
-      stderr = "",
-      timeout = false;
-    const abort = () => stopProcess(child);
-    options.signal?.addEventListener("abort", abort, { once: true });
-    const timer = setTimeout(() => {
-      timeout = true;
-      abort();
-    }, options.timeoutMs ?? 300_000);
-    const clean = () => {
-      clearTimeout(timer);
-      options.signal?.removeEventListener("abort", abort);
-    };
-    child.stdout.on("data", (data: Buffer) => {
-      stdout = (stdout + data.toString()).slice(-8_000_000);
-      options.onOutput?.(data.toString());
-    });
-    child.stderr.on("data", (data: Buffer) => {
-      stderr = (stderr + data.toString()).slice(-2_000_000);
-      options.onOutput?.(data.toString());
-    });
-    child.on("error", (err) => {
-      clean();
-      reject(err);
-    });
-    child.on("close", (code) => {
-      clean();
-      if (timeout || options.signal?.aborted)
-        reject(new Error(timeout ? "命令执行超时" : "操作已取消"));
-      else resolve({ code, stdout, stderr });
-    });
+  if (options.signal?.aborted) throw new Error("操作已取消");
+  const child = spawnProcess(binary, args, {
+    cwd: options.cwd,
+    env: options.env,
+    timeout: options.timeoutMs ?? 300_000,
+    cancelSignal: options.signal,
   });
+  let stdout = "", stderr = "";
+  // 保留日志尾部，不因构建输出超过缓冲上限而终止命令。
+  child.nodeChildProcess.stdout?.setEncoding("utf8").on("data", (text: string) => {
+    stdout = (stdout + text).slice(-8_000_000);
+    options.onOutput?.(text);
+  });
+  child.nodeChildProcess.stderr?.setEncoding("utf8").on("data", (text: string) => {
+    stderr = (stderr + text).slice(-2_000_000);
+    options.onOutput?.(text);
+  });
+  const result = await child;
+  if (result.timedOut) throw new Error("命令执行超时", { cause: result });
+  if (result.isCanceled || options.signal?.aborted) throw new Error("操作已取消", { cause: result });
+  if (result.failed && result.exitCode === undefined && !result.isTerminated) throw result;
+  return { code: result.exitCode ?? null, stdout, stderr };
 }
 
 /** 保留 Windows 反斜杠，支持带空格的命令路径与参数。 */
