@@ -1,0 +1,300 @@
+{
+  "runId": "uat-live-20260912110319",
+  "checkedAt": "2026-09-12T11:51:29.131Z",
+  "kind": "真实 GitHub、Codex SDK 与 Windows Chrome",
+  "conclusion": "正式 UAT 通过，完整流程产物完成；旧实例干扰完成标签后由验收代理恢复，保留干预记录",
+  "initialCodeCommit": "29da22185fd025d2b3de36d55c194bcff4aa4b27",
+  "inspectionCodeCommit": "549cc2b9381257d742762f7f4a0caf77c6332af5",
+  "codeChangesDuringRun": "两提交之间只有四处中文文案及注释变化，未改变执行逻辑；本次验收未修改产品源码",
+  "project": "E:/Edge_Load/issue-auto-finish",
+  "sandbox": "E:/Edge_Load/issue-auto-finish-sandbox",
+  "repository": "lusy37/issue-auto-finish-sandbox",
+  "baseCommit": "616696f56e6be3019d13b9ea7db6a8ce2b460d7b",
+  "issue": {
+    "number": 5,
+    "url": "https://github.com/lusy37/issue-auto-finish-sandbox/issues/5",
+    "labels": [
+      "auto-finish:done"
+    ]
+  },
+  "pr": {
+    "id": 4513054008,
+    "number": 6,
+    "title": "feat(#5): 真实 UAT 复验 uat-live-20260912110319：计数器增加翻倍按钮",
+    "html_url": "https://github.com/lusy37/issue-auto-finish-sandbox/pull/6",
+    "state": "open",
+    "source_branch": "feat/issue-5",
+    "target_branch": "main",
+    "headSha": "76d6fc0b4699f21702a7d7e6b653f227ccdf2395",
+    "merged": false
+  },
+  "branch": "feat/issue-5",
+  "branchCommit": "76d6fc0b4699f21702a7d7e6b653f227ccdf2395",
+  "planReadOnly": {
+    "commit": "79e5747442e5399413d275ca40bf2c830e3b0d8a",
+    "files": [
+      ".claude-plan/.gitignore",
+      ".claude-plan/issue-5/01-plan.md",
+      ".claude-plan/issue-5/issue-meta.json",
+      ".claude-plan/issue-5/progress.json"
+    ],
+    "passed": true
+  },
+  "approval": {
+    "at": "2026-09-12T11:12:51.638Z",
+    "reviewer": "本次验收的 Codex 执行代理",
+    "channel": "真实 Chrome 工作台审核按钮",
+    "rationale": "已读取完整计划，核对当前功能范围、安全整数边界、现有测试保留及正式 UAT 要求；刷新后审核状态和计划保留",
+    "planSha256": "0773ce2254f219f75f0c2af8c73f1bc0843a68a4e4d30224efb5fedbcc874718"
+  },
+  "phaseProgress": {
+    "plan": {
+      "status": "completed",
+      "startedAt": "2026-09-12T11:07:55.206Z",
+      "completedAt": "2026-09-12T11:11:06.623Z",
+      "sessionId": "codex:01a0954d-74a7-7900-abdb-8ced184b5704"
+    },
+    "review": {
+      "status": "completed",
+      "startedAt": "2026-09-12T11:11:13.167Z"
+    },
+    "build": {
+      "status": "completed",
+      "startedAt": "2026-09-12T11:12:59.279Z",
+      "completedAt": "2026-09-12T11:27:37.564Z",
+      "sessionId": "codex:01a09552-17ee-7d92-b4a3-9af1036e2dda"
+    },
+    "verify": {
+      "status": "completed",
+      "startedAt": "2026-09-12T11:27:44.948Z",
+      "completedAt": "2026-09-12T11:35:43.285Z",
+      "sessionId": "codex:01a0955f-993d-7b72-9bbf-a8b9294d94a0"
+    },
+    "uat": {
+      "status": "completed",
+      "startedAt": "2026-09-12T11:35:56.989Z",
+      "completedAt": "2026-09-12T11:36:29.763Z"
+    }
+  },
+  "uat": {
+    "runId": "d0ec4bf7-6d3f-49fe-83e2-5ea7754426fe",
+    "issueIid": 5,
+    "startedAt": "2026-09-12T11:36:08.259Z",
+    "finishedAt": "2026-09-12T11:36:29.748Z",
+    "passed": true,
+    "passedTests": 7,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "screenshots": [
+      "artifacts/counter-正数计数可以连续翻倍/test-finished-1.png",
+      "artifacts/counter-用户可以连续增加和减少计数/test-finished-1.png",
+      "artifacts/counter-翻倍后增加和减少使用更新后的计数/test-finished-1.png",
+      "artifacts/counter-负数计数可以连续翻倍/test-finished-1.png",
+      "artifacts/counter-零值连续翻倍仍为零/test-finished-1.png",
+      "artifacts/counter-首页和后端连接正常/test-finished-1.png",
+      "report/data/12475da6a455eeec2b8cc78d5a7a367a85fab624.png",
+      "report/data/270f4d623a9472bc27dd7d33a0bfe538f4aecbd2.png",
+      "report/data/70fc8515fca6015c077c116ac8ca753441006afd.png",
+      "report/data/9883416195b4ecc96c174244818a76c75458414b.png",
+      "report/data/bb001676417d70211a31b8dddfd389f86a7eff16.png"
+    ],
+    "reportAvailable": true
+  },
+  "uatStats": {
+    "startTime": "2026-09-12T11:36:11.275Z",
+    "duration": 18195.857,
+    "expected": 7,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "reportPath": "E:\\Edge_Load\\issue-auto-finish\\.iaf-mini\\uat-live-20260912110319\\data\\uat\\d0ec4bf7-6d3f-49fe-83e2-5ea7754426fe\\report\\index.html",
+  "verification": {
+    "unitPassed": 9,
+    "lintPassed": true,
+    "buildPassed": true,
+    "source": ".claude-plan/issue-5/02-verify-report.md",
+    "formalUatUsesCurrentExitCodeAndReport": true
+  },
+  "workbench": {
+    "approval": {
+      "passed": true,
+      "checkedAt": "2026-09-12T11:12:51.689Z",
+      "browser": "152.0.7977.84",
+      "pageErrors": []
+    },
+    "completed": {
+      "passed": true,
+      "checkedAt": "2026-09-12T11:43:25.120Z",
+      "browser": "152.0.7977.84",
+      "pageErrors": []
+    }
+  },
+  "deliveryNotes": [
+    {
+      "id": 5645639878,
+      "createdAt": "2026-09-12T11:36:49Z",
+      "url": "https://github.com/lusy37/issue-auto-finish-sandbox/issues/5#issuecomment-5645639878"
+    }
+  ],
+  "summary": {
+    "range": "all",
+    "total": 1,
+    "completed": 1,
+    "failed": 0,
+    "successRate": 1,
+    "totalDurationMs": 1760577,
+    "averageDurationMs": 1760577,
+    "retries": 0,
+    "interventions": 1,
+    "phases": {
+      "plan": {
+        "runs": 1,
+        "durationMs": 191438,
+        "failures": 0
+      },
+      "build": {
+        "runs": 1,
+        "durationMs": 878303,
+        "failures": 0
+      },
+      "verify": {
+        "runs": 1,
+        "durationMs": 478351,
+        "failures": 0
+      },
+      "uat": {
+        "runs": 1,
+        "durationMs": 32787,
+        "failures": 0
+      }
+    },
+    "uat": {
+      "passed": 1,
+      "failed": 0,
+      "passRate": 1
+    }
+  },
+  "restart": {
+    "passed": true,
+    "checkedAt": "2026-09-12T11:51:21.463Z",
+    "service": {
+      "launcherPid": 33072,
+      "servicePid": 28860,
+      "startedAt": "2026-09-12T11:50:35.895Z",
+      "codeCommit": "29da22185fd025d2b3de36d55c194bcff4aa4b27"
+    },
+    "state": "completed",
+    "prUrl": "https://github.com/lusy37/issue-auto-finish-sandbox/pull/6",
+    "uatRunId": "d0ec4bf7-6d3f-49fe-83e2-5ea7754426fe",
+    "summary": {
+      "range": "all",
+      "total": 1,
+      "completed": 1,
+      "failed": 0,
+      "successRate": 1,
+      "totalDurationMs": 1760577,
+      "averageDurationMs": 1760577,
+      "retries": 0,
+      "interventions": 1,
+      "phases": {
+        "plan": {
+          "runs": 1,
+          "durationMs": 191438,
+          "failures": 0
+        },
+        "build": {
+          "runs": 1,
+          "durationMs": 878303,
+          "failures": 0
+        },
+        "verify": {
+          "runs": 1,
+          "durationMs": 478351,
+          "failures": 0
+        },
+        "uat": {
+          "runs": 1,
+          "durationMs": 32787,
+          "failures": 0
+        }
+      },
+      "uat": {
+        "passed": 1,
+        "failed": 0,
+        "passRate": 1
+      }
+    },
+    "preview": {
+      "runningCount": 0,
+      "runningIssues": []
+    }
+  },
+  "cleanup": {
+    "passed": true,
+    "checkedAt": "2026-09-12T11:52:01.716Z",
+    "ports": [
+      {
+        "port": 62078,
+        "available": true
+      },
+      {
+        "port": 4401,
+        "available": true
+      },
+      {
+        "port": 9401,
+        "available": true
+      }
+    ],
+    "stoppedServicePid": 28860,
+    "legacyInstanceStopped": true,
+    "sandboxMainClean": true,
+    "baseCommit": "616696f56e6be3019d13b9ea7db6a8ce2b460d7b",
+    "branchCommit": "76d6fc0b4699f21702a7d7e6b653f227ccdf2395",
+    "worktreePreserved": true
+  },
+  "environmentInterventions": {
+    "windowsSelfCheck": "build 和 verify 内的 Playwright 自启动预览在回收时停滞；Codex 核对本次 PID 后关闭其预览进程，命令返回 0。工作台正式 UAT 使用统一预览管理器，7 项通过并自动释放端口，无该停滞。",
+    "legacyInstance": {
+      "pid": 41868,
+      "stoppedAt": "2026-09-12T11:47:32.7394424+00:00",
+      "worktreeBaseDir": "E:/Edge_Load/issue-auto-finish-mini/.iaf-mini/github-sandbox/worktrees",
+      "conflictNoteCount": 153,
+      "notesPreserved": true,
+      "labelRecovery": {
+        "at": "2026-09-12T11:48:03.162Z",
+        "issueId": 5,
+        "before": [
+          "auto-finish",
+          "auto-finish:failed"
+        ],
+        "after": [
+          "auto-finish:done"
+        ],
+        "method": "验收代理在停止旧实例后，依据真实完成状态、UAT 与工作台交付评论恢复完成标签；不是重新执行流水线",
+        "existingDeliveryNotes": [
+          {
+            "id": 5645639878,
+            "body": "任务已完成，浏览器验收通过。合并请求：https://github.com/lusy37/issue-auto-finish-sandbox/pull/6\n<!-- iaf-delivery:5:0 -->\n\n<!-- issue-auto-finish-agent -->",
+            "author": {
+              "username": "lusy37",
+              "name": "lusy37"
+            },
+            "created_at": "2026-09-12T11:36:49Z"
+          }
+        ]
+      }
+    },
+    "limitation": "实例锁仅对数据目录生效，不阻止不同数据目录的工作台监听同一个远程仓库。此次没有实现跨目录或跨机器仓库锁。"
+  },
+  "scope": {
+    "mockUsedForThisWorkflow": false,
+    "realCodexSmokeRerun": false,
+    "fullEngineeringSuiteRerun": false,
+    "platforms": [
+      "Windows"
+    ],
+    "prMerged": false
+  }
+}

@@ -62,3 +62,5 @@ npm run test:codex
 遗留兼容清理后，本机完整回归 **924 项通过**，类型检查、前后端构建和 Chrome 工作台验收通过。删除范围、保留依据及测试数量变化见 [兼容代码盘点](docs/compatibility-audit.md)。
 
 详细说明：[开发记录](docs/development.md)、[架构与功能对照](docs/architecture.md)、[精简依据](docs/simplification.md)、[验收记录](docs/validation.md)。
+
+精简后已再次执行真实 GitHub、Codex 和 Windows Chrome 全流程：[Issue #5](https://github.com/lusy37/issue-auto-finish-sandbox/issues/5) → [PR #6](https://github.com/lusy37/issue-auto-finish-sandbox/pull/6)，正式 UAT 7 项通过，重启核对通过。旧 mini 实例重复领取造成的标签干扰及恢复处置见 [本次真实复验记录](docs/live-uat-20260912.md)。
