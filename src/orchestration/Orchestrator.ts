@@ -106,12 +106,13 @@ export class Orchestrator {
       const finalIntent = await this.resolveAsyncIntent(number, phaseId, intent);
       this.options.checkShutdown?.();
 
+      const executionSnapshot = this.stateStore.getSnapshot(number);
       const out = applyIntent({
         state: { kind: 'running', phaseId },
         intent: finalIntent,
         pipeline: this.pipeline,
         history: snapshot.history,
-        attempts: snapshot.attempts,
+        attempts: executionSnapshot.attempts,
         startedAt,
         now: new Date().toISOString(),
       });
@@ -123,13 +124,13 @@ export class Orchestrator {
         nextStateKind: out.nextState.kind,
       });
 
-      await this.executeSideEffects(number, phaseId, out.sideEffects);
-      this.options.checkShutdown?.();
       this.stateStore.applyTransition(number, {
         nextState: out.nextState,
         nextAttempts: out.nextAttempts,
         historyEntry: out.historyEntry,
       });
+      this.options.checkShutdown?.();
+      await this.executeSideEffects(number, phaseId, out.sideEffects);
 
       if (out.nextState.kind === 'gate-waiting') {
         const handled = await this.tryAutoApplyGate(number, out.nextState);
@@ -168,7 +169,6 @@ export class Orchestrator {
         now: new Date().toISOString(),
       });
 
-      await this.executeSideEffects(number, state.phaseId, out.sideEffects);
       const snapshot = this.stateStore.getSnapshot(number);
       const historyEntry: PhaseHistoryEntry = out.historyEntry ?? {
         phaseId: state.phaseId,
@@ -181,7 +181,10 @@ export class Orchestrator {
         nextState: out.nextState,
         nextAttempts: snapshot.attempts,
         historyEntry,
+        expectedPlanRevision: state.payload?.planRevision as number | undefined,
+        reviewFeedback: action.action === 'reject' ? action.feedback : undefined,
       });
+      await this.executeSideEffects(number, state.phaseId, out.sideEffects);
 
       this.logger.info('Auto gate applied', {
         number,
@@ -327,6 +330,8 @@ export interface OrchestrationStateSnapshot {
 
 /** Reducer 输出的状态转移 */
 export interface OrchestrationTransition {
+  expectedPlanRevision?: number;
+  reviewFeedback?: string;
   readonly nextState: OrchestrationState;
   readonly nextAttempts: number;
   readonly historyEntry: PhaseHistoryEntry;

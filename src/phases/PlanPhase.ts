@@ -51,7 +51,7 @@ export class PlanPhase extends BasePhase {
       basePrompt = planPrompt(promptCtx);
     }
 
-    return basePrompt;
+    return basePrompt + this.structuredContract();
   }
 
   /**
@@ -94,8 +94,12 @@ export class PlanPhase extends BasePhase {
    */
   protected getResumePrompt(ctx: PhaseContext): string {
     const history = this.plan.readReviewHistory();
-    if (history.length === 0) return super.getResumePrompt(ctx);
+    if (history.length === 0) return super.getResumePrompt(ctx) + this.structuredContract();
     const pc = demandToPromptContext(ctx.demand);
-    return buildReviewFeedbackResumePrompt(history, pc.supplementText || undefined);
+    return buildReviewFeedbackResumePrompt(history, pc.supplementText || undefined) + this.structuredContract();
   }
+  private structuredContract(): string {
+    return '\n最终只返回严格 JSON，不写文件，不返回 Markdown 计划。结构：{"title":"父需求标题","description":"完整实施说明","acceptanceCriteria":["父需求验收标准"],"tasks":[{"id":"task1","title":"任务标题","instructions":"完整实现要求","acceptanceCriteria":["任务验收标准"],"dependsOn":[]}]}。1～20 个任务；依赖只使用已定义 ID，不能成环；目录及分支由服务端决定。所有任务共同完成一个父 Issue，最后统一验收和交付。';
+  }
+
 }

@@ -62,7 +62,7 @@ export async function handleFailure(
     );
   } catch { /* ignore */ }
 
-  deps.stopPreviewServers(issue.number);
+  await deps.stopPreviewServers(issue.number);
 
   const preservedDirs = wtCtx.workspace
     ? [wtCtx.workspace.primary.gitRootDir]

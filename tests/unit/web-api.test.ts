@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { GitHubClient } from '../../src/clients/GitHubClient.js';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import express from 'express';
@@ -41,6 +44,7 @@ const mockOrchestrator = {
   restartIssue: vi.fn().mockResolvedValue(undefined),
   cancelIssue: vi.fn().mockResolvedValue(undefined),
   retryFromPhase: vi.fn(),
+  retryIssue: vi.fn(),
   processIssue: vi.fn().mockResolvedValue(undefined),
   getPipelineDef: vi.fn().mockReturnValue(PLAN_MODE_PIPELINE),
   getPortAllocator: vi.fn().mockReturnValue(mockPortAllocator),
@@ -152,13 +156,13 @@ describe('API Routes', () => {
 
   describe('POST /api/issues/:number/retry', () => {
     it('returns 400 when issue is not failed', async () => {
-      tracker.resetForRetry.mockReturnValue(false);
+      mockOrchestrator.retryIssue.mockReturnValue(false);
       const res = await req('POST', '/api/issues/42/retry');
       expect(res.status).toBe(400);
     });
 
     it('returns success when issue is reset', async () => {
-      tracker.resetForRetry.mockReturnValue(true);
+      mockOrchestrator.retryIssue.mockReturnValue(true);
       const res = await req('POST', '/api/issues/42/retry');
       expect(res.status).toBe(200);
       expect((res.body as Record<string, unknown>).success).toBe(true);
@@ -267,18 +271,18 @@ describe('API Routes', () => {
 
     it('returns 400 when content field is missing', async () => {
       const res = await req('PUT', '/api/issues/42/plans/01-plan.md', { foo: 'bar' });
-      expect(res.status).toBe(400);
-      expect((res.body as Record<string, unknown>).error).toContain('content');
+      expect(res.status).toBe(403);
+      expect((res.body as Record<string, unknown>).error).toContain('重新规划');
     });
 
     it('returns 404 when plan directory does not exist', async () => {
       const res = await req('PUT', '/api/issues/42/plans/01-plan.md', { content: 'test' });
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(403);
     });
   });
 });
 
-describe('API Routes — git fallback for plan files', () => {
+describe('API Routes — 聚合状态与数据目录中的展示内容', () => {
   const fbTracker = createMockIssueTracker();
   const fbConfig = createTestConfig();
   const fbMockGit = createMockGitOperations();
@@ -295,6 +299,7 @@ describe('API Routes — git fallback for plan files', () => {
   const fbMockOrchestrator = {
     restartIssue: vi.fn().mockResolvedValue(undefined),
     retryFromPhase: vi.fn(),
+  retryIssue: vi.fn(),
     processIssue: vi.fn().mockResolvedValue(undefined),
     getPipelineDef: vi.fn().mockReturnValue(PLAN_MODE_PIPELINE),
     getPortAllocator: vi.fn().mockReturnValue(fbMockPortAllocator),
@@ -358,25 +363,26 @@ describe('API Routes — git fallback for plan files', () => {
     });
   }
 
-  it('falls back to git show when worktree plan file does not exist', async () => {
+  it('计划从不可变版本读取，不依赖 Git 中的副本', async () => {
     const record = createTestRecord({ branchName: 'feat/issue-42' });
     fbTracker.get.mockReturnValue(record);
-    fbMockGit.showFile.mockResolvedValue('# Plan Result\nSome plan content');
+    fbTracker.store.savePlan(42, JSON.parse(structuredPlanOutput('Plan Result：完整实施需求')));
+    fbMockGit.showFile.mockResolvedValue('伪造的旧副本');
 
     const res = await fbReq('GET', '/api/issues/42/plans/01-plan.md');
 
     expect(res.status).toBe(200);
     expect(res.body).toContain('Plan Result');
-    expect(fbMockGit.showFile).toHaveBeenCalledWith(
-      'feat/issue-42',
-      'app/mmpayxdcdevopslogicsvr/.claude-plan/issue-42/01-plan.md',
-    );
+    expect(fbMockGit.showFile).not.toHaveBeenCalled();
   });
 
-  it('从 Git 读取当前验证报告', async () => {
+  it('验证报告只从数据目录读取', async () => {
     fbTracker.get.mockReturnValue(createTestRecord());
     fbMockGit.showFile.mockImplementation(async (_branch, filename) =>
       filename.endsWith('/02-verify-report.md') ? '# 当前验证报告' : null);
+    const reportDir = path.join(process.env.DATA_DIR!, 'issues', '42', 'artifacts');
+    fs.mkdirSync(reportDir, { recursive: true });
+    fs.writeFileSync(path.join(reportDir, '02-verify-report.md'), '# 当前验证报告');
     const res = await fbReq('GET', '/api/issues/42/plans/02-verify-report.md');
     expect(res.status).toBe(200);
     expect(res.body).toContain('当前验证报告');
@@ -404,7 +410,7 @@ describe('API Routes — git fallback for plan files', () => {
     expect(res.status).toBe(404);
   });
 
-  it('reads progress.json from git when worktree is cleaned', async () => {
+  it('工作区清理后进度由聚合状态生成', async () => {
     const progress = {
       displayId: 100,
       title: 'Test',
@@ -419,6 +425,7 @@ describe('API Routes — git fallback for plan files', () => {
     };
     const record = createTestRecord({ branchName: 'feat/issue-42' });
     fbTracker.get.mockReturnValue(record);
+    Object.assign(record, { currentPhase: progress.currentPhase, phaseProgress: progress.phases });
     fbMockGit.showFile.mockResolvedValue(JSON.stringify(progress));
 
     const res = await fbReq('GET', '/api/issues/42/plans/progress.json');
@@ -427,7 +434,7 @@ describe('API Routes — git fallback for plan files', () => {
     expect((res.body as Record<string, unknown>).currentPhase).toBe('verify');
   });
 
-  it('returns progress in issue detail via git fallback', async () => {
+  it('详情读取聚合进度', async () => {
     const progress = {
       displayId: 100,
       title: 'Test',
@@ -442,6 +449,7 @@ describe('API Routes — git fallback for plan files', () => {
     };
     const record = createTestRecord({ branchName: 'feat/issue-42', state: 'phase_running' as any, attempts: 1 });
     fbTracker.get.mockReturnValue(record);
+    Object.assign(record, { currentPhase: progress.currentPhase, phaseProgress: progress.phases });
     fbMockGit.showFile.mockResolvedValue(JSON.stringify(progress));
 
     const res = await fbReq('GET', '/api/issues/42');

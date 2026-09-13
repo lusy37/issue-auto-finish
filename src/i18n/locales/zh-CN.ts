@@ -179,12 +179,9 @@ export const zhCN: Record<string, string> = {
 4. **接口设计** — API 接口定义
 5. **详细实施步骤** — 按顺序列出实施步骤
 
-### 第三部分：实施 Todolist
-- [ ] 步骤1: 具体描述
-- [ ] 步骤2: 具体描述
-...
-
-请确保 Todolist 足够详细，每个步骤可独立执行和验证。
+### 第三部分：内部任务图
+将上述分析和设计写入 description。每个任务使用 id、title、instructions、acceptanceCriteria、dependsOn 字段；明确任务产物和验收标准，只引用已定义的任务 ID。
+完整计划使用 title、description、acceptanceCriteria、tasks 字段，最终只返回严格 JSON，不输出 Markdown 文档。
 {outputConstraint}`,
 
   'prompt.build': `你是开发工程师。请按照实施计划完成代码变更。

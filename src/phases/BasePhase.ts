@@ -1,12 +1,10 @@
-import { KnowledgeStore } from '../knowledge/KnowledgeStore.js';
-import { resolveDataDir } from '../paths.js';
-import path from 'node:path';
+import { resolvePromptRules } from '../knowledge/PromptRules.js';
+import { renderPlan, validatePlan } from '../dag/contracts.js';
 import type { AIRunner, RunResult, StreamEvent } from '../ai-runner/index.js';
 
 import { GitOperations } from '../git/GitOperations.js';
 import { PlanPersistence } from '../persistence/PlanPersistence.js';
 
-import { getProjectKnowledge } from '../knowledge/index.js';
 import { Config } from '../config.js';
 
 import type { PortPair } from '../deploy/PortAllocator.js';
@@ -32,6 +30,7 @@ export interface FixContext {
 }
 
 export interface PhaseContext {
+  onTemporaryFile?: (file: string, present: boolean) => void;
   demand: DemandSpec;
   branchName: string;
   pipelineMode?: string;
@@ -136,8 +135,10 @@ export abstract class BasePhase {
     this.persistSessionId(result.sessionId);
     if (this.phaseName === 'plan') {
       if (result.output.trim().length < BasePhase.MIN_ARTIFACT_BYTES) return { kind: 'failed', error: { message: '计划内容为空或不完整', retryable: 'hard-no-auto' } };
-      this.plan.writePlan(result.output);
+      try { this.plan.writePlan(renderPlan(validatePlan(JSON.parse(result.output.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1] ?? result.output)))); }
+      catch (error) { return { kind: 'failed', error: { message: `结构化计划无效：${(error as Error).message}`, retryable: 'hard' } }; }
     }
+    if (this.phaseName === 'verify') this.plan.writeFile('02-verify-report.md', result.output);
     try {
       await this.validatePhaseOutput(ctx, displayId, expectedResultFiles);
     } catch (err) {
@@ -308,14 +309,7 @@ export abstract class BasePhase {
   protected toArtifactRefs(files: ReadonlyArray<{ filename: string; label: string }>): readonly ArtifactRef[] {
     return files.map(f => ({ filename: f.filename, label: f.label }));
   }
-protected async resolveRules(_ctx: PhaseContext): Promise<string | null> {
-    if (!this.config.knowledge.enabled) return null;
-    const store = new KnowledgeStore(path.join(resolveDataDir(), 'knowledge'));
-    const rules = store.getAllEntries().filter(e => e.type === 'custom' || (e.type === 'agent-rule' && e.tags.includes('enabled')));
-    const project = getProjectKnowledge();
-    const context = project ? `项目说明：${project.businessContext.purpose}\n技术栈：${project.structure.primaryLanguage} ${project.structure.frameworks.join('、')}\n${project.agentKnowledge.conventions.join('\n')}` : '';
-    return [context, ...rules.map(e => { try { const rule=JSON.parse(e.content);return rule.deprecated ? '' : rule.content; } catch { return e.content; } })].filter(Boolean).join('\n\n') || null;
-  }
+  protected async resolveRules(_ctx: PhaseContext): Promise<string | null> { return resolvePromptRules(this.config.knowledge.enabled); }
 
   protected async validatePhaseOutput(
     ctx: PhaseContext,

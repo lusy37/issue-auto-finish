@@ -2,6 +2,7 @@ import { defineConfig } from 'tsup';
 
 export default defineConfig({
   entry: {
+    'sdk-worker': 'src/ai-runner/sdk-worker.ts',
     cli: 'src/cli/index.ts',
     index: 'src/index.ts',
     lib: 'src/lib.ts',

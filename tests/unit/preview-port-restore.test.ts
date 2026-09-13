@@ -1,7 +1,10 @@
+import { newIssueRun } from '../../src/dag/contracts.js';
+vi.mock('../../src/orchestrator/DagPhaseRunner.js', () => ({ DagPhaseRunner: isolatedPhaseRunner((...args) => mockPhaseRun(...args)) }));
+import { isolatedPhaseRunner } from '../helpers/isolated-phase-runner.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueState } from '../../src/tracker/IssueState.js';
 import { buildPlanModePipeline } from '../../src/pipeline/PipelineDefinition.js';
-import type { IssueProcessingContext, OrchestratorDeps, PhaseLoopResult } from '../../src/orchestrator/IssueProcessingContext.js';
+import type { IssueProcessingContext, OrchestratorDeps } from '../../src/orchestrator/IssueProcessingContext.js';
 import type { PhaseContext } from '../../src/phases/BasePhase.js';
 import type { PortPair } from '../../src/deploy/PortAllocator.js';
 import type { WorktreeContext } from '../../src/git/WorktreeContext.js';
@@ -82,6 +85,7 @@ describe('Preview port restore on retry', () => {
   }
 
   function bindTrackerToRecord(ctx: IssueProcessingContext): void {
+    ctx.record.run ??= newIssueRun();
     mockTracker.get.mockImplementation(() => ctx.record as any);
   }
 

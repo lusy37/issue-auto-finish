@@ -1,3 +1,4 @@
+import { newIssueRun, type PlanContent } from '../../src/dag/contracts.js';
 import { vi } from 'vitest';
 import type { Config } from '../../src/config.js';
 import type { GitHubIssue } from '../../src/clients/GitHubClient.js';
@@ -97,7 +98,28 @@ export function createMockAIRunner() {
 }
 
 export function createMockIssueTracker() {
-  return {
+  const tracker = {
+    transaction: vi.fn((number: number, update: (record: any) => void) => {
+      const record = tracker.get(number);
+      if (!record) throw new Error(`Issue #${number} 不存在`);
+      record.run ??= newIssueRun();
+      update(record); record.run.version++;
+      return record;
+    }),
+    assertIdentity: vi.fn(),
+    store: {
+      dataDir: process.env.DATA_DIR!, isBlocked: vi.fn().mockReturnValue(false),
+      savePlan: vi.fn((number: number, content: PlanContent) => {
+        const record = tracker.get(number); record.run ??= newIssueRun();
+        const revision = ++record.run.planRevision;
+        record.run.review = { revision, decision: 'waiting' };
+        record.run.planDigest = 'mock-digest';
+        const plan = { ...content, revision, digest: 'mock-digest', demand: record.demandSpec };
+        tracker.store.readPlan.mockReturnValue(plan);
+        return plan;
+      }),
+      readPlan: vi.fn(),
+    },
     get: vi.fn(),
     create: vi.fn().mockImplementation((record: Record<string, unknown>) => ({
       ...record,
@@ -131,6 +153,7 @@ export function createMockIssueTracker() {
     releaseProcessingLock: vi.fn(),
     clearProcessingLock: vi.fn(),
   };
+  return tracker;
 }
 
 export function createTestConfig(overrides?: Partial<Config>): Config {
@@ -186,6 +209,7 @@ export function createTestConfig(overrides?: Partial<Config>): Config {
       ...overrides?.issueNoteSync,
     },
     e2e: {
+      configFile: 'playwright.config.ts',
       enabled: false,
       baseUrl: 'https://localhost:8890',
       backendUrl: 'http://127.0.0.1:3000',
@@ -419,7 +443,6 @@ export function createMockPreviewDeps(overrides?: Partial<PreviewDeps>): Preview
 
 export function createMockCompletionDeps(overrides?: Partial<CompletionDeps>): CompletionDeps {
   return {
-    tryCreatePullRequest: vi.fn().mockResolvedValue(null),
     screenshotPublisher: { publishScreenshot: vi.fn() } as any,
     ...overrides,
   };

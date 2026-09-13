@@ -9,7 +9,7 @@ const logger = rootLogger.child('GitOperations');
 export class GitOperations {
   private workDir: string;
 
-  constructor(workDir: string) {
+  constructor(workDir: string, private readonly signal?: AbortSignal) {
     this.workDir = workDir;
   }
 
@@ -19,6 +19,7 @@ export class GitOperations {
       cwd: this.workDir,
       env: { ...process.env, HUSKY: '0' },
       timeoutMs: 300000,
+      signal: this.signal,
     });
     if (result.code !== 0) {
       const error = new Error(result.stderr.trim() || 'Git 命令失败');
@@ -32,6 +33,31 @@ export class GitOperations {
     await this.exec(['checkout', '-f', branch]);
     await this.exec(['pull', 'origin', branch]);
     logger.info('Fetched and pulled', { branch });
+  }
+
+  head(ref = 'HEAD'): Promise<string> { return this.exec(['rev-parse', '--verify', ref]); }
+  async isAncestor(ancestor: string, descendant: string): Promise<boolean> {
+    try { await this.exec(['merge-base', '--is-ancestor', ancestor, descendant]); return true; }
+    catch (error) { if ((error as { code?: number }).code === 1) return false; throw error; }
+  }
+  async resetOwned(commit: string): Promise<void> { await this.exec(['reset', '--hard', commit]); }
+  async changedContent(from: string, to = 'HEAD'): Promise<boolean> {
+    return !!(await this.exec(['diff', '--name-only', from, to, '--', '.', ':(exclude).iaf-mini', ':(exclude).claude-plan']));
+  }
+  async commitCandidate(message: string): Promise<string> {
+    if (await this.hasChanges()) {
+      await this.exec(['add', '-A', '--', '.', ':(exclude).iaf-mini', ':(exclude).claude-plan']);
+      const staged = await this.exec(['diff', '--cached', '--name-only']);
+      if (staged) await this.commit(message);
+    }
+    return this.head();
+  }
+  async remoteHead(branch: string): Promise<string | undefined> {
+    const output = await this.exec(['ls-remote', '--heads', 'origin', `refs/heads/${branch}`]);
+    return output.split(/\s+/)[0] || undefined;
+  }
+  async pushAccepted(branch: string, commit: string, lease?: string): Promise<void> {
+    await this.exec(['push', '--no-verify', `--force-with-lease=refs/heads/${branch}:${lease ?? ''}`, 'origin', `${commit}:refs/heads/${branch}`]);
   }
 
   async fetch(): Promise<void> {

@@ -92,7 +92,7 @@ const PHASE_PLAN: PhaseSpec = {
   id: 'plan',
   label: '规划',
   kind: 'ai',
-  artifacts: [{ filename: '01-plan.md', label: '实施计划', editable: true }],
+  artifacts: [{ filename: '01-plan.md', label: '实施计划', editable: false }],
 };
 
 const PHASE_REVIEW: PhaseSpec = {

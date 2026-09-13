@@ -1,7 +1,6 @@
 import { BasePhase, PhaseContext } from './BasePhase.js';
 import { planModeVerifyPrompt, demandToPromptContext } from '../prompts/templates.js';
 import { VerifyReportParser } from '../verify/index.js';
-import type { VerifyReportResult } from '../verify/index.js';
 import type { PhaseCallbacks } from './PhaseCallbacks.js';
 import type { PhaseIntent } from '../orchestration/Intent.js';
 
@@ -27,10 +26,11 @@ export class VerifyPhase extends BasePhase {
     if (intent.kind !== 'completed') return intent;
 
     const report = this.readVerifyReport();
-    if (!report) return intent;
+    if (!report || ['Lint', 'Build', 'Test'].some(name => !new RegExp(name + '\\s*(?:结果|Result)\\*{0,2}\\s*[:：]\\s*(?:通过|失败|passed|failed|pass|fail|未通过)', 'i').test(report))) {
+      return { kind: 'failed', sessionId: intent.sessionId, error: { message: '验证报告缺少本次 Lint、Build 或 Test 的明确结果，请人工检查执行环境', retryable: 'hard-no-auto' } };
+    }
 
     const parsed = this.reportParser.parse(report);
-    this.applyTodolistCheck(parsed);
 
     this.logger.info('Verify report parsed', {
       passed: parsed.passed,
@@ -81,33 +81,10 @@ export class VerifyPhase extends BasePhase {
     return planModeVerifyPrompt(promptCtx);
   }
 
-  private applyTodolistCheck(parsed: VerifyReportResult): void {
-    if (!this.config.verifyFixLoop.todolistCheckEnabled) return;
-    if (parsed.todolistStats) return;
-
-    const planContent = this.readPlanFile();
-    if (!planContent) return;
-
-    const todoStats = this.reportParser.parseTodolistFromPlan(planContent);
-    if (todoStats.total === 0) return;
-
-    parsed.todolistStats = todoStats;
-    parsed.todolistComplete = todoStats.completed === todoStats.total;
-    if (!parsed.todolistComplete) {
-      parsed.failureReasons.push(
-        `Todolist 未全部完成(${todoStats.completed}/${todoStats.total})`,
-      );
-      parsed.passed = false;
-    }
-  }
-
   private readVerifyReport(): string | null {
     const files = this.getResultFiles();
     if (files.length === 0) return null;
     return this.plan.readFile(files[0].filename);
   }
 
-  private readPlanFile(): string | null {
-    return this.plan.readFile('01-plan.md');
-  }
 }

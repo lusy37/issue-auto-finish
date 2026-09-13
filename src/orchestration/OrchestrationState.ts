@@ -119,6 +119,8 @@ export function isDrivable(state: OrchestrationState): boolean {
 
 /** 阶段历史条目 — 真实事件流水账，主要供前端展示与诊断 */
 export interface PhaseHistoryEntry {
+  readonly planRevision?: number;
+  readonly buildGeneration?: number;
   readonly phaseId: string;
   /** 同一阶段第几次尝试（1-based） */
   readonly attemptId: number;

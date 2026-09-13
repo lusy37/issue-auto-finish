@@ -7,7 +7,7 @@ exports[`Pipeline matrix snapshots (MAT-1~6) > MAT-1: (release=false, e2e=false)
     {
       "artifacts": [
         {
-          "editable": true,
+          "editable": false,
           "filename": "01-plan.md",
           "label": "实施计划",
         },
@@ -77,7 +77,7 @@ exports[`Pipeline matrix snapshots (MAT-1~6) > MAT-3: (release=false, e2e=true) 
     {
       "artifacts": [
         {
-          "editable": true,
+          "editable": false,
           "filename": "01-plan.md",
           "label": "实施计划",
         },
@@ -164,7 +164,7 @@ exports[`Pipeline matrix snapshots (MAT-1~6) > MAT-5: 2 种组合的 transitions
       "resetAttempts": false,
       "targetPhaseId": "build",
     },
-    "from": "verify",
+    "from": "*",
     "on": "requestRetryFrom",
   },
   {
@@ -185,7 +185,7 @@ exports[`Pipeline matrix snapshots (MAT-1~6) > MAT-5: 2 种组合的 transitions
   {
     "action": {
       "kind": "retry-same-phase",
-      "maxAttempts": 3,
+      "maxAttempts": 4,
     },
     "from": "*",
     "on": "failed",
@@ -193,7 +193,7 @@ exports[`Pipeline matrix snapshots (MAT-1~6) > MAT-5: 2 种组合的 transitions
   {
     "action": {
       "kind": "retry-same-phase",
-      "maxAttempts": Infinity,
+      "maxAttempts": 4,
     },
     "from": "*",
     "on": "failed",

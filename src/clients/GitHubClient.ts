@@ -28,6 +28,9 @@ export interface CreatePullRequestOptions {
   description?: string;
 }
 export interface GitHubPullRequest {
+  description?: string;
+  source_repository?: string;
+  target_repository?: string;
   id: number;
   number: number;
   title: string;
@@ -65,13 +68,14 @@ interface RawIssue {
   pull_request?: unknown;
 }
 interface RawPull {
+  body?: string;
   id: number;
   number: number;
   title: string;
   html_url: string;
   state: string;
-  head: { ref: string };
-  base: { ref: string };
+  head: { ref: string; repo?: { full_name: string } };
+  base: { ref: string; repo?: { full_name: string } };
   merged?: boolean;
   mergeable?: boolean | null;
   mergeable_state?: string;
@@ -204,6 +208,9 @@ export class GitHubClient {
   }
   private pull(raw: RawPull): GitHubPullRequest {
     return {
+      description: raw.body ?? '',
+      source_repository: raw.head?.repo?.full_name,
+      target_repository: raw.base?.repo?.full_name,
       id: raw.id,
       number: raw.number,
       title: raw.title,
@@ -369,6 +376,15 @@ export class GitHubClient {
       has_conflicts: raw.mergeable === false && raw.mergeable_state === "dirty",
       merge_status: raw.mergeable_state ?? "unknown",
     };
+  }
+  async listPullRequests(): Promise<GitHubPullRequest[]> {
+    const result: GitHubPullRequest[] = [];
+    for (let page = 1; page <= 100; page++) {
+      const batch = await this.request<RawPull[]>(`/pulls?state=all&per_page=100&page=${page}`);
+      result.push(...batch.map(raw => this.pull(raw)));
+      if (batch.length < 100) return result;
+    }
+    throw new Error('PR 查询结果不完整，不能可靠核对交付身份');
   }
   async closePullRequest(number: number): Promise<void> {
     await this.request(`/pulls/${number}`, {

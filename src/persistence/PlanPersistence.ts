@@ -1,3 +1,5 @@
+import type { IssueTracker } from '../tracker/IssueTracker.js';
+import { renderPlan } from '../dag/contracts.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ProgressData, PhaseProgress, type PhaseStatus } from '../tracker/IssueState.js';
@@ -7,10 +9,7 @@ import { logger as rootLogger } from '../logger.js';
 
 const logger = rootLogger.child('PlanPersistence');
 
-const PLAN_DIR = '.claude-plan';
 const BACKUP_ROOT = 'review-backups';
-
-const PLAN_GITIGNORE = '# 仅提交各任务的产物目录。\n*\n!issue-*/\n!issue-*/**\n!.gitignore\n';
 
 export interface ReviewRound {
   round: number;
@@ -23,23 +22,8 @@ export interface ReviewRound {
 }
 
 export class PlanPersistence {
-  /**
-   * 确保 .claude-plan/.gitignore 排除临时文件（hooks、事件日志等），
-   * 仅保留 issue-* 产物目录。在 git add 之前调用以防止污染 PR。
-   */
-  static ensureGitignore(workDir: string): void {
-    const dir = path.join(workDir, PLAN_DIR);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    const gitignorePath = path.join(dir, '.gitignore');
-    if (fs.existsSync(gitignorePath)) {
-      const content = fs.readFileSync(gitignorePath, 'utf-8');
-      if (content.includes('!issue-*/')) return;
-    }
-    fs.writeFileSync(gitignorePath, PLAN_GITIGNORE, 'utf-8');
-    logger.debug('.claude-plan/.gitignore written', { workDir });
-  }
+  /** 运行产物保存在数据目录，不再修改目标仓库的 gitignore。 */
+  static ensureGitignore(_workDir: string): void {}
 
   // ---------------------------------------------------------------------------
   // 全局后备 — 当 worktree 因任何原因不存在时，把审核反馈先持久化到
@@ -112,7 +96,7 @@ export class PlanPersistence {
   private workDir: string;
   private issueIid: number;
 
-  constructor(workDir: string, issueIid: number) {
+  constructor(workDir: string, issueIid: number, private readonly dataDir = resolveDataDir(), private readonly tracker?: IssueTracker) {
     this.workDir = workDir;
     this.issueIid = issueIid;
   }
@@ -122,7 +106,7 @@ export class PlanPersistence {
   }
 
   get planDir(): string {
-    return path.join(this.workDir, PLAN_DIR, `issue-${this.issueIid}`);
+    return path.join(this.dataDir, 'issues', String(this.issueIid), 'artifacts');
   }
 
   ensureDir(): void {
@@ -146,6 +130,8 @@ export class PlanPersistence {
   }
 
   readProgress(): ProgressData | null {
+    const record = this.tracker?.get(this.issueIid);
+    if (record?.phaseProgress) return { displayId: this.issueIid, title: record.demandSpec?.title ?? '', branchName: record.branchName, pipelineMode: record.pipelineMode, currentPhase: record.currentPhase ?? 'plan', phases: record.phaseProgress };
     const filePath = path.join(this.planDir, 'progress.json');
     if (!fs.existsSync(filePath)) return null;
     try {
@@ -157,7 +143,7 @@ export class PlanPersistence {
 
   getAllPlanFiles(): string[] {
     if (!fs.existsSync(this.planDir)) return [];
-    return fs.readdirSync(this.planDir).map((f) => path.join(PLAN_DIR, `issue-${this.issueIid}`, f));
+    return fs.readdirSync(this.planDir).map((f) => path.join(this.planDir, f));
   }
 
   /** 根据当前流水线定义创建初始阶段进度。 */
@@ -248,6 +234,9 @@ export class PlanPersistence {
   }
 
   readReviewFeedback(): string | null {
+    const history = this.readReviewHistory();
+    if (history.length) return PlanPersistence.renderReviewHistoryMarkdown(history);
+    if (fs.existsSync(path.join(this.dataDir, 'issues', String(this.issueIid), 'run.json'))) return null;
     const filePath = path.join(this.planDir, 'review-feedback.md');
     if (!fs.existsSync(filePath)) return null;
     try {
@@ -258,6 +247,8 @@ export class PlanPersistence {
   }
 
   readReviewHistory(): ReviewRound[] {
+    const aggregateFile = path.join(this.dataDir, 'issues', String(this.issueIid), 'run.json');
+    if (fs.existsSync(aggregateFile)) return JSON.parse(fs.readFileSync(aggregateFile, 'utf8')).record.run.reviewHistory ?? [];
     const filePath = path.join(this.planDir, 'review-history.json');
     if (!fs.existsSync(filePath)) return [];
     try {
@@ -318,6 +309,7 @@ export class PlanPersistence {
   }
 
   updatePhaseSessionId(phaseName: string, sessionId: string): void {
+    if (this.tracker) { this.tracker.updatePhaseProgress(this.issueIid, phaseName, { sessionId }); return; }
     const progress = this.readProgress();
     if (!progress?.phases[phaseName]) return;
     progress.phases[phaseName].sessionId = sessionId;
@@ -335,6 +327,10 @@ export class PlanPersistence {
 
   /** 读取 planDir 下指定文件，不存在返回 null */
   readFile(filename: string): string | null {
+    if (filename === '01-plan.md') {
+      const run = this.tracker?.get(this.issueIid)?.run;
+      if (run?.planRevision && run.planDigest) return renderPlan(this.tracker!.store.readPlan(this.issueIid, run.planRevision, run.planDigest));
+    }
     const filePath = path.join(this.planDir, filename);
     if (!fs.existsSync(filePath)) return null;
     try {
@@ -357,6 +353,7 @@ export class PlanPersistence {
 
   /** 写入 planDir 下指定文件（自动 ensureDir） */
   writeFile(filename: string, content: string): void {
+    if (filename === '01-plan.md') throw new Error('计划展示副本只读，请生成结构化计划版本');
     this.ensureDir();
     fs.writeFileSync(path.join(this.planDir, filename), content, 'utf-8');
   }

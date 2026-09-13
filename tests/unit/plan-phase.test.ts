@@ -1,3 +1,4 @@
+import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -143,7 +144,7 @@ describe('PlanPhase', () => {
     expect(prompt).toContain('round-2 反馈');
   });
 
-  it('claude + oversized planSnapshot: truncates to MAX_CHARS with explicit notice', () => {
+  it('claude + oversized planSnapshot: 保留完整审核快照', () => {
     const huge = '占位文本'.repeat(3000); // 远超 8000 字符上限
     plan.writeReviewFeedback('过长方案反馈', huge);
 
@@ -156,11 +157,11 @@ describe('PlanPhase', () => {
     const prompt = (claudePhase as any).buildPrompt(ctx);
 
     expect(prompt).toContain('<rejected-plan>');
-    expect(prompt).toMatch(/已截断至\s*8000\s*字符/);
-    // 注入的 snapshot 部分长度不会超过上限(单独验证占位文本无需精确匹配)
+    expect(prompt).not.toContain('已截断至');
+    // 审核反馈始终绑定完整的上轮计划。
     const match = prompt.match(/<rejected-plan>\n([\s\S]*?)\n<\/rejected-plan>/);
     expect(match).not.toBeNull();
-    expect(match![1].length).toBeLessThanOrEqual(8000);
+    expect(match![1]).toBe(huge);
   });
 
   it('claude + reject feedback (with planSnapshot): also injects snapshot (PTY profile triggers deterministicCopy path)', () => {
@@ -254,7 +255,7 @@ describe('Phase artifact validation', () => {
       createTestConfig(),
     );
 
-    aiRunner.run.mockResolvedValue({success:true,output:'# 计划\n\n'+'实施步骤及验收标准。'.repeat(10),exitCode:0});
+    aiRunner.run.mockResolvedValue({success:true,output:structuredPlanOutput('实施步骤及验收标准。'.repeat(10)),exitCode:0});
     const intent = await phase.run(ctx);
     expect(intent.kind).toBe('completed');
   });

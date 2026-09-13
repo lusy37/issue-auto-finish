@@ -77,9 +77,9 @@ describe('Phase-AI Integration', () => {
     const intent = await phase.run(buildPhaseCtx());
     expect(intent.kind).toBe('completed');
 
-    const artifactPath = path.join(dataDir, '.claude-plan', `issue-${ISSUE_IID}`, '01-plan.md');
+    const artifactPath = path.join(process.env.DATA_DIR!, 'issues', String(ISSUE_IID), 'artifacts', '01-plan.md');
     expect(existsSync(artifactPath)).toBe(true);
-    expect(readFileSync(artifactPath, 'utf-8')).toBe(planContent);
+    expect(readFileSync(artifactPath, 'utf-8')).toContain(planContent);
 
     expect(runner.runCalls[0].mode).toBe('plan');
     expect(runner.runCalls[0].phaseName).toBe('plan');

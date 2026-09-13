@@ -21,59 +21,13 @@ describe('PlanPersistence', () => {
     expect(plan.baseDir).toBe(tmpDir);
   });
 
-  describe('ensureGitignore', () => {
-    it('creates .claude-plan/.gitignore that excludes temp files but keeps issue-*/', () => {
-      PlanPersistence.ensureGitignore(tmpDir);
-
-      const gitignorePath = path.join(tmpDir, '.claude-plan', '.gitignore');
-      expect(fs.existsSync(gitignorePath)).toBe(true);
-
-      const content = fs.readFileSync(gitignorePath, 'utf-8');
-      expect(content).toContain('*');
-      expect(content).toContain('!issue-*/');
-      expect(content).toContain('!issue-*/**');
-      expect(content).toContain('!.gitignore');
-    });
-
-    it('is idempotent — does not overwrite if already correct', () => {
-      PlanPersistence.ensureGitignore(tmpDir);
-      const gitignorePath = path.join(tmpDir, '.claude-plan', '.gitignore');
-      const first = fs.readFileSync(gitignorePath, 'utf-8');
-
-      PlanPersistence.ensureGitignore(tmpDir);
-      const second = fs.readFileSync(gitignorePath, 'utf-8');
-
-      expect(first).toBe(second);
-    });
-
-    it('补齐只有 .phase-prompt.md 的忽略配置', () => {
-      const dir = path.join(tmpDir, '.claude-plan');
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, '.gitignore'), '.phase-prompt.md\n', 'utf-8');
-
-      PlanPersistence.ensureGitignore(tmpDir);
-
-      const content = fs.readFileSync(path.join(dir, '.gitignore'), 'utf-8');
-      expect(content).toContain('!issue-*/');
-    });
-
-    it('creates .claude-plan/ directory if it does not exist', () => {
-      const freshDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-gi-'));
-      PlanPersistence.ensureGitignore(freshDir);
-
-      expect(fs.existsSync(path.join(freshDir, '.claude-plan', '.gitignore'))).toBe(true);
-      fs.rmSync(freshDir, { recursive: true, force: true });
-    });
+  describe('运行产物与仓库隔离', () => {
+    it('不会向目标仓库创建内部产物目录', () => { PlanPersistence.ensureGitignore(tmpDir); expect(fs.existsSync(path.join(tmpDir, '.claude-plan'))).toBe(false); });
+    it('重复初始化保持目标仓库内容不变', () => { fs.writeFileSync(path.join(tmpDir, 'README.md'), '原内容'); PlanPersistence.ensureGitignore(tmpDir); PlanPersistence.ensureGitignore(tmpDir); expect(fs.readdirSync(tmpDir)).toEqual(['README.md']); });
+    it('不会修改仓库现存的忽略配置', () => { fs.writeFileSync(path.join(tmpDir, '.gitignore'), 'node_modules/'); PlanPersistence.ensureGitignore(tmpDir); expect(fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf8')).toBe('node_modules/'); });
+    it('没有仓库目录也能保存产物', () => { const plan = new PlanPersistence(path.join(tmpDir, '不存在'), 42); plan.writePlan('完整计划'); expect(plan.readFile('01-plan.md')).toBe('完整计划'); });
   });
-
-  it('ensureDir creates .claude-plan/issue-{number}/ directory', () => {
-    const plan = new PlanPersistence(tmpDir, 42);
-    plan.ensureDir();
-
-    const planDir = path.join(tmpDir, '.claude-plan', 'issue-42');
-    expect(fs.existsSync(planDir)).toBe(true);
-    expect(fs.statSync(planDir).isDirectory()).toBe(true);
-  });
+  it('产物目录在显式 DATA_DIR 下', () => { const plan = new PlanPersistence(tmpDir, 42); plan.ensureDir(); expect(plan.planDir).toBe(path.join(process.env.DATA_DIR!, 'issues', '42', 'artifacts')); expect(fs.existsSync(plan.planDir)).toBe(true); });
 
   it('readProgress returns null when no progress file exists', () => {
     const plan = new PlanPersistence(tmpDir, 42);
@@ -145,7 +99,7 @@ describe('PlanPersistence', () => {
     it('readReviewHistory handles corrupted JSON gracefully', () => {
       const plan = new PlanPersistence(tmpDir, 42);
       plan.ensureDir();
-      const historyPath = path.join(tmpDir, '.claude-plan', 'issue-42', 'review-history.json');
+      const historyPath = path.join(plan.planDir, 'review-history.json');
       fs.writeFileSync(historyPath, 'not valid json', 'utf-8');
 
       expect(plan.readReviewHistory()).toEqual([]);

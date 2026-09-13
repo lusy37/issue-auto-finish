@@ -1,3 +1,4 @@
+import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { beforeEach, afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -46,7 +47,7 @@ it('中断后重建状态适配器，实际从进度文件恢复 SDK 会话', as
   expect(plan.readProgress()?.phases.plan).toMatchObject({ status: 'in_progress', sessionId: 'codex:thread-42' });
 
   const resumed = runner();
-  resumed.run.mockResolvedValue({ success: true, output: '完整实施计划。'.repeat(12), sessionId: 'codex:thread-42', exitCode: 0 });
+  resumed.run.mockResolvedValue({ success: true, output: structuredPlanOutput('完整实施计划。'.repeat(12)), sessionId: 'codex:thread-42', exitCode: 0 });
   new TrackerStateStore(tracker, plan).transitionToRunning(42, 'plan', new Date().toISOString());
   expect((await phase(resumed).run(ctx)).kind).toBe('completed');
   expect(resumed.run).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'codex:thread-42', continueSession: true }));
@@ -57,7 +58,7 @@ it.each(['中断', '驳回'])('%s会话标识无效时，使用完整计划上�
   plan.updatePhaseSessionId('plan', 'invalid-session-id');
   if (reason === '驳回') plan.writeReviewFeedback('增加测试', '上一轮完整计划', 'invalid-session-id');
   const ai = runner();
-  ai.run.mockResolvedValue({ success: true, output: '完整实施计划。'.repeat(12), sessionId: 'codex:new-thread', exitCode: 0 });
+  ai.run.mockResolvedValue({ success: true, output: structuredPlanOutput('完整实施计划。'.repeat(12)), sessionId: 'codex:new-thread', exitCode: 0 });
   await phase(ai).run(ctx);
   expect(ai.run.mock.calls[0][0].continueSession).toBeUndefined();
   if (reason === '驳回') expect(ai.run.mock.calls[0][0].prompt).toContain('上一轮完整计划');

@@ -418,6 +418,7 @@ describe('IssuePoller', () => {
         review: { enabled, autoApproveLabels: ['skip-review'] },
       });
       const waitingRecord = {
+        run: { planRevision: 1 },
         demandSpec: {
           demandId: 'gh-42',
           sourceRef: { source: 'github-issue', externalId: '42', displayId: '42' },
@@ -444,7 +445,7 @@ describe('IssuePoller', () => {
       // PR4 之后 IssuePoller 应通过正统的 orchestrator.applyGateAction 进行批准，
       // 由 Reducer + TrackerStateStore 统一维护 orchestrationState/phaseProgress/phaseHistory，
       // 而不是直接调 tracker.updateState（老路径会绕过 phaseProgress 同步，导致前端样式错误）。
-      if (enabled) expect(orchestrator.applyGateAction).toHaveBeenCalledWith(42, { action: 'approve', source: 'label' });
+      if (enabled) expect(orchestrator.applyGateAction).toHaveBeenCalledWith(42, { action: 'approve', source: 'label' }, 1);
       else expect(orchestrator.applyGateAction).not.toHaveBeenCalled();
       p.stop();
     });
@@ -493,6 +494,7 @@ describe('IssuePoller', () => {
         review: { enabled: true, autoApproveLabels: ['skip-review'] },
       });
       const waitingRecord = {
+        run: { planRevision: 1 },
         demandSpec: {
           demandId: 'gh-42',
           sourceRef: { source: 'github-issue', externalId: '42', displayId: '42' },
@@ -521,6 +523,7 @@ describe('IssuePoller', () => {
 
     it('skips auto-approve check when autoApproveLabels is empty', async () => {
       const waitingRecord = {
+        run: { planRevision: 1 },
         demandSpec: {
           demandId: 'gh-42',
           sourceRef: { source: 'github-issue', externalId: '42', displayId: '42' },
@@ -549,6 +552,7 @@ describe('IssuePoller', () => {
         review: { enabled: true, autoApproveLabels: ['skip-review'] },
       });
       const waitingRecord = {
+        run: { planRevision: 1 },
         demandSpec: {
           demandId: 'gh-42',
           sourceRef: { source: 'github-issue', externalId: '42', displayId: '42' },

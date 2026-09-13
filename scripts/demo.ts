@@ -14,7 +14,7 @@ import type {
 import { main } from "../src/index.js";
 
 /** 可重复操作的本地演示：平台和 AI 使用固定响应，Git、状态机、浏览器验收均真实执行。 */
-const root = path.resolve(".iaf-mini/demo-github");
+const root = path.resolve(process.env.IAF_DEMO_DIR || ".iaf-mini/demo-dag-v2");
 const repo = path.join(root, "repo"),
   origin = path.join(root, "origin.git");
 fs.mkdirSync(root, { recursive: true });
@@ -116,8 +116,9 @@ const wirePull = (p: GitHubPullRequest) => ({
   title: p.title,
   state: p.state,
   html_url: p.html_url,
-  head: { ref: p.source_branch },
-  base: { ref: p.target_branch },
+  body: p.description,
+  head: { ref: p.source_branch, repo: { full_name: "demo/repo" } },
+  base: { ref: p.target_branch, repo: { full_name: "demo/repo" } },
   mergeable: true,
   mergeable_state: "clean",
 });
@@ -246,20 +247,13 @@ app.get(api + "/pulls", (req, res) =>
     data.prs
       .filter(
         (p) =>
-          p.source_branch ===
-            String(req.query.head).split(":").slice(1).join(":") &&
-          p.target_branch === req.query.base,
+          (!req.query.head || p.source_branch === String(req.query.head).split(":").slice(1).join(":")) &&
+          (!req.query.base || p.target_branch === req.query.base),
       )
       .map(wirePull),
   ),
 );
 app.post(api + "/pulls", (req, res) => {
-  if (!data.failedBranches.includes(req.body.head)) {
-    data.failedBranches.push(req.body.head);
-    save();
-    res.status(503).json({ message: "演示：首次交付失败，请重试交付" });
-    return;
-  }
   const number =
     Math.max(
       0,
@@ -272,11 +266,19 @@ app.post(api + "/pulls", (req, res) => {
     title: req.body.title,
     source_branch: req.body.head,
     target_branch: req.body.base,
+    source_repository: "demo/repo",
+    target_repository: "demo/repo",
+    description: req.body.body,
     state: "open",
     html_url: platformUrl + "/demo/repo/pull/" + number,
   };
   data.prs.push(pr);
   save();
+  if (!data.failedBranches.includes(req.body.head)) {
+    data.failedBranches.push(req.body.head); save();
+    res.status(503).json({ message: "演示：PR 已创建但响应丢失，重试时将核对并复用原 PR" });
+    return;
+  }
   res.status(201).json(wirePull(pr));
 });
 app.get(api + "/pulls/:number", (req, res) => {
@@ -315,7 +317,7 @@ app.get("/demo/repo/pull/:id", (req, res) =>
 );
 const server = await new Promise<ReturnType<typeof app.listen>>(
   (resolve, reject) => {
-    const server = app.listen(platformPort, "127.0.0.1", () => resolve(server));
+    const server = app.listen(platformPort, "127.0.0.1", (error?: Error) => error ? reject(error) : resolve(server));
     server.on("error", reject);
   },
 );
@@ -329,21 +331,8 @@ const runner: AIRunner = {
   },
   async run(options: RunOptions) {
     let output = "";
-    if (options.prompt.includes("Issue 草稿"))
-      output = JSON.stringify({
-        tasks: [
-          {
-            title: "实现演示页面",
-            description: "创建演示页面并覆盖错误处理。",
-            acceptanceCriteria: "页面展示修复完成，测试和浏览器验收通过。",
-          },
-          {
-            title: "补充页面验收说明",
-            description: "增加页面说明并完成测试。",
-            acceptanceCriteria: "说明完整，浏览器验收通过。",
-          },
-        ],
-      });
+    if (options.phaseName === 'draft')
+      output = JSON.stringify({ title: '实现演示页面', description: '创建演示页面并覆盖错误处理。', acceptanceCriteria: '页面展示修复完成，测试和浏览器验收通过。' });
     else if (options.prompt.includes("你是经验分析专家")) {
       const diaryIds = [
         ...options.prompt.matchAll(/### 日记 \d+ \(ID: ([^)]+)\)/g),
@@ -379,20 +368,9 @@ const runner: AIRunner = {
         ],
       });
     } else if (options.mode === "plan")
-      output =
-        plan +
-        "\n## 审核反馈\n" +
-        (options.prompt.includes("反馈")
-          ? "已补充边界条件与错误处理。"
-          : "等待用户审核。");
+      output = JSON.stringify({ title: '实现演示页面', description: plan + (options.prompt.includes('反馈') ? '\n已补充边界条件与错误处理。' : ''), acceptanceCriteria: ['标题展示修复完成，浏览器验收通过'], tasks: [{ id: 'page', title: '实现页面', instructions: '实现 index.html 页面和说明，覆盖错误处理', acceptanceCriteria: ['浏览器可访问'], dependsOn: [] }] });
     else {
-      const number = Number(options.workDir.match(/issue-(\d+)/)?.[1]);
-      const planDir = path.join(
-        options.workDir,
-        ".claude-plan",
-        `issue-${number}`,
-      );
-      fs.mkdirSync(planDir, { recursive: true });
+      const number = options.identity?.issueNumber;
       if (options.phaseName === "build") {
         const html = path.join(options.workDir, "index.html");
         const repair = fs.readFileSync(html, "utf8").includes("待修复");
@@ -400,21 +378,12 @@ const runner: AIRunner = {
           html,
           `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><h1>${repair ? "修复完成" : "待修复"}</h1><p>Issue #${number} 的本地演示页面</p></html>`,
         );
-        const current = path.join(planDir, "01-plan.md");
-        fs.writeFileSync(
-          current,
-          fs.readFileSync(current, "utf8").replaceAll("[ ]", "[x]"),
-        );
         output = repair ? "已修复页面标题" : "已实现页面，等待验证";
       } else if (options.phaseName === "verify") {
         const ok = fs
           .readFileSync(path.join(options.workDir, "index.html"), "utf8")
           .includes("修复完成");
-        fs.writeFileSync(
-          path.join(planDir, "02-verify-report.md"),
-          `# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: ${ok ? "通过" : "失败"}\n\n## 结果\n${ok ? "所有待办已完成，标题符合验收标准。" : "页面标题不符合验收标准，需要改为修复完成。"}\n`,
-        );
-        output = "已生成演示验证报告";
+        output = `# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: ${ok ? "通过" : "失败"}\n\n## 结果\n${ok ? "标题符合验收标准。" : "页面标题不符合验收标准，需要改为修复完成。"}\n`;
       } else throw new Error(`演示执行器不支持此调用：${options.phaseName}`);
     }
     options.onStreamEvent?.({
@@ -435,7 +404,7 @@ const configFile = path.join(root, ".env");
 const saved = fs.existsSync(configFile) ? parseEnv(fs.readFileSync(configFile)) : {};
 // 演示重启保留流程开关；平台、仓库和执行器仍使用演示配置。
 const flowSettings = Object.fromEntries(
-  ["REVIEW_ENABLED", "KNOWLEDGE_ENABLED", "DISTILL_ENABLED", "VERIFY_FIX_LOOP_ENABLED", "VERIFY_FIX_MAX_ITERATIONS"]
+  ["REVIEW_ENABLED", "KNOWLEDGE_ENABLED", "DISTILL_ENABLED", "VERIFY_FIX_LOOP_ENABLED", "VERIFY_FIX_MAX_ITERATIONS", "MAX_CONCURRENT_ISSUES", "AI_MAX_CONCURRENCY", "MAX_RETRIES"]
     .filter(key => saved[key] !== undefined)
     .map(key => [key, saved[key]]),
 );

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, computed } from "vue";
 import type { AgentLogEntry, IssueState } from '@/types';
 import { usePipeline } from '@/composables/usePipeline';
 import { useAgentLogs } from '@/composables/useAgentLogs';
@@ -19,10 +20,17 @@ const debugMode = defineModel<boolean>('debugMode', { default: false });
 
 const { stateLabel, isTerminalState } = usePipeline();
 const { agentLogContainer, agentLogLabel } = useAgentLogs();
+const taskFilter = ref(''), attemptFilter = ref('');
+const tasks = computed(() => [...new Set(props.logs.flatMap(log => log.identity?.taskId ? [log.identity.taskId] : []))]);
+const filteredLogs = computed(() => props.logs.filter(log => (!taskFilter.value || log.identity?.taskId === taskFilter.value) && (!attemptFilter.value || log.identity?.attemptNo === Number(attemptFilter.value))));
 </script>
 
 <template>
   <div>
+    <div class="flex gap-2 mb-2">
+      <label>任务 <select v-model="taskFilter" aria-label="按任务筛选日志"><option value="">全部</option><option v-for="task in tasks" :key="task" :value="task">{{ task }}</option></select></label>
+      <label>尝试 <input v-model="attemptFilter" type="number" min="1" aria-label="按尝试筛选日志" class="w-20 border rounded" /></label>
+    </div>
     <div class="flex items-center justify-between mb-2">
       <h3 class="text-base font-semibold text-gray-700">{{ $t('agentLog.title') }}</h3>
       <div class="flex items-center space-x-2">
@@ -71,7 +79,7 @@ const { agentLogContainer, agentLogLabel } = useAgentLogs();
       style="max-height: 20rem;"
     >
       <div
-        v-for="(log, idx) in logs"
+        v-for="(log, idx) in filteredLogs"
         :key="idx"
         class="agent-log-item"
         :class="'log-' + log.type"
@@ -79,6 +87,7 @@ const { agentLogContainer, agentLogLabel } = useAgentLogs();
         <span class="log-badge">{{ agentLogLabel(log.type) }}</span>
         <span class="text-gray-400 text-xs pr-1">{{ formatLogTime(log.timestamp) }}</span>
         <span v-if="log.phase" class="text-gray-400 text-xs pr-1">[{{ log.phase }}]</span>
+        <span v-if="log.identity" class="text-xs text-blue-600">{{ log.identity.taskId }} · 第 {{ log.identity.attemptNo }} 次 </span>
         <span class="text-gray-700 break-all">{{ log.summary }}</span>
       </div>
     </div>

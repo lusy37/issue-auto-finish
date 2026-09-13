@@ -1,3 +1,6 @@
+import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
+import { randomUUID } from 'node:crypto';
+import { assertOwnedDirectory, isInside } from '../dag/TaskGraphExecutor.js';
 import { cancelUat } from '../e2e/PlaywrightRunner.js';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -15,11 +18,10 @@ import { PlanPersistence } from '../persistence/PlanPersistence.js';
 import type { WorktreeContext } from '../git/WorktreeContext.js';
 import { getLocalIP } from '../utils/network.js';
 import type { PhaseContext } from '../phases/BasePhase.js';
-import { createPhase } from '../phases/PhaseFactory.js';
 import { resolvePipelineMode, getPipelineDef, buildPlanModePipeline, registerPipeline, createLifecycleManager, PipelineDef } from '../pipeline/PipelineDefinition.js';
 import { SupplementStore } from '../supplement/SupplementStore.js';
 import { githubIssueToDemandSpec } from '../demand/adapters/GitHubAdapter.js';
-import { getIssueNumber, getTitle } from '../tracker/IssueRecordHelper.js';
+import { getIssueNumber } from '../tracker/IssueRecordHelper.js';
 import { eventBus as defaultEventBus, type EventBus } from '../events/EventBus.js';
 import {
   applyGateAction,
@@ -30,11 +32,9 @@ import {
 } from '../orchestration/index.js';
 import { TrackerStateStore } from './TrackerStateStore.js';
 import { AsyncMutex } from '../utils/AsyncMutex.js';
-import { generatePRTitle, generatePRDescription } from '../utils/PullRequestHelper.js';
 import { PortAllocator, type PortPair } from '../deploy/PortAllocator.js';
 import { DevServerManager } from '../deploy/DevServerManager.js';
 import { isE2eEnabledForIssue } from '../e2e/E2eSettings.js';
-import { ConflictResolver } from '../git/ConflictResolver.js';
 import { getProjectKnowledge } from '../knowledge/index.js';
 import { KNOWLEDGE_DEFAULTS } from '../knowledge/KnowledgeDefaults.js';
 import { logger as rootLogger } from '../logger.js';
@@ -48,10 +48,7 @@ import { executePhaseLoop } from './steps/PhaseLoopStep.js';
 import { executeCompletion } from './steps/CompletionStep.js';
 import { handleFailure } from './steps/FailureHandler.js';
 
-export interface PullRequestResult {
-  url: string;
-  number: number;
-}
+
 
 export interface WorktreeStatus {
   /** worktree 根目录是否存在（false = 已被回收 / 手动删除）。 */
@@ -74,7 +71,6 @@ export class PipelineOrchestrator {
   private tracker: IssueTracker;
   private supplementStore?: SupplementStore;
   private mainGitMutex: AsyncMutex;
-  private conflictResolver: ConflictResolver;
   private pipelineDef: PipelineDef;
   private portAllocator: PortAllocator;
   private devServerManager: DevServerManager;
@@ -93,7 +89,6 @@ export class PipelineOrchestrator {
   /** 替换 AIRunner（用于配置热重载） */
   setAIRunner(runner: AIRunner): void {
     this.aiRunner = runner;
-    this.conflictResolver = new ConflictResolver(runner);
     logger.info('AIRunner replaced via hot-reload');
   }
 
@@ -116,7 +111,6 @@ export class PipelineOrchestrator {
     this.supplementStore = supplementStore;
     this.mainGitMutex = mainGitMutex ?? new AsyncMutex();
     this.eventBus = eventBusInstance ?? defaultEventBus;
-    this.conflictResolver = new ConflictResolver(aiRunner);
 
     const mode = resolvePipelineMode(config.pipeline?.mode === 'auto' ? undefined : config.pipeline?.mode);
     this.pipelineDef = mode === 'plan-mode'
@@ -129,7 +123,18 @@ export class PipelineOrchestrator {
       backendPortBase: config.e2e.backendPortBase,
       frontendPortBase: config.e2e.frontendPortBase,
     });
-    this.devServerManager = new DevServerManager({backendCommand: config.preview.backendCommand ? (()=>{const [bin,...args]=splitCommand(config.preview.backendCommand);return {bin,args};})() : undefined, frontendCommand: config.preview.frontendCommand ? (()=>{const [bin,...args]=splitCommand(config.preview.frontendCommand);return {bin,args};})() : undefined, frontendDir: config.preview.frontendDir});
+    this.devServerManager = new DevServerManager({
+      onProcessStarted: (number, pid, workDir) => {
+        const callId = randomUUID();
+        this.tracker.transaction(number, record => {
+          const run = record.run!;
+          if (run.stopIntent) throw new Error('已停止的 Issue 不能启动预览');
+          run.calls[callId] = { identity: { issueNumber: number, planRevision: run.planRevision, buildGeneration: run.buildGeneration, dispatchId: run.dispatchId ?? 'preview', taskId: '$preview', attemptNo: 1, callId }, pid, workDir, status: 'running', startedAt: new Date().toISOString() };
+        });
+        return callId;
+      },
+      onProcessExited: (number, callId) => this.tracker.transaction(number, record => { const call = record.run!.calls[callId]; if (call) { call.status = 'exited'; call.exitedAt = new Date().toISOString(); } }),
+      backendCommand: config.preview.backendCommand ? (()=>{const [bin,...args]=splitCommand(config.preview.backendCommand);return {bin,args};})() : undefined, frontendCommand: config.preview.frontendCommand ? (()=>{const [bin,...args]=splitCommand(config.preview.frontendCommand);return {bin,args};})() : undefined, frontendDir: config.preview.frontendDir});
 
     this.effectiveWorktreeBaseDir = config.project.worktreeBaseDir;
 
@@ -152,63 +157,12 @@ export class PipelineOrchestrator {
   getMainGitMutex(): AsyncMutex { return this.mainGitMutex; }
   getTracker(): IssueTracker { return this.tracker; }
 
+  /** 仅检查登记目录；变基恢复、锁文件核对都归所属 Issue 的恢复协议处理。 */
   async cleanupStaleState(): Promise<void> {
-    logger.info('Cleaning up stale worktree state...');
-    let cleaned = 0;
-    const repoGitRoot = this.config.project.gitRootDir;
-
-    try {
-      const worktrees = await this.mainGit.worktreeList();
-      for (const wtDir of worktrees) {
-        if (wtDir === repoGitRoot) continue;
-        if (!wtDir.includes('/issue-')) continue;
-
-        try {
-          const gitFile = path.join(wtDir, '.git');
-          try {
-            await fs.access(gitFile);
-          } catch {
-            logger.warn('Worktree corrupted (.git missing), force removing', { dir: wtDir });
-            await this.mainGit.worktreeRemove(wtDir, true).catch(() => {});
-            await this.mainGit.worktreePrune();
-            cleaned++;
-            continue;
-          }
-
-          const wtGit = new GitOperations(wtDir);
-
-          if (await wtGit.isRebaseInProgress()) {
-            logger.warn('Aborting residual rebase in worktree', { dir: wtDir });
-            await wtGit.rebaseAbort();
-            cleaned++;
-          }
-
-          const indexLock = path.join(wtDir, '.git', 'index.lock');
-          try {
-            await fs.unlink(indexLock);
-            logger.warn('Removed stale index.lock', { path: indexLock });
-            cleaned++;
-          } catch {
-            // No lock file — normal
-          }
-        } catch (err) {
-          logger.warn('Failed to clean worktree state', { dir: wtDir, error: (err as Error).message });
-        }
-      }
-    } catch (err) {
-      logger.warn('Failed to list worktrees for cleanup', { error: (err as Error).message });
+    for (const record of this.tracker.getAll()) {
+      const directory = this.computeWorktreeContext(getIssueNumber(record), record.branchName).gitRootDir;
+      if (fsSync.existsSync(directory) && !fsSync.existsSync(path.join(directory, '.git'))) logger.warn('工作目录缺少 Git 登记，请人工核对', { directory });
     }
-
-    const mainIndexLock = path.join(repoGitRoot, '.git', 'index.lock');
-    try {
-      await fs.unlink(mainIndexLock);
-      logger.warn('Removed stale main repo index.lock', { path: mainIndexLock });
-      cleaned++;
-    } catch {
-      // No lock file — normal
-    }
-
-    logger.info('Stale state cleanup complete', { cleaned });
   }
 
   /**
@@ -236,7 +190,7 @@ export class PipelineOrchestrator {
   }
 
 
-  async applyGateAction(number: number, action: GateAction): Promise<void> {
+  async applyGateAction(number: number, action: GateAction, planRevision?: number): Promise<void> {
     const record = this.tracker.get(number);
     if (!record) throw new IssueNotFoundError(number);
 
@@ -265,65 +219,21 @@ export class PipelineOrchestrator {
       now: new Date().toISOString(),
     });
 
-    // Gate 操作的 sideEffect 当前只有 emit-event，直接转发到 EventBus
-    for (const se of out.sideEffects) {
-      if (se.kind === 'emit-event') {
-        this.eventBus.emitTyped(se.type as never, { issueIid: number, ...se.payload });
-      }
-    }
-    if (out.historyEntry) {
-      stateStore.applyTransition(number, {
-        nextState: out.nextState,
-        nextAttempts: snapshot.attempts,
-        historyEntry: out.historyEntry,
-      });
-    }
+    if (planRevision === undefined || planRevision !== record.run!.planRevision) throw new GateActionError('审核计划版本已过期，请刷新页面', 'invalid-state');
+    if (out.historyEntry) stateStore.applyTransition(number, {
+      nextState: out.nextState, nextAttempts: snapshot.attempts, historyEntry: out.historyEntry,
+      expectedPlanRevision: planRevision, reviewFeedback: action.action === 'reject' ? action.feedback : undefined,
+    });
+    for (const se of out.sideEffects) if (se.kind === 'emit-event') this.eventBus.emitTyped(se.type as never, { issueIid: number, ...se.payload });
 
     if (action.action === 'reject') {
-      // reject 走完 Reducer 后需要补充三个领域副作用，这些不是 Reducer 的纯逻辑职责：
-      //   1. 持久化 review-history.json（带 planSnapshot + reviewedSessionId 用于下一轮 PlanPhase）
-      //   2. 重置所有阶段的 phaseProgress 为 pending（reject = 流水线从 plan 重启）
-      //   3. 同步驳回原因到GitHub Issue 评论
-      await this.handleRejectSideEffects(number, action.feedback);
+      const current = this.tracker.get(number)!;
+      await this.syncRejectFeedbackToIssue(current, number, action.feedback, current.run!.reviewHistory?.length ?? 1);
     }
 
     logger.info('Gate action applied', {
       number, phaseId: gatePhaseId, action: action.action, nextStateKind: out.nextState.kind,
     });
-  }
-
-  /**
-   * reject 路径专用副作用：持久化反馈 + 重置 phaseProgress + 同步评论。
-   *
-   * 抽出本方法让 applyGateAction 主体保持「Reducer → SideEffect → StateStore」三段式骨架，
-   * reject 特有的领域 IO 收敛在此处。
-   */
-  private async handleRejectSideEffects(number: number, feedback: string): Promise<void> {
-    const record = this.tracker.get(number);
-    if (!record) return;
-
-    const wtCtx = this.computeWorktreeContext(number, record.branchName);
-    const round = await this.persistRejectFeedback(number, wtCtx.workDir, feedback);
-    this.tracker.initPhaseProgress(number, this.getIssueSpecificPipelineDef(number));
-    await this.syncRejectFeedbackToIssue(record, number, feedback, round);
-  }
-
-  /**
-   * 写入审核反馈，返回累计的轮次数。
-   *
-   * worktree 存在 → 写 worktree 内 review-history.json（带 planSnapshot + reviewedSessionId
-   * 供下一轮 PlanPhase resume）；worktree 缺失 → fallback 写全局后备目录（仅保住反馈本身）。
-   */
-  private async persistRejectFeedback(number: number, workDir: string, feedback: string): Promise<number> {
-    if (fsSync.existsSync(workDir)) {
-      const planPersistence = new PlanPersistence(workDir, number);
-      const snapshot = planPersistence.readFile('01-plan.md') ?? undefined;
-      const reviewedSessionId = planPersistence.getPhaseSessionId('plan');
-      planPersistence.writeReviewFeedback(feedback, snapshot, reviewedSessionId);
-      return planPersistence.readReviewHistory().length;
-    }
-    PlanPersistence.writeReviewFeedbackBackup(number, feedback);
-    return PlanPersistence.readReviewHistoryBackup(number).length;
   }
 
   /**
@@ -375,6 +285,7 @@ export class PipelineOrchestrator {
   }
 
   private async ensureWorktree(wtCtx: WorktreeContext): Promise<void> {
+    assertOwnedDirectory(this.config.project.worktreeBaseDir, wtCtx.gitRootDir);
     const wsCtx = await this.workspaceManager.prepareWorkspace(
       wtCtx.issueIid,
       wtCtx.branchName,
@@ -384,6 +295,9 @@ export class PipelineOrchestrator {
   }
 
   private async cleanupWorktree(wtCtx: WorktreeContext): Promise<void> {
+    const record = this.tracker.get(wtCtx.issueIid);
+    if (this.executions.has(wtCtx.issueIid) || record?.run?.recoveryRequired || Object.values(record?.run?.calls ?? {}).some(call => call.status !== 'exited')) throw new Error('目录仍有执行或恢复引用，不能清理');
+    assertOwnedDirectory(this.config.project.worktreeBaseDir, wtCtx.gitRootDir);
     if (wtCtx.workspace) {
       await this.workspaceManager.cleanupWorkspace(wtCtx.workspace);
       return;
@@ -395,91 +309,100 @@ export class PipelineOrchestrator {
       logger.warn('Failed to cleanup worktree', { dir: wtCtx.gitRootDir, error: (err as Error).message });
     }
   }
-private async installDependencies(workDir: string): Promise<void> {
+private async installDependencies(workDir: string, signal?: AbortSignal, force = false): Promise<void> {
  try { await fs.access(path.join(workDir,'package.json')); } catch { return; }
- if(await this.ensureNodeModules(workDir)) return;
+ if(!force && await this.ensureNodeModules(workDir)) return;
  const knowledge=getProjectKnowledge()??KNOWLEDGE_DEFAULTS;
  const [binary,...args]=splitCommand(knowledge.toolchain.installCommand);
- const result=await runProcess(binary,args,{cwd:workDir,timeoutMs:300000});
+ const result=await runProcess(binary,args,{cwd:workDir,timeoutMs:300000,signal});
  if(result.code!==0) throw new Error('安装项目依赖失败：'+result.stderr.slice(-1000));
 }
 private async ensureNodeModules(workDir: string): Promise<boolean> { try { await fs.access(path.join(workDir, 'node_modules', '.bin')); return true; } catch { return false; } }
 
+  private async stopIssue(issueIid: number, kind: 'pause' | 'cancel' | 'redo'): Promise<void> {
+    this.tracker.transaction(issueIid, record => {
+      record.run!.stopIntent = { kind, requestedAt: new Date().toISOString() };
+      record.state = kind === 'cancel' ? IssueState.Cancelled : IssueState.Paused;
+      record.pausedAtPhase = record.currentPhase ?? 'plan';
+      record.orchestrationState = kind === 'cancel' ? { kind: 'pipeline-completed' } : { kind: 'paused', phaseId: record.pausedAtPhase };
+    });
+    this.controllers.get(issueIid)?.abort();
+    cancelUat(issueIid);
+    await this.executions.get(issueIid)?.catch(() => {});
+    await this.stopPreviewServers(issueIid);
+    this.confirmStoppedCalls(issueIid);
+  }
+
+  private async recoverExecution(issueIid: number): Promise<void> {
+    const record = this.tracker.get(issueIid)!;
+    if (record.run!.stopIntent || [IssueState.Paused, IssueState.Cancelled, IssueState.Failed].includes(record.state)) throw new Error('停止或人工处理状态不自动恢复');
+    for (const call of Object.values(record.run!.calls)) {
+      if (call.status === 'exited') continue;
+      if (call.pid) {
+        try { process.kill(call.pid, 0); throw new Error(`旧调用进程 ${call.pid} 尚未确认退出，请人工核对`); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+      }
+    }
+    for (const file of record.run!.temporaryFiles ?? []) {
+      assertOwnedDirectory(this.config.project.worktreeBaseDir, file);
+      if (!/^\.iaf-uat-[a-f0-9-]+\.config\.ts$/.test(path.basename(file))) throw new Error('临时文件登记无效，请人工核对');
+      fsSync.rmSync(file, { force: true });
+    }
+    this.tracker.transaction(issueIid, current => {
+      const run = current.run!;
+      const uncertain = Object.values(run.tasks).some(task => task.status === 'running' && !task.success) || (Object.values(run.calls).some(call => call.identity.dispatchId === run.dispatchId && call.identity.taskId.startsWith('$phase') && call.status !== 'exited'));
+      if (uncertain) {
+        const phase = current.currentPhase ?? 'build';
+        if ((run.retryUsed[phase] ?? 0) >= this.config.poll.maxRetries) throw new Error('恢复未知执行所需的自动重试额度已用完');
+        run.retryUsed[phase] = (run.retryUsed[phase] ?? 0) + 1;
+      }
+      for (const call of Object.values(run.calls)) if (call.status !== 'exited') { call.status = 'exited'; call.exitedAt = new Date().toISOString(); }
+      for (const task of Object.values(run.tasks)) if (task.status === 'running' && !task.success) task.status = 'uncertain';
+      run.temporaryFiles = [];
+      run.recoveryRequired = false;
+    });
+  }
+
+  /** 显式继续允许核对已退出的孤儿调用，但绝不抢占仍存活或身份不明的进程。 */
+  private confirmStoppedCalls(issueIid: number): void {
+    const record = this.tracker.get(issueIid)!;
+    for (const call of Object.values(record.run!.calls)) {
+      if (call.status === 'exited') continue;
+      if (call.status !== 'queued' && !call.pid) throw new Error('调用缺少进程凭证，目录保持隔离，请人工核对');
+      if (call.pid) {
+        try { process.kill(call.pid, 0); throw new Error(`旧进程 ${call.pid} 尚未退出`); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+      }
+    }
+    this.tracker.transaction(issueIid, current => {
+      for (const call of Object.values(current.run!.calls)) if (call.status !== 'exited') { call.status = 'exited'; call.exitedAt = new Date().toISOString(); }
+      current.run!.recoveryRequired = false;
+    });
+  }
+
   async restartIssue(issueIid: number): Promise<void> {
     const record = this.tracker.get(issueIid);
     if (!record) throw new IssueNotFoundError(issueIid);
-
-    const wtCtx = this.computeWorktreeContext(issueIid, record.branchName);
-    logger.info('Restarting issue — cleaning context', { issueIid, branchName: record.branchName });
-
-    // 设置 pending action，防止旧的 processIssue 循环在 kill 后覆盖状态
-    this.pendingActions.set(issueIid, 'restart');
-
-    cancelUat(issueIid);
-    this.aiRunner.killByWorkDir(wtCtx.workDir);
-
-    this.stopPreviewServers(issueIid);
-    await this.executions.get(issueIid)?.catch(() => {});
-
-    try {
-      const deleted = await this.github.cleanupAgentNotes(getIssueNumber(record));
-      logger.info('Agent notes cleaned up', { issueIid, deleted });
-    } catch (err) {
-      logger.warn('Failed to cleanup agent notes', { issueIid, error: (err as Error).message });
+    if (record.run!.delivery?.prNumber) {
+      const pr = await this.github.getPullRequestDetail(record.run!.delivery.prNumber);
+      if (pr.state === 'merged') throw new Error('原 PR 已合并，请为后续需求创建新 Issue');
+      if (pr.state === 'closed') throw new Error('请先在 GitHub 重开原 PR，再完整重做');
     }
-
+    await this.stopIssue(issueIid, 'redo');
+    const wtCtx = this.computeWorktreeContext(issueIid, record.branchName);
+    assertOwnedDirectory(this.config.project.worktreeBaseDir, wtCtx.gitRootDir);
     await this.mainGitMutex.runExclusive(async () => {
-      await this.cleanupWorktree(wtCtx);
-      await this.cleanupWorkspaceRoot(issueIid);
-      try { await this.mainGit.deleteBranch(record.branchName); } catch { /* branch may not exist */ }
-      try { await this.mainGit.deleteRemoteBranch(record.branchName); } catch { /* remote branch may not exist */ }
+      await this.mainGit.fetch();
+      if (fsSync.existsSync(wtCtx.gitRootDir)) await new GitOperations(wtCtx.gitRootDir).resetOwned(`origin/${this.config.project.baseBranch}`);
     });
-
-
-
     this.tracker.resetFull(issueIid);
-    // 清理完毕，删除 pendingAction 防止新的 processIssue 被误拦截
-    this.pendingActions.delete(issueIid);
-    logger.info('Issue restarted', { issueIid });
   }
 
   async cancelIssue(issueIid: number): Promise<void> {
-    cancelUat(issueIid);
-    const record = this.tracker.get(issueIid);
-    if (!record) throw new IssueNotFoundError(issueIid);
-
-    const wtCtx = this.computeWorktreeContext(issueIid, record.branchName);
-    logger.info('Cancelling issue — cleaning all resources', { issueIid, branchName: record.branchName });
-
-    this.tracker.updateState(issueIid, IssueState.Cancelled);
-    cancelUat(issueIid);
-    this.aiRunner.killByWorkDir(wtCtx.workDir);
-    await this.executions.get(issueIid)?.catch(() => {});
-
-    // 2. 停止预览服务器
-    this.stopPreviewServers(issueIid);
-
-    // 3. 移除GitHub标签（关键步骤！防止 discovery 循环重新发现）
-    try {
-      await this.github.removeLabelsWithPrefix(getIssueNumber(record), 'auto-finish');
-    } catch (err) {
-      logger.warn('Failed to remove labels on cancel', { issueIid, error: (err as Error).message });
-    }
-
-    // 4. 清理 worktree + 分支
-    await this.mainGitMutex.runExclusive(async () => {
-      await this.cleanupWorktree(wtCtx);
-      await this.cleanupWorkspaceRoot(issueIid);
-      try { await this.mainGit.deleteBranch(record.branchName); } catch { /* branch may not exist */ }
-      try { await this.mainGit.deleteRemoteBranch(record.branchName); } catch { /* remote branch may not exist */ }
-    });
-
-    // 5. 标记为 Skipped（保留记录防止 discovery 重新拾取）
-    this.tracker.clearProcessingLock(issueIid);
-    this.tracker.updateState(issueIid, IssueState.Cancelled);
-    // 6. 清理 E2E 产物
-
-    logger.info('Issue cancelled', { issueIid });
+    if (!this.tracker.get(issueIid)) throw new IssueNotFoundError(issueIid);
+    await this.stopIssue(issueIid, 'cancel');
+    // 已发布分支及 PR 身份保留，诊断目录由保留期策略处理。
+    await this.github.removeLabelsWithPrefix(issueIid, 'auto-finish');
   }
 
   /**
@@ -490,6 +413,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     if (!this.workspaceManager) return;
 
     const wsRoot = this.workspaceManager.getWorkspaceRoot(issueIid);
+    assertOwnedDirectory(this.config.project.worktreeBaseDir, wsRoot);
     try {
       await fs.rm(wsRoot, { recursive: true, force: true });
       logger.info('Workspace root cleaned up', { issueIid, dir: wsRoot });
@@ -498,21 +422,27 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     }
   }
 
+  retryIssue(issueIid: number): boolean {
+    if (this.executions.has(issueIid)) throw new InvalidStateError('running', '旧执行尚未退出，请稍后重试');
+    const record = this.tracker.get(issueIid);
+    if (!record || record.state !== IssueState.Failed) return false;
+    this.confirmStoppedCalls(issueIid);
+    return this.tracker.resetForRetry(issueIid);
+  }
+
   retryFromPhase(issueIid: number, phase: string): void {
     if(this.executions.has(issueIid)) throw new InvalidStateError('running','任务仍在执行，请先中止或等待当前执行结束');
     const record = this.tracker.get(issueIid);
     if (!record) throw new IssueNotFoundError(issueIid);
 
+    if (phase === 'plan' && Object.values(record.run!.tasks).some(task => task.attemptNo > 0)) throw new Error('已有合并结果，请使用完整重做来重新规划');
     const issueDef = this.getIssueSpecificPipelineDef(issueIid);
     const issueLM = createLifecycleManager(issueDef);
     if (!issueLM.isRetryable(phase)) {
       throw new InvalidPhaseError(phase);
     }
 
-    // Interrupt stale AI processes to prevent them from overwriting the reset state.
-    const wtCtx = this.computeWorktreeContext(issueIid, record.branchName);
-    cancelUat(issueIid);
-    this.aiRunner.killByWorkDir(wtCtx.workDir);
+    this.confirmStoppedCalls(issueIid);
 
     logger.info('Retrying issue from phase', { issueIid, phase });
     const ok = this.tracker.resetToPhase(issueIid, phase, issueDef);
@@ -523,89 +453,38 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
 
   // ── 阶段级中止/继续/重做 ──
 
-  abortIssue(issueIid: number): void {
-    const record = this.tracker.get(issueIid);
-    if (!record) throw new IssueNotFoundError(issueIid);
-
-    const ABORTABLE = new Set([
-      IssueState.PhaseRunning, IssueState.PhaseDone,
-      IssueState.PhaseWaiting, IssueState.PhaseApproved,
-    ]);
-    if (!ABORTABLE.has(record.state)) {
-      throw new InvalidStateError(record.state, `Issue #${issueIid} not in abortable state`);
-    }
-
-    const wtCtx = this.computeWorktreeContext(issueIid, record.branchName);
-
-    if (record.state === IssueState.PhaseRunning) {
-      // AI 进程运行中 — 设标记后 kill，由 catch 块完成状态转换
-      this.pendingActions.set(issueIid, 'abort');
-      cancelUat(issueIid);
-    this.aiRunner.killByWorkDir(wtCtx.workDir);
-    } else {
-      // 无进程运行（PhaseDone/PhaseWaiting/PhaseApproved）— 直接暂停
-      this.tracker.pauseIssue(issueIid, record.currentPhase ?? '');
-    }
-
-    logger.info('Issue abort requested', { issueIid, state: record.state });
+  async abortIssue(issueIid: number): Promise<void> {
+    if (!this.tracker.get(issueIid)) throw new IssueNotFoundError(issueIid);
+    await this.stopIssue(issueIid, 'pause');
   }
 
   continueIssue(issueIid: number): void {
+    if (this.executions.has(issueIid)) throw new Error('停止仍在进行，请等待进程退出');
     const record = this.tracker.get(issueIid);
     if (!record) throw new IssueNotFoundError(issueIid);
     if (record.state !== IssueState.Paused) {
       throw new InvalidStateError(record.state, `Issue #${issueIid} not in paused state`);
     }
 
+    this.confirmStoppedCalls(issueIid);
     const issueDef = this.getIssueSpecificPipelineDef(issueIid);
     this.tracker.resumeFromPause(issueIid, issueDef, false);
     logger.info('Issue continued from pause', { issueIid });
   }
 
-  redoPhase(issueIid: number): void {
+  async redoPhase(issueIid: number): Promise<void> {
     const record = this.tracker.get(issueIid);
     if (!record) throw new IssueNotFoundError(issueIid);
+    const phase = record.pausedAtPhase ?? record.currentPhase ?? 'plan';
+    if (phase === 'plan' && Object.values(record.run!.tasks).some(task => task.attemptNo > 0)) throw new Error('任务图已执行，请使用完整重做重新规划');
+    await this.stopIssue(issueIid, 'pause');
+    this.tracker.resetToPhase(issueIid, phase, this.getIssueSpecificPipelineDef(issueIid));
+    this.tracker.updatePhaseProgress(issueIid, phase, { sessionId: undefined });
+  }
 
-    const REDOABLE = new Set([
-      IssueState.Paused, IssueState.PhaseRunning, IssueState.PhaseDone,
-      IssueState.PhaseWaiting, IssueState.PhaseApproved,
-    ]);
-    if (!REDOABLE.has(record.state)) {
-      throw new InvalidStateError(record.state, `Issue #${issueIid} not in redoable state`);
-    }
-
-    const issueDef = this.getIssueSpecificPipelineDef(issueIid);
-    const wtCtx = this.computeWorktreeContext(issueIid, record.branchName);
-
-    if (record.state === IssueState.PhaseRunning) {
-      // AI 进程运行中 — 设标记后 kill，由 catch 块完成状态转换
-      this.pendingActions.set(issueIid, 'redo');
-      cancelUat(issueIid);
-    this.aiRunner.killByWorkDir(wtCtx.workDir);
-    } else if (record.state === IssueState.Paused) {
-      const phase = record.pausedAtPhase;
-      if (phase) {
-        const wtPlan = new PlanPersistence(wtCtx.workDir, issueIid);
-        wtPlan.updatePhaseProgress(phase, 'pending');
-        this.tracker.updatePhaseProgress(issueIid, phase, {
-          status: 'pending', startedAt: undefined, completedAt: undefined, error: undefined,
-        });
-      }
-      this.tracker.resumeFromPause(issueIid, issueDef, true);
-      this.eventBus.emitTyped('issue:redone', { issueIid });
-    } else {
-      // PhaseDone/PhaseWaiting/PhaseApproved — 重置到当前阶段前驱
-      const phase = record.currentPhase;
-      if (phase) {
-        const wtPlan = new PlanPersistence(wtCtx.workDir, issueIid);
-        wtPlan.updatePhaseProgress(phase, 'pending');
-        // resetToPhase 内部已重置 tracker 的 phaseProgress
-        this.tracker.resetToPhase(issueIid, phase, issueDef);
-      }
-      this.eventBus.emitTyped('issue:redone', { issueIid });
-    }
-
-    logger.info('Issue redo requested', { issueIid, state: record.state });
+  async stopExecutions(): Promise<void> {
+    for (const controller of this.controllers.values()) controller.abort();
+    await Promise.allSettled(this.executions.values());
   }
 
   /**
@@ -649,22 +528,36 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
   }
 
   private readonly executions = new Map<number, Promise<void>>();
-  private readonly executionMutex = new AsyncMutex();
+  private readonly controllers = new Map<number, AbortController>();
   async processIssue(issue: GitHubIssue): Promise<void> {
     const existing = this.executions.get(issue.number);
     if (existing) return existing;
-    const running = this.executionMutex.runExclusive(async () => {
+    const controller = new AbortController();
+    this.controllers.set(issue.number, controller);
+    const running = Promise.resolve().then(async () => {
       const state = this.tracker.get(issue.number)?.state;
       if (state === IssueState.Cancelled || state === IssueState.Completed) return;
-      await runWithIssueContext(issue.number, () => this._processIssueImpl(issue));
+      await runWithIssueContext(issue.number, () => this._processIssueImpl(issue), controller.signal, {
+        processStarted: (pid, workDir) => {
+          const callId = randomUUID();
+          this.tracker.transaction(issue.number, record => {
+            const run = record.run!;
+            if (run.stopIntent) throw new Error('停止后不再启动命令');
+            run.calls[callId] = { identity: { issueNumber: issue.number, planRevision: run.planRevision, buildGeneration: run.buildGeneration, dispatchId: run.dispatchId!, taskId: '$process', attemptNo: run.phaseExecutions[record.currentPhase ?? 'setup'] ?? 1, callId }, pid, workDir, status: 'running', startedAt: new Date().toISOString() };
+          });
+          return callId;
+        },
+        processExited: callId => { this.tracker.transaction(issue.number, record => { const call = record.run!.calls[callId]; if (call) { call.status = 'exited'; call.exitedAt = new Date().toISOString(); } }); },
+      });
     });
     this.executions.set(issue.number, running);
-    try { await running; } finally { this.executions.delete(issue.number); }
+    try { await running; } finally { this.executions.delete(issue.number); this.controllers.delete(issue.number); }
   }
 
-  private buildDeps(): OrchestratorDeps {
+  private buildDeps(issueNumber?: number): OrchestratorDeps {
     return {
       config: this.config,
+      signal: issueNumber === undefined ? undefined : this.controllers.get(issueNumber)?.signal,
       github: this.github,
       mainGit: this.mainGit,
       mainGitMutex: this.mainGitMutex,
@@ -677,13 +570,11 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       workspaceManager: this.workspaceManager,
       emitProgress: (number, step, msg) => this.emitProgress(number, step, msg),
       ensureWorktree: (wtCtx) => this.ensureWorktree(wtCtx),
-      installDependencies: (workDir) => this.installDependencies(workDir),
+      installDependencies: (workDir, signal, force) => this.installDependencies(workDir, signal ?? (issueNumber === undefined ? undefined : this.controllers.get(issueNumber)?.signal), force),
       shouldAutoApprove: (labels) => this.shouldAutoApprove(labels),
       shouldDeployServers: (number) => this.shouldDeployServers(number),
       startPreviewServers: (wtCtx, issue) => this.startPreviewServers(wtCtx, issue),
       stopPreviewServers: (number) => this.stopPreviewServers(number),
-      tryCreatePullRequest: (issue, branch, workDir, previewUrl) =>
-        this.tryCreatePullRequest(issue, branch, workDir, previewUrl),
       buildPreviewUrl: (number) => this.buildPreviewUrl(number),
       getPortsForIssue: (number) => this.portAllocator.getPortsForIssue(number),
       isPreviewRunning: (number) => this.devServerManager.getStatus(number).running,
@@ -696,7 +587,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
   }
 
   private async _processIssueImpl(issue: GitHubIssue): Promise<void> {
-    const branchName = `${this.config.project.branchPrefix}-${issue.number}`;
+    const branchName = this.tracker.get(issue.number)?.branchName ?? `${this.config.project.branchPrefix}-${issue.number}`;
     const wtCtx = this.computeWorktreeContext(issue.number, branchName);
 
     logger.info('Processing issue', {
@@ -706,13 +597,13 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     });
 
     const supplement = this.supplementStore?.get(issue.number);
-    const demand = githubIssueToDemandSpec(issue, supplement);
+    const existingDemand = this.tracker.get(issue.number);
+    const approvedDemand = existingDemand?.run?.review?.decision === 'approved' ? this.tracker.store.readPlan(issue.number, existingDemand.run.planRevision, existingDemand.run.planDigest).demand : undefined;
+    const demand = approvedDemand ?? (existingDemand?.run?.review?.decision !== 'rejected' && existingDemand?.state !== IssueState.Pending && existingDemand?.demandSpec ? existingDemand.demandSpec : githubIssueToDemandSpec(issue, supplement));
 
     let record = this.tracker.get(issue.number);
     const isRetry = record?.state === IssueState.Failed;
     const startResetGeneration = record?.resetGeneration ?? 0;
-    if (isRetry) {
-    }
 
     if (!record) {
       record = this.tracker.create({
@@ -724,10 +615,24 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     }
 
     if (!record.pipelineMode) {
-      this.tracker.updateState(issue.number, record.state, { pipelineMode: this.pipelineDef.mode } as any);
+      this.tracker.updateState(issue.number, record.state, { pipelineMode: this.pipelineDef.mode });
       record.pipelineMode = this.pipelineDef.mode;
     }
 
+    if (record.run!.recoveryRequired) {
+      try { await this.recoverExecution(issue.number); }
+      catch (error) { this.tracker.markFailed(issue.number, (error as Error).message, record.state, false); return; }
+    }
+    if (isRetry && record.lastErrorRetryable !== false) {
+      const phase = record.currentPhase ?? 'setup';
+      if ((record.run!.retryUsed[phase] ?? 0) >= this.config.poll.maxRetries) { this.tracker.markFailed(issue.number, '自动重试额度已用完', record.failedAtState ?? IssueState.Pending, false); return; }
+      this.tracker.transaction(issue.number, current => { current.run!.retryUsed[phase] = (current.run!.retryUsed[phase] ?? 0) + 1; });
+    }
+    this.tracker.transaction(issue.number, current => {
+      if (current.run!.stopIntent) throw new Error('任务已停止');
+      current.run!.dispatchId = randomUUID();
+      current.demandSpec = demand;
+    });
     const issuePipelineDef = this.getIssueSpecificPipelineDef(issue.number);
     const phaseCtx: PhaseContext = {
       demand, branchName, pipelineMode: issuePipelineDef.mode,
@@ -743,7 +648,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       demand, phaseCtx,
     };
 
-    const deps = this.buildDeps();
+    const deps = this.buildDeps(issue.number);
 
     try {
       if (record.deliveryPending) {
@@ -763,7 +668,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       if (phaseResult.paused) return;
       await executeCompletion(ctx, deps, phaseResult);
     } catch (err) {
-      if (this.tracker.get(issue.number)?.state === IssueState.Cancelled) return;
+      if (this.tracker.get(issue.number)?.run?.stopIntent) return;
       // 拦截用户发起的中止和重做。
 
       // Path A: PhaseAbortedError — 来自 PhaseLoopStep 阶段间检查（无 AI 运行时）
@@ -782,74 +687,11 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
         return;
       }
 
+      if (isShuttingDown()) return;
+      if (this.tracker.store.isBlocked(issue.number)) throw err;
       await handleFailure(err, issue, wtCtx, deps, startResetGeneration);
     }
   }
-
-  private async tryCreatePullRequest(
-    issue: GitHubIssue,
-    branchName: string,
-    workDir: string,
-    previewUrl?: string | null,
-  ): Promise<PullRequestResult | null> {
-    try {
-      const title = generatePRTitle(issue.number, issue.title);
-      let description = generatePRDescription({
-        issueIid: issue.number,
-        issueTitle: issue.title,
-        issueDescription: issue.description || '',
-        branchName,
-        planDir: workDir,
-      });
-
-      if (previewUrl) {
-        description += `\n\n## Preview Environment\n\n🌐 ${previewUrl}`;
-      }
-
-      const pr = await this.github.createPullRequest({
-        sourceBranch: branchName,
-        targetBranch: this.config.project.baseBranch,
-        title,
-        description,
-      });
-
-      logger.info('Merge request created successfully', {
-        number: issue.number, prNumber: pr.number, prUrl: pr.html_url,
-      });
-      return { url: pr.html_url, number: pr.number };
-    } catch (err) {
-      const errorMsg = (err as Error).message;
-      logger.warn('Failed to create merge request, trying to find existing one', {
-        number: issue.number, error: errorMsg,
-      });
-
-      return this.tryFindExistingPullRequest(issue.number, branchName);
-    }
-  }
-
-  private async tryFindExistingPullRequest(
-    issueIid: number,
-    branchName: string,
-  ): Promise<PullRequestResult | null> {
-    try {
-      const existing = await this.github.findPullRequestByBranch(
-        branchName,
-        this.config.project.baseBranch,
-      );
-      if (existing) {
-        logger.info('Found existing merge request', {
-          number: issueIid, prNumber: existing.number, prUrl: existing.html_url,
-        });
-        return { url: existing.html_url, number: existing.number };
-      }
-    } catch (findErr) {
-      logger.warn('Failed to find existing merge request', {
-        number: issueIid, error: (findErr as Error).message,
-      });
-    }
-    return null;
-  }
-
 
   private shouldDeployServers(issueIid: number): boolean {
     return isE2eEnabledForIssue(issueIid, this.tracker, this.config)
@@ -874,7 +716,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       this.tracker.updateState(issue.number, this.tracker.get(issue.number)!.state, {
         ports,
         previewStartedAt: new Date().toISOString(),
-      } as any);
+      });
 
       await this.devServerManager.startServers(wtCtx, ports);
 
@@ -912,15 +754,16 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     }
   }
 
-  stopPreviewServers(issueIid: number): void {
+  async stopPreviewServers(issueIid: number): Promise<void> {
     this.devServerManager.stopServers(issueIid);
+    await this.devServerManager.waitForStopped(issueIid);
     this.portAllocator.release(issueIid);
     const record = this.tracker.get(issueIid);
     if (record?.ports) {
       this.tracker.updateState(issueIid, record.state, {
         ports: undefined,
         previewStartedAt: undefined,
-      } as any);
+      });
     }
   }
 
@@ -928,7 +771,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     const record = this.tracker.get(issueIid);
     if (!record) return;
 
-    this.stopPreviewServers(issueIid);
+    await this.stopPreviewServers(issueIid);
 
     const wtCtx = this.computeWorktreeContext(issueIid, record.branchName);
     await this.mainGitMutex.runExclusive(async () => {
@@ -942,11 +785,39 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
    *
    * 幂等：worktree 不存在时安全返回。清理完成后写入 worktreeCleanedAt，使 reaper 后续跳过。
    */
+  /** 仅回收没有任务或进程引用的历史尝试；当前任务、暂停和恢复目录始终保留。 */
+  async cleanupExpiredTaskWorkspaces(retentionMs: number): Promise<void> {
+    for (const record of this.tracker.getAll()) {
+      const number = getIssueNumber(record);
+      for (const workspace of record.run?.workspaces ?? []) {
+        if (workspace.cleanedAt || Date.now() - Date.parse(workspace.createdAt) < retentionMs) continue;
+        await this.mainGitMutex.runExclusive(async () => {
+          const current = this.tracker.get(number)!;
+          if (current.run!.recoveryRequired || current.state === IssueState.Paused || Object.values(current.run!.tasks).some(task => task.workDir === workspace.directory) || Object.values(current.run!.calls).some(call => call.status !== 'exited' && (call.workDir === workspace.directory || isInside(workspace.directory, call.workDir)))) return;
+          assertOwnedDirectory(this.config.project.worktreeBaseDir, workspace.directory);
+          if (fsSync.existsSync(workspace.directory)) await this.mainGit.worktreeRemove(workspace.directory, true);
+          if (await this.mainGit.branchExists(workspace.branch)) await this.mainGit.deleteBranch(workspace.branch);
+          this.tracker.transaction(number, latest => { const saved = latest.run!.workspaces!.find(entry => entry.directory === workspace.directory); if (saved) saved.cleanedAt = new Date().toISOString(); });
+        });
+      }
+    }
+  }
+
   async cleanupCompletedWorktree(issueIid: number): Promise<void> {
     const record = this.tracker.get(issueIid);
     if (!record) return;
 
-    this.stopPreviewServers(issueIid);
+    if (record.state !== IssueState.Completed || record.run?.recoveryRequired || this.executions.has(issueIid) || Object.values(record.run?.calls ?? {}).some(call => call.status !== 'exited')) throw new Error('任务仍需要工作目录，不能清理');
+    for (const workspace of record.run?.workspaces ?? []) {
+      if (workspace.cleanedAt) continue;
+      assertOwnedDirectory(this.config.project.worktreeBaseDir, workspace.directory);
+      await this.mainGitMutex.runExclusive(async () => {
+        if (fsSync.existsSync(workspace.directory)) await this.mainGit.worktreeRemove(workspace.directory, true);
+        if (await this.mainGit.branchExists(workspace.branch)) await this.mainGit.deleteBranch(workspace.branch);
+      });
+      this.tracker.transaction(issueIid, current => { const target = current.run!.workspaces!.find(w => w.directory === workspace.directory); if (target) target.cleanedAt = new Date().toISOString(); });
+    }
+    await this.stopPreviewServers(issueIid);
 
     const wtCtx = this.computeWorktreeContext(issueIid, record.branchName);
     await this.mainGitMutex.runExclusive(async () => {
@@ -969,7 +840,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       throw new InvalidStateError(record.state, 'Worktree no longer exists');
     }
 
-    this.stopPreviewServers(issueIid);
+    await this.stopPreviewServers(issueIid);
 
     const ports = await this.portAllocator.allocate(issueIid);
     wtCtx.ports = ports;
@@ -978,14 +849,14 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       this.tracker.updateState(issueIid, record.state, {
         ports,
         previewStartedAt: new Date().toISOString(),
-      } as any);
+      });
       await this.devServerManager.startServers(wtCtx, ports);
     } catch (err) {
       this.portAllocator.release(issueIid);
       this.tracker.updateState(issueIid, record.state, {
         ports: undefined,
         previewStartedAt: undefined,
-      } as any);
+      });
       throw err;
     }
 
@@ -1057,156 +928,24 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
   }
 
   async resolveConflict(issueIid: number): Promise<void> {
+    if (this.executions.has(issueIid)) throw new Error('任务仍在执行');
     const record = this.tracker.get(issueIid);
-    if (!record) throw new IssueNotFoundError(issueIid);
-
-    const baseBranch = this.config.project.baseBranch;
-    const branchName = record.branchName;
-
-    logger.info('Starting conflict resolution', { issueIid, branchName, baseBranch });
-
-    // 1. Update state
-    this.tracker.updateState(issueIid, IssueState.ResolvingConflict);
-    this.eventBus.emitTyped('conflict:started', { issueIid });
-
-    // 2. Comment on issue
-    try {
-      await this.github.createIssueNote(
-        getIssueNumber(record),
-        t('conflict.startComment', { branch: branchName, baseBranch }),
-      );
-    } catch { /* ignore */ }
-
-    const wtCtx = this.computeWorktreeContext(issueIid, branchName);
-
-    try {
-      // 3. Fetch + ensure worktree
-      await this.mainGitMutex.runExclusive(async () => {
-        await this.mainGit.fetch();
-        await this.ensureWorktree(wtCtx);
-      });
-
-      const wtGit = new GitOperations(wtCtx.gitRootDir);
-
-      // 4. Checkout branch
-      await wtGit.checkout(branchName);
-
-      // 5–6. Rebase + resolve conflicts using shared ConflictResolver
-      await this.conflictResolver.resolve({
-        wtGit,
-        targetRef: `origin/${baseBranch}`,
-        workDir: wtCtx.workDir,
-        branchName,
-        contextId: issueIid,
-        phaseTimeoutMs: this.config.ai.phaseTimeoutMs,
-        onEvent: (event) => {
-          this.eventBus.emitTyped('agent:output', {
-            issueIid,
-            phase: 'conflict-resolve',
-            event,
-          });
-        },
-      });
-
-      // If resolve() returned without throwing, rebase succeeded (with or without conflict resolution).
-
-      // 7. Run verification
-      logger.info('Running verification after conflict resolution', { issueIid });
-      const wtPlan = new PlanPersistence(wtCtx.workDir, issueIid);
-      wtPlan.ensureDir();
-
-      const verifyPhase = createPhase('verify', this.aiRunner, wtGit, wtPlan, this.config);
-
-      const verifyCtx: PhaseContext = {
-        demand: {
-          demandId: `gh-${issueIid}`,
-          sourceRef: {
-            source: 'github-issue',
-            externalId: String(getIssueNumber(record)),
-            displayId: String(issueIid),
-          },
-          title: getTitle(record),
-          description: '',
-          createdAt: record.createdAt,
-        },
-        branchName,
-        pipelineMode: record.pipelineMode,
-      };
-
-      const verifyIntent = await verifyPhase.run(verifyCtx);
-      if (verifyIntent.kind === 'failed') {
-        const errMsg = verifyIntent.error.message || 'Verification failed after conflict resolution';
-        throw new (await import('../errors/index.js')).AIExecutionError('verify', errMsg, {
-          output: verifyIntent.error.rawOutput ?? '',
-          exitCode: 1,
-        });
-      }
-      if (verifyIntent.kind !== 'completed') {
-        throw new (await import('../errors/index.js')).AIExecutionError(
-          'verify',
-          `Unexpected verify intent kind '${verifyIntent.kind}' after conflict resolution`,
-          { output: '', exitCode: 1 },
-        );
-      }
-
-      // 8. Force push
-      await wtGit.forcePush(branchName);
-
-      // 9. Update state — 重置 worktree 延迟清理计时（冲突解决后 worktree 重新可用）
-      this.tracker.updateState(issueIid, IssueState.Completed, {
-        completedAt: new Date().toISOString(),
-        worktreeCleanedAt: undefined,
-      });
-      this.eventBus.emitTyped('conflict:resolved', { issueIid });
-
-      // 10. Comment on Issue/PR
-      try {
-        await this.github.createIssueNote(
-          getIssueNumber(record),
-          t('conflict.resolvedComment', { branch: branchName, baseBranch }),
-        );
-      } catch { /* ignore */ }
-
-      await this.commentOnMr(record.prUrl, t('conflict.mrResolvedComment'));
-
-      logger.info('Conflict resolution completed', { issueIid });
-    } catch (err) {
-      const errorMsg = (err as Error).message;
-      logger.error('Conflict resolution failed', { issueIid, error: errorMsg });
-
-      // Try to abort any in-progress rebase
-      try {
-        const wtGit = new GitOperations(wtCtx.gitRootDir);
-        if (await wtGit.isRebaseInProgress()) {
-          await wtGit.rebaseAbort();
-        }
-      } catch { /* ignore abort failure */ }
-
-      this.tracker.markFailed(issueIid, errorMsg.slice(0, 500), IssueState.ResolvingConflict);
-      this.eventBus.emitTyped('conflict:failed', { issueIid, error: errorMsg });
-
-      try {
-        await this.github.createIssueNote(
-          getIssueNumber(record),
-          t('conflict.failedComment', { error: errorMsg }),
-        );
-      } catch { /* ignore */ }
-    }
+    if (!record?.run?.delivery?.prNumber) throw new Error('任务尚未关联工作台 PR');
+    const pr = await this.github.getPullRequestDetail(record.run.delivery.prNumber);
+    if (pr.state !== 'open') throw new Error('只有开放的原 PR 可以修复冲突');
+    if (record.run.repairRounds >= this.config.verifyFixLoop.maxIterations) throw new Error('集成自动修复额度已用完');
+    await this.mainGitMutex.runExclusive(() => this.mainGit.fetch());
+    this.tracker.transaction(issueIid, current => {
+      const run = current.run!;
+      run.repairRounds++;
+      run.buildEntry = 'repair-integration';
+      run.repairs.push({ round: run.repairRounds, source: 'pr-conflict', report: `将 origin/${this.config.project.baseBranch} 合并到当前分支并解决冲突，保留父需求和基线双方修改。随后重新完整验证。` });
+      run.verify = undefined; run.uat = undefined;
+      current.deliveryPending = false;
+      current.state = IssueState.PhaseApproved;
+      current.currentPhase = 'review';
+      current.orchestrationState = { kind: 'running', phaseId: 'build' };
+    });
   }
 
-  private extractMrIidFromUrl(prUrl: string): number | null {
-    const match = prUrl.match(/pull\/(\d+)/);
-    return match ? parseInt(match[1], 10) : null;
-  }
-
-  private async commentOnMr(prUrl: string | undefined, body: string): Promise<void> {
-    if (!prUrl) return;
-    const prNumber = this.extractMrIidFromUrl(prUrl);
-    if (!prNumber) return;
-    try {
-      await this.github.createPullRequestNote(prNumber, body);
-    } catch (err) {
-      logger.warn('Failed to comment on PR', { prNumber, error: (err as Error).message });
-    }
-  }
 }

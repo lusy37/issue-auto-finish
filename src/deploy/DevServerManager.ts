@@ -19,6 +19,8 @@ interface ServerSet {
 }
 
 export interface DevServerManagerOptions {
+  onProcessStarted?: (number: number, pid: number, workDir: string) => string;
+  onProcessExited?: (number: number, callId: string) => void;
   startupGraceMs?: number;
   frontendDir?: string;
   backendCommand?: { bin: string; args: string[] };
@@ -29,6 +31,9 @@ const DEFAULT_OPTIONS: DevServerManagerOptions = {};
 
 export class DevServerManager {
   private servers = new Map<number, ServerSet>();
+  private stopping = new Map<number, Promise<void>>();
+  async waitForStopped(issueIid: number): Promise<void> { await this.stopping.get(issueIid); }
+  async stopAllAndWait(): Promise<void> { this.stopAll(); await Promise.all(this.stopping.values()); }
   private options: DevServerManagerOptions;
   private logDir: string;
 
@@ -76,6 +81,10 @@ export class DevServerManager {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
+    let backendCall: string | undefined;
+    try { if (backend.pid) backendCall = this.options.onProcessStarted?.(wtCtx.issueIid, backend.pid, wtCtx.workDir); }
+    catch (error) { stopProcess(backend); await backend; backendLog.end(); frontendLog.end(); throw error; }
+    void backend.then(() => { if (backendCall) { try { this.options.onProcessExited?.(wtCtx.issueIid, backendCall); } catch (error) { logger.error('预览退出凭证写入失败', { error: String(error) }); } } });
     backend.nodeChildProcess.on('error', error => { startupError=error; this.stopServers(wtCtx.issueIid); });
     backend.nodeChildProcess.unref();
     backend.nodeChildProcess.stdout?.on('data', (data: Buffer) => {
@@ -105,6 +114,10 @@ export class DevServerManager {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
+    let frontendCall: string | undefined;
+    try { if (frontend.pid) frontendCall = this.options.onProcessStarted?.(wtCtx.issueIid, frontend.pid, frontendDir); }
+    catch (error) { stopProcess(backend); stopProcess(frontend); await Promise.allSettled([backend, frontend]); backendLog.end(); frontendLog.end(); throw error; }
+    void frontend.then(() => { if (frontendCall) { try { this.options.onProcessExited?.(wtCtx.issueIid, frontendCall); } catch (error) { logger.error('预览退出凭证写入失败', { error: String(error) }); } } });
     frontend.nodeChildProcess.on('error', error => { startupError=error; this.stopServers(wtCtx.issueIid); });
     frontend.nodeChildProcess.unref();
     frontend.nodeChildProcess.stdout?.on('data', (data: Buffer) => {
@@ -148,6 +161,8 @@ export class DevServerManager {
     set.frontendLog.end();
 
     this.servers.delete(issueIid);
+    const done = Promise.allSettled([set.backend, set.frontend]).then(() => { this.stopping.delete(issueIid); });
+    this.stopping.set(issueIid, done);
   }
 
   stopAll(): void {

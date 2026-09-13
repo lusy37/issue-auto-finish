@@ -10,6 +10,9 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
 export interface IssueCtx {
+  signal?: AbortSignal;
+  processStarted?: (pid: number, workDir: string) => string;
+  processExited?: (callId: string) => void;
   /** GitHub issue IID being processed. */
   issueIid: number;
   /** Unique correlation ID for this processing run. */
@@ -23,9 +26,9 @@ export const issueContext = new AsyncLocalStorage<IssueCtx>();
  * Run `fn` within an issue-scoped context.
  * A new `correlationId` is generated automatically.
  */
-export function runWithIssueContext<T>(number: number, fn: () => T): T {
+export function runWithIssueContext<T>(number: number, fn: () => T, signal?: AbortSignal, lifecycle?: Pick<IssueCtx, 'processStarted' | 'processExited'>): T {
   return issueContext.run(
-    { issueIid: number, correlationId: randomUUID() },
+    { issueIid: number, correlationId: randomUUID(), signal, ...lifecycle },
     fn,
   );
 }

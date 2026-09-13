@@ -28,12 +28,11 @@ export function createDraftRouter(
       next(e);
     }
   });
-  router.put("/api/drafts/:id/tasks/:taskId", async (req, res, next) => {
+  router.put("/api/drafts/:id", async (req, res, next) => {
     try {
       res.json(
         await service.edit(
           String(req.params.id),
-          String(req.params.taskId),
           req.body,
         ),
       );
@@ -44,21 +43,20 @@ export function createDraftRouter(
   router.post("/api/drafts/:id/confirm", async (req, res, next) => {
     try {
       res.json(
-        await service.confirm(String(req.params.id), req.body.taskIds ?? []),
+        await service.confirm(String(req.params.id)),
       );
     } catch (e) {
       next(e);
     }
   });
   router.post(
-    "/api/drafts/:id/tasks/:taskId/reconcile",
+    "/api/drafts/:id/reconcile",
     async (req, res, next) => {
       try {
         res.json(
           await service.reconcile(
             String(req.params.id),
-            String(req.params.taskId),
-            req.body.issueIid ?? null,
+              req.body.issueIid ?? null,
           ),
         );
       } catch (e) {

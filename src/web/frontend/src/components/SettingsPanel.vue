@@ -13,6 +13,9 @@ const featureLabels: Record<string, string> = {
   VERIFY_FIX_LOOP_ENABLED: "验证失败后自动修复",
 };
 const labels: Record<string, string> = {
+  MAX_CONCURRENT_ISSUES: "同时执行的父 Issue 数量（默认 1）",
+  AI_MAX_CONCURRENCY: "全局 AI 并发额度（默认 4，范围 1～32）",
+  MAX_RETRIES: "首次执行之外的自动重试次数（0 表示不自动重试）",
   GITHUB_API_URL: "GitHub API 地址",
   GITHUB_TOKEN: "GitHub Token（留空保留原值）",
   GITHUB_REPOSITORY: "GitHub 仓库（owner/repo）",
@@ -60,6 +63,7 @@ onMounted(() => run(load));
     <p>
       单用户、单仓库，执行器使用Codex SDK。配置保存在当前项目的独立数据目录。
     </p>
+    <p>父 Issue 并发限制同时推进的需求数量；全局 AI 额度限制全部需求和后台功能合计的 AI 调用。等待额度时不会启动新调用。</p>
     <form @submit.prevent="run(save)">
       <fieldset class="my-4 border rounded p-4">
         <legend>流程与知识</legend>

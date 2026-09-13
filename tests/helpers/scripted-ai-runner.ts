@@ -1,3 +1,4 @@
+import { structuredPlanOutput } from './structured-plan.js';
 /**
  * ScriptedAIRunner — 阶段功能层专用的可编程 AI Runner。
  *
@@ -12,7 +13,7 @@ import type { AIRunner, RunOptions, RunResult, StreamEvent } from '../../src/ai-
 // Script types
 // ---------------------------------------------------------------------------
 
-export type SideEffect = (options: RunOptions) => void | Promise<void>;
+export type SideEffect = ((options: RunOptions) => void | Promise<void>) & { artifact?: { filename: string; content: string } };
 
 export interface AICallScript {
   /** 返回的 RunResult */
@@ -77,7 +78,7 @@ export class ScriptedAIRunner implements AIRunner {
     if (script.artifacts) {
       const iidMatch = options.workDir.match(/issue-(\d+)/);
       const number = iidMatch ? parseInt(iidMatch[1], 10) : 0;
-      const planDir = path.join(options.workDir, '.claude-plan', `issue-${number}`);
+      const planDir = path.join(process.env.DATA_DIR!, 'issues', String(number), 'artifacts');
       fs.mkdirSync(planDir, { recursive: true });
       for (const [filename, content] of Object.entries(script.artifacts)) {
         if (options.mode === 'plan' && filename === '01-plan.md') continue;
@@ -89,7 +90,7 @@ export class ScriptedAIRunner implements AIRunner {
     if (script.todolistContent && options.mode !== 'plan') {
       const iidMatch = options.workDir.match(/issue-(\d+)/);
       const number = iidMatch ? parseInt(iidMatch[1], 10) : 0;
-      const planDir = path.join(options.workDir, '.claude-plan', `issue-${number}`);
+      const planDir = path.join(process.env.DATA_DIR!, 'issues', String(number), 'artifacts');
       fs.mkdirSync(planDir, { recursive: true });
       fs.writeFileSync(path.join(planDir, '01-plan.md'), script.todolistContent);
     }
@@ -99,7 +100,13 @@ export class ScriptedAIRunner implements AIRunner {
       await script.sideEffect(options);
     }
 
-    return planText && options.mode === 'plan' ? {...script.result, output: planText} : script.result;
+    planText ??= script.sideEffect?.artifact?.filename === '01-plan.md' ? script.sideEffect.artifact.content : undefined;
+    const report = script.artifacts?.['02-verify-report.md'] ?? (script.sideEffect?.artifact?.filename === '02-verify-report.md' ? script.sideEffect.artifact.content : undefined);
+    if (options.phaseName === 'verify' && report) return { ...script.result, output: report };
+    if (options.mode === 'plan' && script.result.success && (planText || script.result.output.length >= 50)) {
+      return { ...script.result, output: structuredPlanOutput(planText ?? script.result.output) };
+    }
+    return script.result;
   }
 
   killAll(): void {
@@ -175,9 +182,9 @@ export function writeArtifact(
   filename: string,
   content: string,
 ): SideEffect {
-  return (options: RunOptions) => {
-    const planDir = path.join(options.workDir, '.claude-plan', `issue-${issueIid}`);
+  return Object.assign((_options: RunOptions) => {
+    const planDir = path.join(process.env.DATA_DIR!, 'issues', String(issueIid), 'artifacts');
     fs.mkdirSync(planDir, { recursive: true });
     fs.writeFileSync(path.join(planDir, filename), content);
-  };
+  }, { artifact: { filename, content } });
 }

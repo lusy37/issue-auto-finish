@@ -2,11 +2,11 @@ import type { TransitionRule } from './Pipeline.js';
 
 
 /** 每次执行使用服务启动时的配置，历史次数仍由状态机累计。 */
-export function createPlanModeTransitions(maxIterations = 3): readonly TransitionRule[] {
+export function createPlanModeTransitions(maxIterations = 3, maxRetries = 3): readonly TransitionRule[] {
   return Object.freeze([
   // 1. verify-fix loop 最高优先级
   {
-    from: 'verify',
+    from: '*',
     on: 'requestRetryFrom',
     match: (intent) => intent.kind === 'requestRetryFrom' && intent.targetPhaseId === 'build',
     action: { kind: 'retry-from', targetPhaseId: 'build', maxIterations, resetAttempts: false },
@@ -29,14 +29,14 @@ export function createPlanModeTransitions(maxIterations = 3): readonly Transitio
     from: '*',
     on: 'failed',
     match: (intent) => intent.kind === 'failed' && intent.error.retryable === 'hard',
-    action: { kind: 'retry-same-phase', maxAttempts: 3 },
+    action: { kind: 'retry-same-phase', maxAttempts: maxRetries + 1 },
   },
   // 5. 任意阶段 soft 失败
   {
     from: '*',
     on: 'failed',
     match: (intent) => intent.kind === 'failed' && intent.error.retryable === 'soft',
-    action: { kind: 'retry-same-phase', maxAttempts: Number.POSITIVE_INFINITY },
+    action: { kind: 'retry-same-phase', maxAttempts: maxRetries + 1 },
   },
   // 6. 任意阶段 awaitAsync
   {

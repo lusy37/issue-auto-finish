@@ -7,7 +7,7 @@ import {
   buildPipeline,
   createPlanModeTransitions,
 } from '../../orchestration/index.js';
-import { StandardPhaseRunner } from '../StandardPhaseRunner.js';
+import { DagPhaseRunner } from '../DagPhaseRunner.js';
 import { isShuttingDown } from '../../shutdown/ShutdownSignal.js';
 import { ServiceShutdownError, PhaseAbortedError } from '../../errors/index.js';
 import { TrackerStateStore } from '../TrackerStateStore.js';
@@ -30,18 +30,12 @@ export async function executePhaseLoop(
     {
       e2e: isE2eEnabledForIssue(issueIid, deps.tracker, deps.config),
     },
-    createPlanModeTransitions(deps.config.verifyFixLoop.maxIterations),
+    createPlanModeTransitions(deps.config.verifyFixLoop.maxIterations, deps.config.poll.maxRetries),
   );
 
 
 
-  const phaseRunner = new StandardPhaseRunner({
-    aiRunner: deps.aiRunner,
-    wtGit,
-    wtPlan,
-    config: deps.config,
-    eventBus: deps.eventBus,
-  });
+  const phaseRunner = new DagPhaseRunner(deps, wtGit, wtPlan);
 
   const stateStore = new TrackerStateStore(deps.tracker, wtPlan);
 
@@ -78,7 +72,7 @@ export async function executePhaseLoop(
     {
       maxIterations: 100,
       checkShutdown: () => {
-        if (deps.tracker.get(issueIid)?.state === IssueState.Cancelled) throw new PhaseAbortedError('', 'restart');
+        if (deps.signal?.aborted || deps.tracker.get(issueIid)?.run?.stopIntent || deps.tracker.get(issueIid)?.state === IssueState.Cancelled) throw new PhaseAbortedError('', 'restart');
         if (isShuttingDown()) throw new ServiceShutdownError();
         const pendingAction = deps.consumePendingAction?.(issueIid);
         if (pendingAction) {

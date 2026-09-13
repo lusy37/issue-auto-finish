@@ -2,7 +2,8 @@ import { IssueRecord, IssueState, type PhaseProgress, deriveOrchestrationState }
 import { type PipelineDef } from '../pipeline/PipelineDefinition.js';
 import { IssueNotFoundError } from '../errors/index.js';
 import { ActionLifecycleManager } from '../lifecycle/ActionLifecycleManager.js';
-import { BaseTracker } from './BaseTracker.js';
+import { IssueRunStore } from '../dag/IssueRunStore.js';
+import { newIssueRun, sameIdentity, type ExecutionIdentity } from '../dag/contracts.js';
 import { type ExecutableTask, issueToExecutableTask } from './ExecutableTask.js';
 import { getIssueNumber } from './IssueRecordHelper.js';
 import { logger as rootLogger } from '../logger.js';
@@ -11,31 +12,34 @@ import type { OrchestrationState, PhaseHistoryEntry } from '../orchestration/ind
 
 const logger = rootLogger.child('IssueTracker');
 
-export class IssueTracker extends BaseTracker<IssueRecord> {
+export class IssueTracker {
+  readonly store: IssueRunStore;
   private lifecycleManagers: Map<string, ActionLifecycleManager>;
 
   constructor(
     dataDir: string,
     lifecycleManagers: Map<string, ActionLifecycleManager>,
   ) {
-    const filename = 'tracker.json';
-    super(dataDir, filename, 'issues', 'tracker');
+    this.store = new IssueRunStore(dataDir);
     this.lifecycleManagers = lifecycleManagers;
-    const validStates = new Set(Object.values(IssueState));
-    for (const [issueIid, record] of Object.entries(this.collection)) {
-      const source = record?.demandSpec?.sourceRef?.source;
-      const reason = !source
-        ? '缺少需求来源'
-        : source !== 'github-issue'
-          ? '任务来源必须为 GitHub Issue'
-          : !validStates.has(record.state)
-            ? '任务状态无效'
-            : undefined;
-      if (reason) {
-        throw new Error(`任务 ${issueIid} 的数据格式无效：${reason}。请检查文件：${this.filePath}`);
-      }
-    }
   }
+
+  transaction(issueIid: number, update: (record: IssueRecord) => void): IssueRecord {
+    const record = this.store.transaction(issueIid, update);
+    eventBus.emitTyped('issue:stateChanged', { issueIid, state: record.state, record });
+    return record;
+  }
+
+  assertIdentity(identity: ExecutionIdentity): void {
+    const run = this.get(identity.issueNumber)?.run;
+    if (!run || this.store.isBlocked(identity.issueNumber) || run.stopIntent || run.planRevision !== identity.planRevision || run.buildGeneration !== identity.buildGeneration || run.dispatchId !== identity.dispatchId || !sameIdentity(run.calls[identity.callId]?.identity, identity)) throw new Error('执行身份已失效');
+    if (identity.taskId.startsWith('$phase:') && this.get(identity.issueNumber)?.currentPhase !== identity.taskId.slice(7)) throw new Error('父阶段调用身份已失效');
+    if (run.activeCalls?.[identity.taskId] && run.activeCalls[identity.taskId] !== identity.callId) throw new Error('调用已被新的执行替代');
+    const task = run.tasks[identity.taskId];
+    if (task && (task.attemptNo !== identity.attemptNo || task.identity?.callId !== identity.callId)) throw new Error('任务尝试身份已失效');
+  }
+
+  private getAllRecords(): IssueRecord[] { return this.store.all(); }
 
   private lifecycleFor(record: IssueRecord): ActionLifecycleManager {
     if (record.pipelineMode) {
@@ -46,13 +50,7 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
     return this.lifecycleManagers.get('plan-mode') ?? this.lifecycleManagers.values().next().value!;
   }
 
-  private key(issueIid: number): string {
-    return String(issueIid);
-  }
-
-  get(issueIid: number): IssueRecord | undefined {
-    return this.getByKey(this.key(issueIid));
-  }
+  get(issueIid: number): IssueRecord | undefined { return this.store.get(issueIid); }
 
   create(record: Omit<IssueRecord, 'createdAt' | 'updatedAt' | 'attempts'>): IssueRecord {
     const now = new Date().toISOString();
@@ -64,15 +62,16 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
     };
     full.orchestrationState = deriveOrchestrationState(full);
     full.phaseHistory ??= [];
-    this.setRecord(this.key(getIssueNumber(full)), full);
-    this.save();
+    full.run ??= newIssueRun();
+    this.store.insert(getIssueNumber(full), full);
     logger.info('Issue tracked', { issueIid: getIssueNumber(full), state: record.state });
-    eventBus.emitTyped('issue:created', full);
-    return full;
+    const saved = this.get(getIssueNumber(full))!;
+    eventBus.emitTyped('issue:created', saved);
+    return saved;
   }
 
   updateState(issueIid: number, state: IssueState, extra?: Partial<IssueRecord>): void {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record) {
       throw new IssueNotFoundError(issueIid);
     }
@@ -86,7 +85,7 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
       Object.assign(record, extra);
     }
     record.orchestrationState = deriveOrchestrationState(record);
-    this.save();
+    this.store.replace(record);
     logger.info('Issue state updated', { issueIid, state });
     eventBus.emitTyped('issue:stateChanged', { issueIid, state, record });
   }
@@ -103,7 +102,7 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
     trackerState: IssueState,
     extra?: Partial<IssueRecord>,
   ): void {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record) {
       throw new IssueNotFoundError(issueIid);
     }
@@ -118,32 +117,32 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
     if (extra) {
       Object.assign(record, extra);
     }
-    this.save();
+    this.store.replace(record);
     eventBus.emitTyped('issue:stateChanged', { issueIid, state: trackerState, record });
   }
 
   /** 追加一条 phaseHistory 条目（编排核心调用） */
   appendPhaseHistory(issueIid: number, entry: PhaseHistoryEntry): void {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record) return;
     if (!record.phaseHistory) record.phaseHistory = [];
     record.phaseHistory.push(entry);
     record.updatedAt = new Date().toISOString();
-    this.save();
+    this.store.replace(record);
   }
 
   /** 清空 phaseHistory（用于 reset / restart） */
   clearPhaseHistory(issueIid: number): void {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record) return;
     record.phaseHistory = undefined;
     record.updatedAt = new Date().toISOString();
-    this.save();
+    this.store.replace(record);
   }
 
   /** 初始化阶段进度（流水线启动时调用） */
   initPhaseProgress(issueIid: number, def: PipelineDef): void {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record) return;
     const phases: Record<string, PhaseProgress> = {};
     for (const spec of def.phases) {
@@ -151,18 +150,18 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
     }
     record.phaseProgress = phases;
     record.updatedAt = new Date().toISOString();
-    this.save();
+    this.store.replace(record);
   }
 
   /** 更新单个阶段的进度（原子保存 + SSE 推送） */
   updatePhaseProgress(issueIid: number, phase: string, update: Partial<PhaseProgress>): void {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record?.phaseProgress) return;
     const pp = record.phaseProgress[phase];
     if (!pp) return;
     Object.assign(pp, update);
     record.updatedAt = new Date().toISOString();
-    this.save();
+    this.store.replace(record);
     eventBus.emitTyped('issue:stateChanged', { issueIid, state: record.state, record });
   }
 
@@ -172,7 +171,7 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
   }
 
   markFailed(issueIid: number, error: string, failedAtState: IssueState, isRetryable?: boolean): void {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record) return;
     if (record.state === IssueState.Cancelled) return;
     record.state = IssueState.Failed;
@@ -182,7 +181,7 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
     record.attempts += 1;
     record.updatedAt = new Date().toISOString();
     record.orchestrationState = deriveOrchestrationState(record);
-    this.save();
+    this.store.replace(record);
     logger.warn('Issue marked as failed', { issueIid, error, failedAtState, attempts: record.attempts, isRetryable });
     eventBus.emitTyped('issue:failed', { issueIid, error, failedAtState, record });
   }
@@ -193,24 +192,11 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
    * consume the retry budget.
    */
   markFailedSoft(issueIid: number, error: string, failedAtState: IssueState): void {
-    const record = this.collection[this.key(issueIid)];
-    if (!record) return;
-    if (record.state === IssueState.Cancelled) return;
-    record.state = IssueState.Failed;
-    record.lastError = error;
-    record.failedAtState = failedAtState;
-    record.lastErrorRetryable = true;
-    record.updatedAt = new Date().toISOString();
-    record.orchestrationState = deriveOrchestrationState(record);
-    this.save();
-    logger.warn('Issue marked as failed (soft — no attempt increment)', {
-      issueIid, error, failedAtState, attempts: record.attempts,
-    });
-    eventBus.emitTyped('issue:failed', { issueIid, error, failedAtState, record });
+    this.markFailed(issueIid, error, failedAtState, true);
   }
 
   pauseIssue(issueIid: number, currentPhase: string): void {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record) return;
     record.state = IssueState.Paused;
     record.pausedAtPhase = currentPhase;
@@ -219,13 +205,13 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
     record.processingLock = undefined;
     record.updatedAt = new Date().toISOString();
     record.orchestrationState = deriveOrchestrationState(record);
-    this.save();
+    this.store.replace(record);
     logger.info('Issue paused', { issueIid, pausedAtPhase: currentPhase });
     eventBus.emitTyped('issue:paused', { issueIid, pausedAtPhase: currentPhase, record });
   }
 
   resumeFromPause(issueIid: number, def: PipelineDef, clearSession: boolean): boolean {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record || record.state !== IssueState.Paused || !record.pausedAtPhase) return false;
 
     const lm = new ActionLifecycleManager(def);
@@ -243,9 +229,10 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
       }
     }
     record.pausedAtPhase = undefined;
+    record.run!.stopIntent = undefined;
     record.updatedAt = new Date().toISOString();
     record.orchestrationState = deriveOrchestrationState(record);
-    this.save();
+    this.store.replace(record);
 
     const eventType = clearSession ? 'issue:redone' : 'issue:continued';
     logger.info('Issue resumed from pause', { issueIid, phase, clearSession, state: preState });
@@ -264,9 +251,10 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
    * - 有未超时锁（其他 correlationId）→ 返回 false
    */
   acquireProcessingLock(issueIid: number, correlationId: string): boolean {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record) return false;
 
+    if (record.run!.stopIntent || this.store.isBlocked(issueIid)) return false;
     const existing = record.processingLock;
     if (existing) {
       const age = Date.now() - new Date(existing.ts).getTime();
@@ -287,7 +275,7 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
 
     record.processingLock = { correlationId, ts: new Date().toISOString() };
     record.updatedAt = new Date().toISOString();
-    this.save();
+    this.store.replace(record);
     return true;
   }
 
@@ -295,7 +283,7 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
    * 释放持久化处理锁。仅当 correlationId 匹配时才清除，防止旧协程误释放新锁。
    */
   releaseProcessingLock(issueIid: number, correlationId: string): void {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record?.processingLock) return;
 
     if (record.processingLock.correlationId !== correlationId) {
@@ -309,16 +297,16 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
 
     record.processingLock = undefined;
     record.updatedAt = new Date().toISOString();
-    this.save();
+    this.store.replace(record);
   }
 
   /** 强制清除持久化处理锁（管理员操作：restart/cancel/retryFromPhase） */
   clearProcessingLock(issueIid: number): void {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record?.processingLock) return;
     record.processingLock = undefined;
     record.updatedAt = new Date().toISOString();
-    this.save();
+    this.store.replace(record);
   }
 
   isProcessing(issueIid: number): boolean {
@@ -354,8 +342,9 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
 
   getDrivableIssues(maxRetries: number, stalledThresholdMs?: number): IssueRecord[] {
     return this.getAllRecords().filter((record) => {
+      if (record.run!.stopIntent || this.store.isBlocked(getIssueNumber(record))) return false;
       const lm = this.lifecycleFor(record);
-      const drivable = lm.isDrivable(record.state, record.attempts, maxRetries, record.lastErrorRetryable)
+      const drivable = record.run!.recoveryRequired || lm.isDrivable(record.state, record.run!.retryUsed[record.currentPhase ?? 'setup'] ?? 0, maxRetries, record.lastErrorRetryable)
         || this.isStalled(getIssueNumber(record), stalledThresholdMs);
       if (!drivable) return false;
 
@@ -383,19 +372,19 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
   }
 
   startSkipped(issueIid: number): boolean {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record || record.state !== IssueState.Skipped) return false;
     record.state = IssueState.Pending;
     record.updatedAt = new Date().toISOString();
     record.orchestrationState = deriveOrchestrationState(record);
-    this.save();
+    this.store.replace(record);
     logger.info('Skipped issue started', { issueIid });
     eventBus.emitTyped('issue:stateChanged', { issueIid, state: IssueState.Pending, record });
     return true;
   }
 
   resetFull(issueIid: number): boolean {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record) return false;
     record.state = IssueState.Pending;
     record.currentPhase = undefined;
@@ -405,19 +394,22 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
     record.phaseProgress = undefined;
     record.processingLock = undefined;
     record.resetGeneration = (record.resetGeneration ?? 0) + 1;
-    record.deliveryPending = undefined;record.deliveryNoteWritten = undefined;record.uatRunId = undefined;record.prUrl = undefined;record.completedAt = undefined;
+    const previous = record.run!;
+    record.run = { ...newIssueRun(), version: previous.version, planRevision: previous.planRevision, buildGeneration: previous.buildGeneration + 1, delivery: previous.delivery, workspaces: previous.workspaces, budgetHistory: [...(previous.budgetHistory ?? []), { planRevision: previous.planRevision, buildGeneration: previous.buildGeneration, retryUsed: previous.retryUsed, phaseExecutions: previous.phaseExecutions, repairRounds: previous.repairRounds }] };
+    record.run.planDigest = previous.planDigest;
+    record.deliveryPending = undefined;record.deliveryNoteWritten = undefined;record.uatRunId = undefined;record.completedAt = undefined;
     record.archivedPhaseHistory = [...(record.archivedPhaseHistory??[]),...(record.phaseHistory??[])];
     record.updatedAt = new Date().toISOString();
     record.phaseHistory = undefined;
     record.orchestrationState = deriveOrchestrationState(record);
-    this.save();
+    this.store.replace(record);
     logger.info('Issue fully reset', { issueIid });
     eventBus.emitTyped('issue:restarted', { issueIid, record });
     return true;
   }
 
   resetToPhase(issueIid: number, phase: string, def: PipelineDef): boolean {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record) return false;
     // Always create a fresh lifecycle manager from the provided def.
     // The cached lifecycleManagers may be stale (e.g., missing dynamically added phases like 'uat').
@@ -425,6 +417,7 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
     const targetState = lm.getPhasePreState(phase);
     if (!targetState) return false;
     record.state = targetState;
+    record.run!.stopIntent = undefined;
     record.deliveryPending=undefined;record.uatRunId=undefined;record.completedAt=undefined;
     // When resetting to a generic phase state, also set currentPhase
     if (targetState === IssueState.PhaseRunning || targetState === IssueState.PhaseDone
@@ -459,19 +452,20 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
     }
     record.updatedAt = new Date().toISOString();
     record.orchestrationState = deriveOrchestrationState(record);
-    this.save();
+    this.store.replace(record);
     logger.info('Issue reset to phase', { issueIid, phase, state: targetState });
     eventBus.emitTyped('issue:retryFromPhase', { issueIid, phase, record });
     return true;
   }
 
   resetForRetry(issueIid: number): boolean {
-    const record = this.collection[this.key(issueIid)];
+    const record = this.get(issueIid);
     if (!record || record.state !== IssueState.Failed) return false;
 
     const restoreState = record.deliveryPending ? IssueState.Delivering : (record.failedAtState ?? IssueState.Pending);
     if(record.deliveryPending) record.retryCount = (record.retryCount ?? 0) + 1;
     record.state = restoreState;
+    record.run!.stopIntent = undefined;
     record.lastError = undefined;
     record.processingLock = undefined;
     // 重置 failed 阶段的 phaseProgress
@@ -486,19 +480,15 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
     }
     record.updatedAt = new Date().toISOString();
     record.orchestrationState = deriveOrchestrationState(record);
-    this.save();
+    this.store.replace(record);
     logger.info('Issue reset for retry', { issueIid, restoreState });
     eventBus.emitTyped('issue:resetForRetry', { issueIid, restoreState, record });
     return true;
   }
 
   delete(issueIid: number): boolean {
-    const key = this.key(issueIid);
-    const record = this.collection[key];
-    if (!record) return false;
-    delete this.collection[key];
-    this.save();
-    logger.info('Issue deleted from tracker', { issueIid });
+    const record = this.get(issueIid);
+    if (!record || !this.store.delete(issueIid)) return false;
     eventBus.emitTyped('issue:deleted', { issueIid, record });
     return true;
   }
@@ -506,46 +496,17 @@ export class IssueTracker extends BaseTracker<IssueRecord> {
   recoverInterruptedIssues(): number {
     let count = 0;
     for (const record of this.getAllRecords()) {
-      const lm = this.lifecycleFor(record);
-      if (lm.isInProgress(record.state) || record.state === IssueState.Delivering) {
-        const number = getIssueNumber(record);
-        logger.warn('Recovering interrupted issue', {
-          issueIid: number,
-          state: record.state,
-        });
-        record.failedAtState = record.state;
-        record.state = IssueState.Failed;
-        record.lastError = 'Interrupted by service restart';
-        record.lastErrorRetryable = false;
-        record.attempts += 1;
-        record.processingLock = undefined;
-        record.updatedAt = new Date().toISOString();
-        record.orchestrationState = deriveOrchestrationState(record);
-        count++;
-        eventBus.emitTyped('issue:failed', {
-          issueIid: number,
-          error: 'Interrupted by service restart',
-          failedAtState: record.failedAtState,
-          record,
-        });
-      } else if (record.state === IssueState.Failed && record.lastErrorRetryable !== false) {
-        // Prevent auto-retry of pre-existing failures after restart;
-
-        const number = getIssueNumber(record);
-        logger.info('Marking pre-existing failed issue as non-retryable after restart', {
-          issueIid: number,
-          currentPhase: record.currentPhase,
-          attempts: record.attempts,
-        });
-        record.lastErrorRetryable = false;
-        record.processingLock = undefined;
-        record.updatedAt = new Date().toISOString();
-        count++;
-      }
-    }
-    if (count > 0) {
-      this.save();
-      logger.info('Recovered interrupted issues', { count });
+      if (!this.lifecycleFor(record).isInProgress(record.state) && record.state !== IssueState.Delivering && !record.run!.stopIntent) continue;
+      this.transaction(getIssueNumber(record), current => {
+        current.run!.recoveryRequired = true;
+        current.processingLock = undefined;
+        if (current.run!.stopIntent) {
+          current.state = current.run!.stopIntent.kind === 'cancel' ? IssueState.Cancelled : IssueState.Paused;
+          current.pausedAtPhase = current.currentPhase ?? 'plan';
+          current.orchestrationState = deriveOrchestrationState(current);
+        }
+      });
+      count++;
     }
     return count;
   }

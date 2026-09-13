@@ -1,27 +1,27 @@
+export type { IssueRun, ExecutionIdentity, TaskDefinition, TaskRun } from '../dag/contracts.js';
 /** 前后端共用的数据契约；仅包含类型，浏览器不会加载服务端执行逻辑。 */
 import type {IssueState as StoredIssueState} from '../tracker/IssueState.js';
 export type { PhaseHistoryEntry } from '../orchestration/OrchestrationState.js';
 export type IssueState = `${StoredIssueState}`;
 
-export interface TaskDraft {
+export interface DemandDraft {
+  format: 'iaf-mini/draft/v2';
   id: string;
+  input: string;
+  createdAt: string;
   title: string;
   description: string;
   acceptanceCriteria: string;
-  status: "draft" | "creating" | "created" | "failed" | "unknown";
+  status: 'draft' | 'unknown' | 'created';
+  marker: string;
+  creationRequestedAt?: string;
   issueIid?: number;
   issueUrl?: string;
   error?: string;
 }
 
-export interface DraftBatch {
-  id: string;
-  input: string;
-  createdAt: string;
-  tasks: TaskDraft[];
-}
-
 export interface UatResult {
+  failureKind?: 'assertion' | 'environment';
   runId: string;
   issueIid: number;
   passed: boolean;

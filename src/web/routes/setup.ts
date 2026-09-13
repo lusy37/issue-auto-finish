@@ -10,6 +10,9 @@ import { createAIRunner, type AIRunner } from "../../ai-runner/index.js";
 import { GitHubClient } from "../../clients/GitHubClient.js";
 import { writeTextAtomicSync } from "../../utils/atomicFile.js";
 const keys = [
+  "MAX_CONCURRENT_ISSUES",
+  "AI_MAX_CONCURRENCY",
+  "MAX_RETRIES",
   "GITHUB_API_URL",
   "GITHUB_TOKEN",
   "GITHUB_REPOSITORY",
@@ -84,6 +87,9 @@ export function createSetupRouter(config: Config) {
     const file = resolveConfigFilePath();
     const values = fs.existsSync(file) ? parseEnv(fs.readFileSync(file)) : {};
     const defaults: Record<string, string | undefined> = {
+      MAX_CONCURRENT_ISSUES: String(config.poll.maxConcurrent),
+      AI_MAX_CONCURRENCY: String(config.ai.maxConcurrency),
+      MAX_RETRIES: String(config.poll.maxRetries),
       GITHUB_API_URL: config.github.apiUrl,
       GITHUB_REPOSITORY: config.github.repository,
       PROJECT_WORK_DIR: config.project.workDir,

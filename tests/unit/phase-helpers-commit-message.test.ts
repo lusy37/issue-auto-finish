@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest';
-import { buildAutoCommitMessage } from '../../src/orchestrator/steps/PhaseHelpers.js';
-it('提交信息关联当前 Issue', () => {
-  expect(buildAutoCommitMessage('build', 42)).toBe('chore(auto): build phase completed for issue #42');
+import * as helpers from '../../src/orchestrator/steps/PhaseHelpers.js';
+it('阶段辅助层不再暴露提交运行文件或提前创建 PR 的入口', () => {
+  expect(helpers).not.toHaveProperty('commitPlanFiles');
+  expect(helpers).not.toHaveProperty('ensurePrCreated');
 });

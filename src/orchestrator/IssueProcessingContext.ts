@@ -50,6 +50,7 @@ export interface PhaseLoopResult {
 
 /** 核心依赖 — 所有 Step 共用 */
 export interface CoreDeps {
+  signal?: AbortSignal;
   config: Config;
   tracker: IssueTracker;
   github: GitHubClient;
@@ -74,26 +75,16 @@ export interface AIDeps {
 export interface PreviewDeps {
   shouldDeployServers(issueIid: number): boolean;
   startPreviewServers(wtCtx: WorktreeContext, issue: GitHubIssue): Promise<import('../deploy/PortAllocator.js').PortPair | null>;
-  stopPreviewServers(issueIid: number): void;
+  stopPreviewServers(issueIid: number): Promise<void>;
   buildPreviewUrl(issueIid: number): string | null;
   getPortsForIssue(issueIid: number): import('../deploy/PortAllocator.js').PortPair | undefined;
   isPreviewRunning(issueIid: number): boolean;
 }
 
-/** 完成/失败处理依赖 — Completion / Failure */
-export interface CompletionDeps {
-  tryCreatePullRequest(
-    issue: GitHubIssue,
-    branchName: string,
-    workDir: string,
-    previewUrl?: string | null,
-  ): Promise<import('./PipelineOrchestrator.js').PullRequestResult | null>;
-}
-
 /** 策略/安装依赖 — Setup / PhaseLoop */
 export interface PolicyDeps {
   shouldAutoApprove(issueLabels: string[]): boolean;
-  installDependencies(workDir: string): Promise<void>;
+  installDependencies(workDir: string, signal?: AbortSignal, force?: boolean): Promise<void>;
   consumePendingAction?: (number: number) => 'abort' | 'redo' | 'restart' | undefined;
   supplementStore?: SupplementStore;
 }
@@ -102,10 +93,10 @@ export interface PolicyDeps {
  * OrchestratorDeps — 编排器注入给各步骤的依赖包。
  *
  * 由 PipelineOrchestrator 一次性构建，步骤函数按需取用。
- * 按域拆分为 CoreDeps / GitDeps / AIDeps / PreviewDeps / CompletionDeps / PolicyDeps。
+ * 按域拆分为 CoreDeps / GitDeps / AIDeps / PreviewDeps / PolicyDeps。
  */
 export interface OrchestratorDeps
-  extends CoreDeps, GitDeps, AIDeps, PreviewDeps, CompletionDeps, PolicyDeps {
+  extends CoreDeps, GitDeps, AIDeps, PreviewDeps, PolicyDeps {
   portAllocator: PortAllocator;
   devServerManager: DevServerManager;
 }

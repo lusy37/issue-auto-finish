@@ -1,3 +1,5 @@
+import { structuredPlanOutput } from '../helpers/structured-plan.js';
+import type { GitHubPullRequest } from '../../src/clients/GitHubClient.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
@@ -129,16 +131,15 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
     );
     vi.spyOn(platform, "listIssueNotes").mockImplementation(async () => notes);
     vi.spyOn(platform, "findPullRequestByBranch").mockResolvedValue(null);
-    const createPr = vi
-      .spyOn(platform, "createPullRequest")
-      .mockRejectedValueOnce(new Error("模拟平台不可用"))
-      .mockResolvedValue({
-        id: 5,
-        number: 5,
-        title: "实现页面",
-        html_url: "http://example.test/pr/5",
-        state: "open",
-      });
+    let platformPr: GitHubPullRequest | undefined;
+    vi.spyOn(platform, 'listPullRequests').mockImplementation(async () => platformPr ? [platformPr] : []);
+    vi.spyOn(platform, 'getPullRequestDetail').mockImplementation(async () => platformPr!);
+    const createPr = vi.spyOn(platform, 'createPullRequest').mockImplementation(async options => {
+      platformPr = { id: 5, number: 5, title: options.title, html_url: 'http://example.test/pr/5', state: 'open',
+        description: options.description, source_branch: options.sourceBranch, target_branch: options.targetBranch,
+        source_repository: 'demo/repo', target_repository: 'demo/repo' };
+      throw new Error('模拟 PR 已创建但响应丢失');
+    });
     const calls: RunOptions[] = [];
     let builds = 0,
       verifies = 0;
@@ -151,14 +152,11 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
       },
       async run(options) {
         calls.push(options);
-        const planDir = path.join(options.workDir, ".claude-plan", "issue-1");
-        fs.mkdirSync(planDir, { recursive: true });
         if (options.mode === "plan")
           return {
             success: true,
             output:
-              plan +
-              (calls.length > 1 ? "\n根据反馈增加错误处理和边界测试。" : ""),
+              structuredPlanOutput(plan + (calls.length > 1 ? "\n根据反馈增加错误处理和边界测试。" : "")),
             exitCode: 0,
           };
         if (options.phaseName === "build") {
@@ -167,21 +165,13 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
             path.join(options.workDir, "index.html"),
             `<h1>${builds === 1 ? "待修复" : "修复完成"}</h1>`,
           );
-          fs.writeFileSync(
-            path.join(planDir, "01-plan.md"),
-            plan.replaceAll("[ ]", "[x]"),
-          );
           return { success: true, output: "已实现页面并检查待办", exitCode: 0 };
         }
         if (options.phaseName === "verify") {
           verifies++;
-          fs.writeFileSync(
-            path.join(planDir, "02-verify-report.md"),
-            verifies === 1
+          return { success: true, output: verifies === 1
               ? "# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: 失败\n\n## 失败原因\n标题不符合验收标准，需要修复页面。\n"
-              : "# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: 通过\nTodolist: 全部完成\n\n## 总结\n所有检查通过，页面标题符合要求。\n",
-          );
-          return { success: true, output: "已运行验证并生成报告", exitCode: 0 };
+              : "# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: 通过\n\n## 总结\n所有检查通过，页面标题符合要求。\n", exitCode: 0 };
         }
         throw new Error("意外 AI 调用：" + options.phaseName);
       },
@@ -218,13 +208,13 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
       await orchestrator.applyGateAction(1, {
         action: "reject",
         feedback: "增加错误处理和边界测试",
-      });
+      }, tracker.get(1)!.run!.planRevision);
       await orchestrator.processIssue(issue);
       expect(calls.at(-1)?.prompt).toContain("增加错误处理");
       expect(tracker.get(1)?.state).toBe(IssueState.PhaseWaiting);
-      await orchestrator.applyGateAction(1, { action: "approve" });
+      await orchestrator.applyGateAction(1, { action: "approve" }, tracker.get(1)!.run!.planRevision);
       await expect(orchestrator.processIssue(issue)).rejects.toThrow(
-        "创建合并请求失败",
+        "模拟 PR 已创建但响应丢失",
       );
       expect(tracker.get(1)?.phaseProgress?.uat?.status).toBe("completed");
       expect(builds).toBe(2);
@@ -234,7 +224,7 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
       await orchestrator.processIssue(issue);
       expect(calls.length).toBe(callsBeforeRetry);
       expect(tracker.get(1)?.state).toBe(IssueState.Completed);
-      expect(createPr).toHaveBeenCalledTimes(2);
+      expect(createPr).toHaveBeenCalledTimes(1);
       expect(notes.some((n) => n.body.includes("iaf-delivery:1:"))).toBe(true);
       await collector.collectDiary(1, "completed");
       expect(
@@ -258,7 +248,7 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
       ).toContain("修复完成");
     } finally {
       collector.stop();
-      orchestrator.getDevServerManager().stopAll();
+      await orchestrator.getDevServerManager().stopAllAndWait();
     }
   }, 180000);
 });

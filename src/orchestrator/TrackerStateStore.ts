@@ -1,127 +1,84 @@
+import { renderPlan } from '../dag/contracts.js';
 import type { IssueTracker } from '../tracker/IssueTracker.js';
 import { IssueState } from '../tracker/IssueState.js';
 import type { PlanPersistence } from '../persistence/PlanPersistence.js';
-import { logger as rootLogger } from '../logger.js';
-import type {
-  OrchestratorStateStore,
-  OrchestrationStateSnapshot,
-  OrchestrationTransition,
-  OrchestrationState,
-  PhaseHistoryEntry,
-} from '../orchestration/index.js';
-import {
-  recordToOrchestrationState,
-  orchestrationStateToTrackerUpdate,
-} from './StateAdapter.js';
+import type { OrchestratorStateStore, OrchestrationStateSnapshot, OrchestrationTransition, OrchestrationState } from '../orchestration/index.js';
+import { recordToOrchestrationState, orchestrationStateToTrackerUpdate } from './StateAdapter.js';
 
-
+/** 父状态、历史、进度、审核和预算在一次聚合事务中生效。 */
 export class TrackerStateStore implements OrchestratorStateStore {
-  private readonly logger = rootLogger.child('TrackerStateStore');
-  private readonly tracker: IssueTracker;
-
-  constructor(tracker: IssueTracker, private readonly plan?: PlanPersistence) {
-    this.tracker = tracker;
-  }
+  constructor(private readonly tracker: IssueTracker, private readonly plan?: PlanPersistence) {}
 
   getSnapshot(number: number): OrchestrationStateSnapshot {
     const record = this.tracker.get(number);
-    if (!record) {
-      throw new Error(`Issue #${number} not found in tracker`);
-    }
-    const state: OrchestrationState =
-      record.orchestrationState ?? recordToOrchestrationState(record);
-    const history: PhaseHistoryEntry[] =
-      record.phaseHistory ?? [];
+    if (!record) throw new Error(`Issue #${number} 不存在`);
     return {
-      state,
-      history,
-      attempts: record.attempts ?? 0,
+      state: record.orchestrationState ?? recordToOrchestrationState(record),
+      history: (record.phaseHistory ?? []).filter(entry => entry.planRevision === undefined || (entry.planRevision === record.run!.planRevision && entry.buildGeneration === record.run!.buildGeneration)),
+      attempts: record.run!.retryUsed[record.currentPhase ?? 'plan'] ?? 0,
     };
   }
 
-  transitionToRunning(number: number, phaseId: string, _startedAt: string): void {
-    const record = this.tracker.get(number);
-    if (!record) return;
-    const previous = this.plan?.readProgress()?.phases[phaseId];
-    this.plan?.updatePhaseProgress(phaseId, 'in_progress', undefined, {
-      preserveSessionId: previous?.status === 'failed' || previous?.status === 'in_progress',
+  transitionToRunning(number: number, phaseId: string, startedAt: string): void {
+    const preserveSessionId = this.tracker.get(number)?.phaseProgress?.[phaseId]?.status !== 'completed' && this.plan?.readProgress()?.phases[phaseId]?.status !== 'completed';
+    this.tracker.transaction(number, record => {
+      if (record.run!.stopIntent) throw new Error('停止意图已持久化，禁止启动阶段');
+      record.state = IssueState.PhaseRunning;
+      record.currentPhase = phaseId;
+      record.orchestrationState = { kind: 'running', phaseId };
+      record.phaseProgress ??= {};
+      record.phaseProgress[phaseId] = { ...record.phaseProgress[phaseId], status: 'in_progress', startedAt, sessionId: preserveSessionId ? record.phaseProgress[phaseId]?.sessionId : undefined };
+      const count = record.run!.phaseExecutions[phaseId] ?? 0;
+      record.run!.phaseExecutions[phaseId] = count + 1;
+      if (count) record.retryCount = (record.retryCount ?? 0) + 1;
     });
-    if (record.phaseProgress?.[phaseId]?.startedAt || record.phaseHistory?.some(h => h.phaseId===phaseId && ['completed','failed'].includes(h.outcome))) this.tracker.updateState(number, record.state, {retryCount:(record.retryCount??0)+1});
-    const next: OrchestrationState = { kind: 'running', phaseId };
-    this.tracker.setOrchestrationState(number, next, IssueState.PhaseRunning, {
-      currentPhase: phaseId,
-    });
-    this.tracker.updatePhaseProgress(number, phaseId, {
-      status: 'in_progress',
-      startedAt: new Date().toISOString(),
-    });
+    // 文档进度仅为可重建投影。
+    try { this.plan?.updatePhaseProgress(phaseId, 'in_progress', undefined, { preserveSessionId }); } catch { /* 权威状态已提交，投影可在下次读取时重建。 */ }
   }
 
-  applyTransition(number: number, transition: OrchestrationTransition): void {
+  applyTransition(number: number, transition: OrchestrationTransition & { expectedPlanRevision?: number; reviewFeedback?: string }): void {
     const update = orchestrationStateToTrackerUpdate(transition.nextState);
-    if (this.tracker.get(number)?.state===IssueState.Cancelled) return;
-    this.tracker.appendPhaseHistory(number, transition.historyEntry);
-    this.tracker.setOrchestrationState(number, transition.nextState, update.state, {...update.extra, attempts:transition.nextAttempts});
-
-    const phaseId = transition.historyEntry.phaseId;
+    const phase = transition.historyEntry.phaseId;
     const outcome = transition.historyEntry.outcome;
-    this.applyPhaseProgressForOutcome(number, phaseId, outcome, transition);
-    const progress = this.tracker.get(number)?.phaseProgress?.[phaseId];
-    if (progress) this.plan?.updatePhaseProgress(phaseId, progress.status, progress.error);
-    if(update.state===IssueState.Failed) this.tracker.emitFailure(number);
-
-    this.logger.debug('State transition applied', {
-      number,
-      nextState: transition.nextState.kind,
-      historyEntry: outcome,
+    const current = this.tracker.transaction(number, record => {
+      const run = record.run!;
+      if (run.stopIntent || record.state === IssueState.Cancelled) throw new Error('停止后的回调不能推进状态');
+      if (outcome === 'gate-approved' || outcome === 'gate-rejected') {
+        if (record.orchestrationState?.kind !== 'gate-waiting' || run.review?.decision !== 'waiting' || run.planRevision !== transition.expectedPlanRevision) throw new Error('审核版本或状态冲突');
+        run.review = { revision: run.planRevision, decision: outcome === 'gate-approved' ? 'approved' : 'rejected', source: transition.historyEntry.approvalSource };
+        if (outcome === 'gate-rejected') {
+          const plan = this.tracker.store.readPlan(number, run.planRevision, run.planDigest);
+          run.review.feedback = transition.reviewFeedback;
+          run.reviewHistory ??= [];
+          run.reviewHistory.push({ round: run.reviewHistory.length + 1, revision: run.planRevision, feedback: transition.reviewFeedback ?? '', timestamp: new Date().toISOString(), planSnapshot: renderPlan(plan), reviewedSessionId: record.phaseProgress?.plan?.sessionId });
+          for (const progress of Object.values(record.phaseProgress ?? {})) Object.assign(progress, { status: 'pending', startedAt: undefined, completedAt: undefined });
+        }
+      }
+      record.phaseHistory = [...(record.phaseHistory ?? []), { ...transition.historyEntry, planRevision: run.planRevision, buildGeneration: run.buildGeneration }];
+      record.orchestrationState = transition.nextState;
+      record.state = update.state;
+      Object.assign(record, update.extra);
+      record.attempts = transition.nextAttempts;
+      if (outcome === 'failed' && transition.nextState.kind === 'running') run.retryUsed[phase] = (run.retryUsed[phase] ?? 0) + 1;
+      if (outcome === 'retried-from') {
+        run.buildEntry = 'repair-integration';
+        run.repairRounds++;
+        run.repairs.push({ round: run.repairRounds, report: transition.historyEntry.retryFromContext?.rawReport ?? transition.historyEntry.errorMessage ?? '', source: phase });
+        run.verify = undefined;
+        run.uat = undefined;
+      }
+      record.phaseProgress ??= {};
+      const progress = record.phaseProgress[phase] ?? { status: 'pending' as const };
+      if (outcome === 'completed' || outcome === 'gate-approved') Object.assign(progress, { status: 'completed', completedAt: transition.historyEntry.endedAt ?? new Date().toISOString(), sessionId: transition.historyEntry.sessionId });
+      else if (outcome === 'failed') Object.assign(progress, { status: 'failed', error: transition.historyEntry.errorMessage });
+      else if (outcome === 'gated') progress.status = 'gate_waiting';
+      else progress.status = 'pending';
+      record.phaseProgress[phase] = progress;
     });
+    const progress = current.phaseProgress?.[phase];
+    try { if (progress) this.plan?.updatePhaseProgress(phase, progress.status, progress.error); } catch { /* 展示副本写入失败不回滚权威状态。 */ }
+    if (current.state === IssueState.Failed) this.tracker.emitFailure(number);
   }
-
-  /** 清理某个 issue 的历史（用于 reset / cancel） */
-  clearHistory(number: number): void {
-    this.tracker.clearPhaseHistory(number);
-  }
-
-  private applyPhaseProgressForOutcome(
-    number: number,
-    phaseId: string,
-    outcome: PhaseHistoryEntry['outcome'],
-    transition: OrchestrationTransition,
-  ): void {
-    if (!phaseId) return;
-
-    if (outcome === 'completed') {
-      this.tracker.updatePhaseProgress(number, phaseId, {
-        status: 'completed',
-        completedAt: transition.historyEntry.endedAt ?? new Date().toISOString(),
-        sessionId: transition.historyEntry.sessionId,
-      });
-      return;
-    }
-    if (outcome === 'failed') {
-      this.tracker.updatePhaseProgress(number, phaseId, {
-        status: 'failed',
-        error: transition.historyEntry.errorMessage,
-      });
-      return;
-    }
-    if (outcome === 'gated') {
-      this.tracker.updatePhaseProgress(number, phaseId, { status: 'gate_waiting' });
-      return;
-    }
-    if (outcome === 'gate-approved') {
-      this.tracker.updatePhaseProgress(number, phaseId, { status: 'completed' });
-      return;
-    }
-    if (outcome === 'gate-rejected') {
-      this.tracker.updatePhaseProgress(number, phaseId, { status: 'pending' });
-      return;
-    }
-    if (outcome === 'retried-from') {
-      this.tracker.updatePhaseProgress(number, phaseId, { status: 'pending' });
-    }
-  }
+  clearHistory(number: number): void { this.tracker.clearPhaseHistory(number); }
 }
-
-/** Re-export OrchestrationState for convenient use in adapters */
 export type { OrchestrationState };

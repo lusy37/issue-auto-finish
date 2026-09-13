@@ -32,6 +32,7 @@ function makeOrchestrator(records: IssueRecord[]) {
   const orchestrator = {
     getTracker: () => ({ getAll: () => records }),
     cleanupCompletedWorktree: cleanup,
+    cleanupExpiredTaskWorkspaces: vi.fn().mockResolvedValue(undefined),
   } as unknown as PipelineOrchestrator;
   return { orchestrator, cleanup };
 }
@@ -108,6 +109,7 @@ describe('WorktreeReaper.reap', () => {
     const orchestrator = {
       getTracker: () => ({ getAll: () => [makeRecord(1), makeRecord(2)] }),
       cleanupCompletedWorktree: cleanup,
+    cleanupExpiredTaskWorkspaces: vi.fn().mockResolvedValue(undefined),
     } as unknown as PipelineOrchestrator;
 
     const result = await makeReaper([orchestrator]).reap();

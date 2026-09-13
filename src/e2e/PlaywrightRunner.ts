@@ -49,6 +49,8 @@ export function validateUatReport(report: unknown, code: number | null) {
 }
 export async function executeUat(options: {
   issueIid: number;
+  signal?: AbortSignal;
+  onTemporaryFile?: (file: string, present: boolean) => void;
   workDir: string;
   configFile: string;
   baseUrl: string;
@@ -57,6 +59,9 @@ export async function executeUat(options: {
 }): Promise<UatResult> {
   if (active.has(options.issueIid)) throw new Error("该任务正在执行浏览器验收");
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  options.signal?.addEventListener('abort', abort, { once: true });
+  if (options.signal?.aborted) controller.abort();
   active.set(options.issueIid, controller);
   const runId = randomUUID(),
     startedAt = new Date().toISOString();
@@ -72,6 +77,7 @@ export async function executeUat(options: {
     skippedTests: 0,
   };
   let wrapper: string | undefined;
+  let commandLog = "";
   try {
     const config = path.resolve(options.workDir, options.configFile);
     if (!fs.existsSync(config))
@@ -91,6 +97,7 @@ export async function executeUat(options: {
       ".iaf-uat-" + runId + ".config.ts",
     );
     const configImport = "./" + path.basename(config);
+    options.onTemporaryFile?.(wrapper, true);
     fs.writeFileSync(
       wrapper,
       `import original from ${JSON.stringify(configImport)};
@@ -114,7 +121,7 @@ export default { ...config, use: {...config.use, browserName: 'chromium', screen
         cwd: options.workDir,
         timeoutMs: options.timeoutMs,
         signal: controller.signal,
-        onOutput: options.onOutput,
+        onOutput: text => { commandLog = (commandLog + text).slice(-2_000_000); options.onOutput?.(text); },
         env: {
           ...process.env,
           CI: "1",
@@ -150,12 +157,17 @@ export default { ...config, use: {...config.use, browserName: 'chromium', screen
         [...new Set(messages)].join("\n").slice(0, 2000) ||
         command.stderr.slice(-1000) ||
         "没有实际通过的测试，请查看本次报告";
+      const environmentError = /ECONNREFUSED|ENOTFOUND|ERR_CONNECTION|browserType\.launch|Executable doesn't exist|Authentication|Unauthorized|401|403/i.test(result.error ?? '') || !!report.errors?.length;
+      const assertions = /expect\(|AssertionError|toBe|toHave|toEqual|toContain/i.test(result.error ?? '');
+      result.failureKind = result.failedTests > 0 && assertions && !environmentError ? 'assertion' : 'environment';
     }
   } catch (err) {
     result.error = (err as Error).message;
+    result.failureKind = 'environment';
   } finally {
+    options.signal?.removeEventListener('abort', abort);
     active.delete(options.issueIid);
-    if (wrapper) fs.rmSync(wrapper, { force: true });
+    if (wrapper) { fs.rmSync(wrapper, { force: true }); options.onTemporaryFile?.(wrapper, false); }
   }
   const listImages = (dir: string): string[] =>
     fs
@@ -174,6 +186,7 @@ export default { ...config, use: {...config.use, browserName: 'chromium', screen
                 ]
               : [],
       );
+  fs.writeFileSync(path.join(outputDir, "command.log"), commandLog);
   result.screenshots = listImages(outputDir);
   result.reportAvailable = fs.existsSync(
     path.join(outputDir, "report", "index.html"),

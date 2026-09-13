@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TaskGraphPanel from "./TaskGraphPanel.vue";
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import type { SystemStatus } from '@/types';
 import { getIssueIid, getIssueTitle, getReviewApprovalSource } from '@/types';
@@ -17,7 +18,7 @@ import PlanDocViewer from './PlanDocViewer.vue';
 import E2eArtifactsViewer from './E2eArtifactsViewer.vue';
 
 const systemStatus = ref<SystemStatus | null>(null);
-const activeTab = ref<'docs' | 'review' | 'supplement' | 'logs' | 'e2e'>('docs');
+const activeTab = ref<'docs' | 'review' | 'supplement' | 'logs' | 'e2e' | 'tasks'>('docs');
 const noteSyncSaving = ref(false);
 
 const { pipelineMode, stateLabel, stateClass, getPlanDocs, isEditableDoc } = usePipeline();
@@ -366,18 +367,20 @@ onUnmounted(() => {
 
       <!-- Right content area -->
       <div class="flex-1 flex flex-col min-w-0">
+        <TaskGraphPanel v-if="activeTab === 'tasks'" :issue-number="getIssueIid(detail.selectedIssue.value)" :state-version="detail.selectedIssue.value.run?.version" />
+
         <!-- Agent interactive dialog (above tabs, always visible) -->
 
 
         <!-- Tabs -->
         <div class="flex gap-0 border-b border-gray-200 bg-white px-4">
           <button
-            v-for="tab in (['docs', 'review', 'supplement', 'logs', 'e2e'] as const)"
+            v-for="tab in (['docs', 'tasks', 'review', 'supplement', 'logs', 'e2e'] as const)"
             :key="tab"
             class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
             :class="activeTab === tab ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
             @click="activeTab = tab"
-          >{{ $t(`detail.tab.${tab}`) }}</button>
+          >{{ tab === 'tasks' ? '内部任务' : $t(`detail.tab.${tab}`) }}</button>
         </div>
 
         <!-- Tab content -->

@@ -1,9 +1,12 @@
+import { structuredPlanOutput } from '../helpers/structured-plan.js';
+import { newIssueRun } from '../../src/dag/contracts.js';
+vi.mock('../../src/orchestrator/DagPhaseRunner.js', () => ({ DagPhaseRunner: isolatedPhaseRunner((...args) => mockPhaseRun(...args)) }));
+import { isolatedPhaseRunner } from '../helpers/isolated-phase-runner.js';
 // 本组验证核心调度；真实 Git、UAT 及交付门禁由 mini-workflow 集成测试覆盖。
 vi.mock('../../src/orchestrator/steps/CompletionStep.js', () => ({ executeCompletion: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.updateState(ctx.issue.number, 'completed', {prUrl:pr.html_url,deliveryPending:false,completedAt:new Date().toISOString()}); } }));
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueState } from '../../src/tracker/IssueState.js';
-import { createLifecycleManager, getPipelineDef } from '../../src/pipeline/PipelineDefinition.js';
 import { eventBus, type EventPayload } from '../../src/events/EventBus.js';
 import { GateActionError } from '../../src/orchestration/index.js';
 import {
@@ -125,17 +128,16 @@ describe('PipelineOrchestrator', () => {
   let trackerStore: Map<number, any>;
 
   function attachStatefulTracker(seed?: any): void {
-    if (seed?.issueIid !== undefined) {
-      trackerStore.set(seed.issueIid, seed);
-    }
+    if (seed) { seed.run ??= newIssueRun(); trackerStore.set(seed.issueIid ?? Number(seed.demandSpec?.sourceRef?.displayId ?? 42), seed); }
     mockTracker.create.mockImplementation((record: any) => {
       const r = {
         ...record,
+        run: newIssueRun(),
         attempts: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      trackerStore.set(record.issueIid, r);
+      trackerStore.set(Number(record.demandSpec?.sourceRef?.displayId ?? record.issueIid), r);
       return r;
     });
     mockTracker.updateState.mockImplementation((number: number, state: any, extra?: any) => {
@@ -172,7 +174,7 @@ describe('PipelineOrchestrator', () => {
         updatedAt: new Date().toISOString(),
       });
     });
-    mockTracker.get.mockImplementation((number: number) => trackerStore.get(number));
+    mockTracker.get.mockImplementation((number: number) => { const record = trackerStore.get(number); if (record) record.run ??= newIssueRun(); return record; });
   }
 
   beforeEach(() => {
@@ -389,7 +391,7 @@ describe('PipelineOrchestrator', () => {
   });
 
   describe('cleanupStaleState', () => {
-    it('cleans corrupted worktree when .git is missing', async () => {
+    it('不会直接删除缺少登记的工作目录', async () => {
       const corruptedDir = '/tmp/test-worktrees/issue-99';
       mockMainGit.worktreeList.mockResolvedValue([config.project.gitRootDir, corruptedDir]);
       // .git file does not exist
@@ -398,8 +400,8 @@ describe('PipelineOrchestrator', () => {
       const orchestrator = createOrchestrator();
       await orchestrator.cleanupStaleState();
 
-      expect(mockMainGit.worktreeRemove).toHaveBeenCalledWith(corruptedDir, true);
-      expect(mockMainGit.worktreePrune).toHaveBeenCalled();
+      expect(mockMainGit.worktreeRemove).not.toHaveBeenCalled();
+      expect(mockMainGit.worktreePrune).not.toHaveBeenCalled();
     });
 
     it('processes healthy worktree normally', async () => {
@@ -426,8 +428,9 @@ describe('PipelineOrchestrator', () => {
       await expect(orchestrator.restartIssue(999)).rejects.toThrow('Issue 999 not found');
     });
 
-    it('cleans worktree, deletes branches, and resets', async () => {
+    it('完整重做保留分支并重置构建状态', async () => {
       mockTracker.get.mockReturnValue({
+        run: newIssueRun(),
         issueIid: 42,
         branchName: 'feat/issue-42',
         state: IssueState.Failed,
@@ -436,8 +439,9 @@ describe('PipelineOrchestrator', () => {
       const orchestrator = createOrchestrator();
       await orchestrator.restartIssue(42);
 
-      expect(mockMainGit.worktreeRemove).toHaveBeenCalled();
-      expect(mockMainGit.deleteBranch).toHaveBeenCalledWith('feat/issue-42');
+      expect(mockMainGit.worktreeRemove).not.toHaveBeenCalled();
+      expect(mockMainGit.deleteBranch).not.toHaveBeenCalled();
+      expect(mockMainGit.deleteRemoteBranch).not.toHaveBeenCalled();
       expect(mockTracker.resetFull).toHaveBeenCalledWith(42);
     });
   });
@@ -451,6 +455,7 @@ describe('PipelineOrchestrator', () => {
 
     it('delegates to tracker.resetToPhase with PipelineDef for plan-mode', () => {
       mockTracker.get.mockReturnValue({
+        run: newIssueRun(),
         issueIid: 42,
         branchName: 'feat/issue-42',
         state: IssueState.PhaseRunning,
@@ -464,6 +469,7 @@ describe('PipelineOrchestrator', () => {
 
     it('rejects gate phase for retry', () => {
       mockTracker.get.mockReturnValue({
+        run: newIssueRun(),
         issueIid: 42,
         branchName: 'feat/issue-42',
         state: IssueState.PhaseRunning,
@@ -501,22 +507,15 @@ describe('PipelineOrchestrator', () => {
       const gateEvents = captureEvent('gate:approved');
 
       const orchestrator = createOrchestrator();
-      await orchestrator.applyGateAction(42, { action: 'approve' });
+      mockTracker.store.savePlan(42, JSON.parse(structuredPlanOutput()));
+      await orchestrator.applyGateAction(42, { action: 'approve' }, 1);
 
       const record = mockTracker.get(42);
       expect(record?.state).toBe(IssueState.PhaseApproved);
       expect(record?.orchestrationState).toEqual({ kind: 'gate-approved', phaseId: 'review' });
 
-      expect(mockTracker.updatePhaseProgress).toHaveBeenCalledWith(
-        42,
-        'review',
-        expect.objectContaining({ status: 'completed' }),
-      );
-
-      expect(mockTracker.appendPhaseHistory).toHaveBeenCalledWith(
-        42,
-        expect.objectContaining({ phaseId: 'review', outcome: 'gate-approved' }),
-      );
+      expect(record?.phaseProgress?.review?.status).toBe('completed');
+      expect(record?.phaseHistory).toContainEqual(expect.objectContaining({ phaseId: 'review', outcome: 'gate-approved' }));
 
       expect(gateEvents).toHaveLength(1);
       expect(gateEvents[0].data).toMatchObject({ issueIid: 42, phaseId: 'review' });
@@ -576,21 +575,17 @@ describe('PipelineOrchestrator', () => {
       const rejectEvents = captureEvent('gate:rejected');
 
       const orchestrator = createOrchestrator();
-      await orchestrator.applyGateAction(42, { action: 'reject', feedback: '需要补充错误处理' });
+      mockTracker.store.savePlan(42, JSON.parse(structuredPlanOutput()));
+      await orchestrator.applyGateAction(42, { action: 'reject', feedback: '需要补充错误处理' }, 1);
 
       const record = mockTracker.get(42);
       expect(record?.state).toBe(IssueState.BranchCreated);
       expect(record?.currentPhase).toBeUndefined();
       expect(record?.orchestrationState).toEqual({ kind: 'queued' });
 
-      // 关键副作用 1：appendPhaseHistory(outcome='gate-rejected') 由 TrackerStateStore 写入
-      expect(mockTracker.appendPhaseHistory).toHaveBeenCalledWith(
-        42,
-        expect.objectContaining({ phaseId: 'review', outcome: 'gate-rejected' }),
-      );
-
-      // 关键副作用 2：initPhaseProgress 把所有阶段重置为 pending（reject = 流水线从 plan 重启）
-      expect(mockTracker.initPhaseProgress).toHaveBeenCalledWith(42, expect.anything());
+      expect(record?.phaseHistory).toContainEqual(expect.objectContaining({ phaseId: 'review', outcome: 'gate-rejected' }));
+      expect(Object.values(record?.phaseProgress ?? {}).every((progress: any) => progress.status === 'pending')).toBe(true);
+      expect(record?.run?.reviewHistory).toHaveLength(1);
 
       // 关键副作用 3：发出统一的 gate:rejected 事件（取代老 review:rejected）
       expect(rejectEvents).toHaveLength(1);

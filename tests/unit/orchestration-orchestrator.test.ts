@@ -427,7 +427,7 @@ describe('Orchestrator.drive(): verify-fix 循环驱动', () => {
 });
 
 describe('Orchestrator.drive(): sideEffect 执行', () => {
-  it('completed 阶段触发 commit-artifacts + sync-result-to-issue', async () => {
+  it('completed 阶段只同步产物，不提交运行文件', async () => {
     const pipeline = buildPipelineForTest();
     const stateStore = makeStateStore({ kind: 'queued' });
     const executor = makeSideEffectExecutor();
@@ -440,7 +440,7 @@ describe('Orchestrator.drive(): sideEffect 执行', () => {
     await orch.drive(1, baseRunCtx);
 
     const planEffects = executor.effects.filter((e) => e.effect.kind === 'commit-artifacts' && e.effect.phaseId === 'plan');
-    expect(planEffects).toHaveLength(1);
+    expect(planEffects).toHaveLength(0);
     const syncEffects = executor.effects.filter((e) => e.effect.kind === 'sync-result-to-issue' && e.effect.phaseId === 'plan');
     expect(syncEffects).toHaveLength(1);
   });

@@ -35,6 +35,10 @@ function buildPhaseCtx(): PhaseContext {
 
 const PASSING_REPORT = `# 验证报告
 
+**Lint 结果**: 通过
+**Build 结果**: 通过
+**Test 结果**: 通过
+
 ## Lint 检查
 - [x] ESLint 通过
 
@@ -132,7 +136,7 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
     const phase = createPhase(runner, { verifyFixLoop: { enabled: false, maxIterations: 3 } });
     const intent = await phase.run(buildPhaseCtx());
     expect(intent).toMatchObject({ kind: 'failed', error: { retryable: 'hard-no-auto', rawOutput: FAILING_REPORT } });
-    expect(readFileSync(path.join(dataDir, '.claude-plan', `issue-${ISSUE_IID}`, '02-verify-report.md'), 'utf8')).toBe(FAILING_REPORT);
+    expect(readFileSync(path.join(process.env.DATA_DIR!, 'issues', String(ISSUE_IID), 'artifacts', '02-verify-report.md'), 'utf8')).toBe(FAILING_REPORT);
     expect(runner.runCalls).toHaveLength(1);
   });
 
@@ -158,7 +162,7 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
     expect(runner.runCalls[0].phaseName).toBe('verify');
   });
 
-  it.each(['-', '*'])('报告缺少统计时，%s 格式的未完成待办应触发返工', async (bullet) => {
+  it.each(['-', '*'])('报告缺少明确命令结果时，不能凭 %s 格式待办推断验收通过', async (bullet) => {
     // 模拟计划尚有一项未完成，验证实际阶段使用统一待办解析器。
     const planDir = path.join(dataDir, '.claude-plan', `issue-${ISSUE_IID}`);
     mkdirSync(planDir, { recursive: true });
@@ -175,10 +179,9 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
     });
     const intent = await phase.run(buildPhaseCtx());
 
-    expect(intent.kind).toBe('requestRetryFrom');
-    if (intent.kind !== 'requestRetryFrom') throw new Error('Expected requestRetryFrom intent');
-    expect(intent.targetPhaseId).toBe('build');
-    expect(intent.context?.todolistStats).toEqual({ completed: 2, total: 3 });
-    expect(intent.context?.verifyFailures).toContain('Todolist 未全部完成(2/3)');
+    expect(intent.kind).toBe('failed');
+    if (intent.kind !== 'failed') throw new Error('应拒绝不完整报告');
+    expect(intent.error.retryable).toBe('hard-no-auto');
+    expect(intent.error.message).toContain('缺少');
   });
 });

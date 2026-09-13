@@ -6,7 +6,7 @@ exports[`Back-to-Back: tracker state update sequences > classic issue lifecycle 
   "branch_created",
   "phase_running",
   "phase_done",
-  undefined,
+  "phase_waiting",
   "phase_approved",
   "phase_running",
   "phase_done",

@@ -1,3 +1,7 @@
+import { AsyncMutex } from '../../src/utils/AsyncMutex.js';
+import { graphFixture, git as realGit } from '../helpers/dag-repository.js';
+import { GitOperations } from '../../src/git/GitOperations.js';
+import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -7,9 +11,11 @@ import { IssueState } from '../../src/tracker/IssueState.js';
 import { PlanPersistence } from '../../src/persistence/PlanPersistence.js';
 import { buildPlanModePipeline, createLifecycleManager } from '../../src/pipeline/PipelineDefinition.js';
 import { resetKnowledgeCache } from '../../src/knowledge/KnowledgeLoader.js';
-import { createMockGitOperations, createMockOrchestratorDeps, createTestConfig, createTestIssue } from '../helpers/mock-factories.js';
+import { createMockOrchestratorDeps, createTestConfig, createTestIssue } from '../helpers/mock-factories.js';
 import type { AIRunner, RunOptions } from '../../src/ai-runner/AIRunner.js';
 import type { IssueProcessingContext } from '../../src/orchestrator/IssueProcessingContext.js';
+
+const uatBehavior = vi.hoisted(() => ({ fail: false }));
 
 // 计划、构建、验证、状态机和落盘都使用实际实现；本组只隔离浏览器阶段和外部平台。
 vi.mock('../../src/phases/PhaseFactory.js', async importOriginal => {
@@ -17,13 +23,15 @@ vi.mock('../../src/phases/PhaseFactory.js', async importOriginal => {
   return {
     ...original,
     createPhase: (...args: Parameters<typeof original.createPhase>) => args[0] === 'uat'
-      ? { run: async () => ({ kind: 'completed' }), getResultFiles: () => [] }
+      ? { run: async () => { if (uatBehavior.fail) return { kind: 'requestRetryFrom', targetPhaseId: 'build', reason: 'uat-assertion-failed', context: { rawReport: '浏览器断言失败，需要修复' } }; args[3].writeFile('uat-run.json', JSON.stringify({ runId: 'simulated-uat' })); return { kind: 'completed', output: '模拟验收通过' }; }, getResultFiles: () => [] }
       : original.createPhase(...args),
   };
 });
 
 let dir: string;
+const disposableRepositories: string[] = [];
 beforeEach(() => {
+  uatBehavior.fail = false;
   const root = path.resolve('.iaf-mini/repair-tests');
   fs.mkdirSync(root, { recursive: true });
   dir = fs.mkdtempSync(path.join(root, '流程配置 '));
@@ -31,6 +39,7 @@ beforeEach(() => {
   resetKnowledgeCache();
 });
 afterEach(() => {
+  for (const directory of disposableRepositories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   resetKnowledgeCache();
@@ -38,7 +47,11 @@ afterEach(() => {
 });
 
 function fixture(options: { review?: boolean; label?: boolean; max?: number; loop?: boolean; failVerify?: boolean } = {}) {
+  const repository = graphFixture();
   const config = createTestConfig();
+  Object.assign(config.project, { gitRootDir: repository.repo, workDir: repository.integration, worktreeBaseDir: repository.worktrees, projectSubDir: '' });
+  fs.writeFileSync(path.join(repository.integration, 'playwright.config.ts'), 'export default {};');
+  realGit(repository.integration, 'add', '.'); realGit(repository.integration, 'commit', '-m', '验收配置');
   config.review.enabled = options.review ?? false;
   config.preview.enabled = false;
   config.e2e.enabled = true;
@@ -53,7 +66,8 @@ function fixture(options: { review?: boolean; label?: boolean; max?: number; loo
   };
   const record = tracker.create({ state: IssueState.Pending, pipelineMode: 'plan-mode', demandSpec: demand, branchName: 'feat/issue-1' });
   tracker.initPhaseProgress(1, pipelineDef);
-  const plan = new PlanPersistence(dir, 1);
+  tracker.transaction(1, record => { record.run!.dispatchId = 'configuration-drive'; });
+  const plan = new PlanPersistence(repository.integration, 1, dir, tracker);
   plan.writeProgress(plan.createInitialProgress(1, demand.title, record.branchName, pipelineDef));
   const calls: RunOptions[] = [];
   const runner: AIRunner = {
@@ -62,21 +76,22 @@ function fixture(options: { review?: boolean; label?: boolean; max?: number; loo
       calls.push(opts);
       if (opts.phaseName === 'verify') plan.writeFile('02-verify-report.md',
         `# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: ${options.failVerify ? '失败' : '通过'}\n\n## 总结\n${options.failVerify ? '失败：测试不符合要求，需要修复。' : '所有检查通过，待办全部完成。'}\n`);
-      return { success: true, exitCode: 0, output: '# 完整实施计划\n\n目标是验证审核和自动修复配置真正进入阶段执行逻辑。\n\n- [x] 修改页面\n- [x] 运行验证\n- [x] 完成验收\n' };
+      if (opts.phaseName === 'build') fs.writeFileSync(path.join(opts.workDir, 'result.txt'), String(calls.length));
+      return { success: true, exitCode: 0, output: opts.phaseName === 'verify' ? plan.readFile('02-verify-report.md')! : structuredPlanOutput('目标是验证审核和自动修复配置真正进入阶段执行逻辑。') };
     },
   };
-  const git = createMockGitOperations();
-  git.hasChanges.mockResolvedValue(true);
-  const deps = createMockOrchestratorDeps({ config, tracker, aiRunner: runner, shouldAutoApprove: () => options.label ?? false });
+  const git = new GitOperations(repository.integration);
+  const deps = createMockOrchestratorDeps({ mainGitMutex: new AsyncMutex(), config, tracker, aiRunner: runner, shouldAutoApprove: () => options.label ?? false });
   const ctx = {
     issue: createTestIssue({ number: 1 }), branchName: record.branchName,
-    wtCtx: { workDir: dir, issueIid: 1 }, record, isRetry: false, pipelineDef, demand,
-    phaseCtx: { demand, branchName: record.branchName, pipelineMode: 'plan-mode' },
+    wtCtx: { workDir: repository.integration, gitRootDir: repository.integration, issueIid: 1 }, record, isRetry: false, pipelineDef, demand,
+    phaseCtx: { demand, workDir: repository.integration, branchName: record.branchName, pipelineMode: 'plan-mode' },
   } as IssueProcessingContext;
+  disposableRepositories.push(repository.directory);
   return { config, deps, ctx, calls, plan, managers, drive: () => executePhaseLoop(ctx, deps, git as never, plan) };
 }
 
-describe('配置进入实际阶段循环', () => {
+describe('配置进入实际阶段循环', { timeout: 120_000 }, () => {
   it.each([
     { review: false, label: true, source: 'configuration' },
     { review: true, label: true, source: 'label' },
@@ -104,8 +119,9 @@ describe('配置进入实际阶段循环', () => {
   it('完整计划保存失败时不能进入构建', async () => {
     const f = fixture();
     vi.spyOn(f.plan, 'writePlan').mockImplementationOnce(() => { throw new Error('计划落盘失败'); });
-    await expect(f.drive()).rejects.toThrow('计划落盘失败');
-    expect(f.calls.map(c => c.phaseName)).toEqual(['plan']);
+    vi.spyOn(f.deps.tracker.store, 'savePlan').mockImplementation(() => { throw new Error('计划落盘失败'); });
+    expect(await f.drive()).toMatchObject({ paused: true });
+    expect(f.calls.every(c => c.phaseName === 'plan')).toBe(true);
     expect(f.deps.tracker.get(1)?.phaseHistory?.some(h => h.outcome === 'gate-approved')).toBe(false);
   });
 
@@ -140,4 +156,16 @@ describe('配置进入实际阶段循环', () => {
     expect(f.calls.filter(c => c.phaseName === 'verify')).toHaveLength(4);
     expect(f.deps.tracker.get(1)?.phaseHistory?.filter(h => h.outcome === 'retried-from')).toHaveLength(3);
   });
+});
+
+it('有效 UAT 断言失败实际进入集成修复且受共享轮次上限约束', async () => {
+  uatBehavior.fail = true;
+  const f = fixture({ max: 1 });
+  await f.drive();
+  const state = f.deps.tracker.get(1)!;
+  expect(state.run!.repairRounds).toBe(1);
+  expect(f.calls.filter(call => call.prompt.includes('按已批准的计划修复集成代码'))).toHaveLength(1);
+  expect(f.calls.filter(call => call.phaseName === 'verify')).toHaveLength(2);
+  expect(Object.values(state.run!.tasks).every(task => task.status === 'merged')).toBe(true);
+  expect(state.orchestrationState?.kind).toBe('pipeline-failed');
 });

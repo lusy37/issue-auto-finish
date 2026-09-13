@@ -25,7 +25,7 @@ import SettingsPanel from '@/components/SettingsPanel.vue';
 
 const systemStatus = ref<SystemStatus | null>(null);
 const mainTab = ref('tracked');
-const tabs = [{id:'tracked',label:'任务工作台'},{id:'drafts',label:'需求拆分'},{id:'knowledge',label:'知识与经验'},{id:'distill',label:'蒸馏'},{id:'analytics',label:'任务统计'},{id:'settings',label:'设置'}];
+const tabs = [{id:'tracked',label:'任务工作台'},{id:'drafts',label:'需求草稿'},{id:'knowledge',label:'知识与经验'},{id:'distill',label:'蒸馏'},{id:'analytics',label:'任务统计'},{id:'settings',label:'设置'}];
 
 const { pipelineMode } = usePipeline();
 const { tasks, filter, filteredTasks, activeCount, completedCount, failedCount, refresh: rawRefreshIssues } = useTasks('issue');

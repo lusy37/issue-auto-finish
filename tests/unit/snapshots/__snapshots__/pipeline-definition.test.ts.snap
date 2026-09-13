@@ -5,7 +5,7 @@ exports[`Pipeline Definitions > PLAN_MODE_PIPELINE artifacts 1`] = `
   {
     "artifacts": [
       {
-        "editable": true,
+        "editable": false,
         "filename": "01-plan.md",
         "label": "实施计划",
       },
@@ -47,7 +47,7 @@ exports[`Pipeline Definitions > PLAN_MODE_PIPELINE definition (snapshot) 1`] = `
     {
       "artifacts": [
         {
-          "editable": true,
+          "editable": false,
           "filename": "01-plan.md",
           "label": "实施计划",
         },
@@ -163,7 +163,7 @@ exports[`Pipeline Definitions > getPipelineDef returns plan-mode def 1`] = `
     {
       "artifacts": [
         {
-          "editable": true,
+          "editable": false,
           "filename": "01-plan.md",
           "label": "实施计划",
         },

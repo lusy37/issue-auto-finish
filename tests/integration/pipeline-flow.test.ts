@@ -1,3 +1,5 @@
+vi.mock('../../src/orchestrator/DagPhaseRunner.js', () => ({ DagPhaseRunner: isolatedPhaseRunner((...args) => mockPhaseRun(...args)) }));
+import { isolatedPhaseRunner } from '../helpers/isolated-phase-runner.js';
 // 本组验证核心调度；真实 Git、UAT 及交付门禁由 mini-workflow 集成测试覆盖。
 vi.mock('../../src/orchestrator/steps/CompletionStep.js', () => ({ executeCompletion: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.updateState(ctx.issue.number, 'completed', {prUrl:pr.html_url,deliveryPending:false,completedAt:new Date().toISOString()}); } }));
 /**

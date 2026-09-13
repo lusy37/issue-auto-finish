@@ -37,7 +37,7 @@ export async function executeSetup(
     await deps.mainGit.fetch();
     deps.emitProgress(issue.number, 'worktree', t('orchestrator.worktreeProgress'));
     await deps.ensureWorktree(wtCtx);
-  });
+  }, deps.signal);
 
   // 3. 更新状态为 BranchCreated
   if (record.state === IssueState.Pending) {
@@ -56,8 +56,8 @@ export async function executeSetup(
   deps.emitProgress(issue.number, 'init_plan', t('orchestrator.initPlanProgress'));
   const primaryWorkDir = wtCtx.workspace ? wtCtx.workspace.primary.workDir : wtCtx.workDir;
   const primaryGitRoot = wtCtx.workspace ? wtCtx.workspace.primary.gitRootDir : wtCtx.gitRootDir;
-  const wtGit = new GitOperations(primaryGitRoot);
-  const wtPlan = new PlanPersistence(primaryWorkDir, issue.number);
+  const wtGit = new GitOperations(primaryGitRoot, deps.signal);
+  const wtPlan = new PlanPersistence(primaryWorkDir, issue.number, deps.tracker.store.dataDir, deps.tracker);
 
   wtPlan.ensureDir();
   wtPlan.writeIssueMeta({
@@ -67,9 +67,6 @@ export async function executeSetup(
     labels: issue.labels,
     state: issue.state,
   });
-
-  // 合并 worktree 缺失期间收到的审核反馈后备（来自 reject-plan API 的兜底持久化）
-  wtPlan.mergeBackupIfPresent();
 
   const existingProgress = wtPlan.readProgress();
   if (!existingProgress || record.state === IssueState.Pending) {

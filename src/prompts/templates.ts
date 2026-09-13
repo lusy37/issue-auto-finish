@@ -24,10 +24,10 @@ function planDir(number: number): string {
 }
 
 const PLAN_OUTPUT_CONSTRAINT = [
-  '不要修改任何代码文件。',
-  '实施 Todolist 只包含编码代理在 build/verify 阶段能够实际完成的代码、测试、文档与检查，步骤数量按需求复杂度确定。',
-  '计划审核、正式 UAT、Git 提交/推送和 PR 创建由外层工作台执行，须放在独立的后续流程说明中，不能列为待勾选项；尤其不能要求在 verify 之前完成 PR 创建。',
-  '本地浏览器自检可以列入实施清单，但不能替代工作台后续生成的正式 UAT 结果。',
+  '不要修改任何文件；结构化计划由服务端持久化并生成只读展示。',
+  '所有内部任务共同完成一个父 Issue；任务只包含业务代码、文档、配置、测试等有效仓库变化。',
+  '任务依赖使用 dependsOn，不能成环；所有任务完成后统一 verify、UAT 和 PR 交付。',
+  '审核、Git 提交/推送和 PR 创建由工作台执行，不列为子任务。最终输出严格 JSON。',
 ].join('\n');
 
 /**
@@ -96,15 +96,8 @@ export function demandToPromptContext(demand: DemandSpec): {
 }
 
 export function planModeVerifyPrompt(ctx: PromptContext): string {
-  const pd = planDir(ctx.issueIid);
   const kv = getKnowledgeForPrompt(ctx.knowledgeEnabled);
-  const base = t('prompt.planModeVerify', {
-    number: ctx.issueIid,
-    title: ctx.issueTitle,
-    planDir: pd,
-    ...kv,
-  });
-  return base;
+  return `验证 Issue #${ctx.issueIid}：${ctx.issueTitle}\n${ctx.issueDescription}\n依次执行 ${kv.lintCommand}、${kv.buildCommand}、${kv.testCommand}，按实际命令结果判断。\n不要修改源码、配置、测试或计划，不要提交或推送，不要写报告文件；报告由服务端保存。临时文件用完后清理。最终回复完整 Markdown 报告，包含 **Lint 结果**: 通过/失败、**Build 结果**: 通过/失败、**Test 结果**: 通过/失败，并列出失败命令及诊断。没有实际执行或无法确定时必须报告失败。任务完成由服务端核对，不依赖计划中的勾选标记。\n项目检查说明：${kv.knownIssuesSection}`;
 }
 
 export function planPrompt(ctx: PromptContext): string {
@@ -146,19 +139,9 @@ export interface ReviewRoundForPrompt {
   planSnapshot?: string;
 }
 
-/** Plan-snapshot 注入上限（字符数），防止 prompt 过长压爆上下文。 */
-export const REJECTED_PLAN_SNAPSHOT_MAX_CHARS = 8000;
-
-/** 把 snapshot 安全截断后包裹在 `<rejected-plan>` 块中。截断时附加省略提示。 */
+/** 上轮完整快照属于审核契约，不能静默截断后让模型据不完整方案重新规划。 */
 function buildRejectedPlanSection(snapshot: string | undefined): string {
-  if (!snapshot) return '';
-  let body = snapshot;
-  let truncatedNote = '';
-  if (body.length > REJECTED_PLAN_SNAPSHOT_MAX_CHARS) {
-    body = body.slice(0, REJECTED_PLAN_SNAPSHOT_MAX_CHARS);
-    truncatedNote = `\n<!-- 旧方案过长，已截断至 ${REJECTED_PLAN_SNAPSHOT_MAX_CHARS} 字符 -->`;
-  }
-  return `\n\n## 上一轮被驳回的实施计划（请基于此做实质性修改，避免与原方案高度雷同）\n\n<rejected-plan>\n${body}\n</rejected-plan>${truncatedNote}`;
+  return snapshot ? `\n\n## 上一轮被驳回的完整实施计划\n\n<rejected-plan>\n${snapshot}\n</rejected-plan>` : '';
 }
 
 /** 计划保持只读；驳回时携带上一轮快照和审核反馈。 */
@@ -194,7 +177,7 @@ export function rePlanPrompt(ctx: PromptContext, history: ReviewRoundForPrompt[]
   const rePlanReadInstruction = (rejectedPlanSection
         ? '请先阅读:\n- AGENTS.md (项目架构)\n\n上文已直接给出上一轮被驳回的方案全文，请基于该方案对照反馈做修改。'
         : '请先阅读:\n- AGENTS.md (项目架构)\n\n参考之前的审核反馈历史来改进计划。');
-  const rePlanOutputInstruction = '请基于上一轮被驳回的实施计划做实质性修改：\n- 针对每条审核反馈给出可验证的调整（说明改了什么、为什么、影响范围）\n- 不要原样照搬被驳回方案，也不要只做措辞润色\n- 避免空洞口号（如"提升健壮性"），代之以具体的设计/接口/步骤/验收标准\n\n请输出修改后的完整新版实施计划，保持相同的文档结构。';
+  const rePlanOutputInstruction = '请基于上一轮被驳回的实施计划做实质性修改：\n- 针对每条审核反馈给出可验证的调整（说明改了什么、为什么、影响范围）\n- 不要原样照搬被驳回方案，也不要只做措辞润色\n- 避免空洞口号（如"提升健壮性"），代之以具体的设计/接口/步骤/验收标准\n\n请输出修改后的完整新版结构化计划，使用规定的 JSON 字段。';
   const outputConstraint = PLAN_OUTPUT_CONSTRAINT;
 
   const base = t('prompt.rePlan', {

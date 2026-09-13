@@ -70,16 +70,16 @@ export async function redoPhase(number: number): Promise<void> {
   await post(`/api/issues/${number}/redo-phase`);
 }
 
-export async function approvePlan(number: number): Promise<void> {
-  await post(`/api/issues/${number}/approve-plan`);
+export async function approvePlan(number: number, planRevision: number): Promise<void> {
+  await post(`/api/issues/${number}/approve-plan`, { planRevision });
 }
 
-export async function rejectPlan(number: number, feedback: string): Promise<void> {
-  await post(`/api/issues/${number}/reject-plan`, { feedback });
+export async function rejectPlan(number: number, feedback: string, planRevision: number): Promise<void> {
+  await post(`/api/issues/${number}/reject-plan`, { feedback, planRevision });
 }
 
-export async function skipReview(number: number): Promise<void> {
-  await post(`/api/issues/${number}/skip-review`);
+export async function skipReview(number: number, planRevision: number): Promise<void> {
+  await post(`/api/issues/${number}/skip-review`, { planRevision });
 }
 
 export async function fetchReviewHistory(number: number): Promise<ReviewRound[]> {

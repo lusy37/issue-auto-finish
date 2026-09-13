@@ -1,3 +1,4 @@
+import type { ExecutionIdentity } from '../dag/contracts.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { eventBus, EventPayload } from '../events/EventBus.js';
@@ -6,6 +7,7 @@ import { logger as rootLogger } from '../logger.js';
 const logger = rootLogger.child('AgentLogStore');
 
 export interface AgentLogEntry {
+  identity?: ExecutionIdentity;
   type: string;
   phase?: string;
   timestamp: string;
@@ -94,7 +96,7 @@ export class AgentLogStore {
   }
 
   private handleAgentOutput(payload: EventPayload): void {
-    const d = payload.data as { issueIid?: number; phase?: string; event?: { type?: string; content?: unknown; timestamp?: string } };
+    const d = payload.data as { issueIid?: number; phase?: string; event?: { identity?: ExecutionIdentity; type?: string; content?: unknown; timestamp?: string } };
     if (!d?.issueIid || !d.event) return;
 
     const eventType = d.event.type || 'raw';
@@ -102,6 +104,7 @@ export class AgentLogStore {
 
     const entry: AgentLogEntry = {
       type: eventType,
+      identity: d.event.identity,
       phase: d.phase,
       timestamp: d.event.timestamp || payload.timestamp,
       summary: this.summarizeContent(d.event),

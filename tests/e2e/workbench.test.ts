@@ -1,3 +1,4 @@
+import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { it, expect, vi } from "vitest";
 import { chromium, expect as browserExpect, type Request } from "@playwright/test";
 import fs from "node:fs";
@@ -50,7 +51,7 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
     process.env.DATA_DIR!,
     new Map([[pipeline.mode, createLifecycleManager(pipeline)]]),
   );
-  const record = tracker.create({
+  tracker.create({
     state: IssueState.PhaseWaiting,
     currentPhase: "review",
     branchName: "feat/issue-1",
@@ -67,6 +68,7 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
       createdAt: new Date().toISOString(),
     },
   });
+  tracker.store.savePlan(1, JSON.parse(structuredPlanOutput('工作台实施计划，覆盖错误处理和用户操作')), tracker.get(1)!.run!.version);
   tracker.initPhaseProgress(1, pipeline);
   tracker.updatePhaseProgress(1, "plan", { status: "completed" });
   tracker.updatePhaseProgress(1, "review", { status: "gate_waiting" });
@@ -87,17 +89,16 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
   });
   const createIssue = vi
     .spyOn(platform, "createIssue")
-    .mockResolvedValue({
+    .mockImplementation(async (title, description) => ({
       id: 102,
       number: 2,
-      title: "子任务",
-      description: "",
+      title, description, html_url: platform.repositoryUrl + "/issues/2",
       state: "open",
       labels: [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       author: { username: "demo", name: "demo" },
-    });
+    }));
   const runner: AIRunner = {
     killAll() {},
     killByWorkDir() {
@@ -107,16 +108,8 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
       return {
         success: true,
         exitCode: 0,
-        output: options.prompt.includes("Issue 草稿")
-          ? JSON.stringify({
-              tasks: [
-                {
-                  title: "初始子任务",
-                  description: "实现可展示的页面",
-                  acceptanceCriteria: "页面正常展示",
-                },
-              ],
-            })
+        output: options.phaseName === 'draft'
+          ? JSON.stringify({ title: '初始需求', description: '实现可展示的页面', acceptanceCriteria: '页面正常展示' })
           : JSON.stringify({ actions: [] }),
       };
     },
@@ -185,22 +178,21 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
     await browserExpect(
       page.getByRole("navigation", { name: "工作台导航" }).getByRole("button"),
     ).toHaveCount(6);
-    await page.getByRole("button", { name: "需求拆分", exact: true }).click();
+    await page.getByRole("button", { name: "需求草稿", exact: true }).click();
     await page.getByLabel("原始需求").fill("创建演示页面");
     await page.getByRole("button", { name: "生成草稿" }).click();
-    await browserExpect(page.getByLabel("草稿标题")).toHaveValue("初始子任务");
-    await page.getByLabel("草稿标题").fill("编辑后的子任务");
-    await page.getByRole("checkbox").check();
-    await page.getByRole("button", { name: "确认创建选中草稿" }).click();
+    await browserExpect(page.getByLabel("草稿标题")).toHaveValue("初始需求");
+    await page.getByLabel("草稿标题").fill("编辑后的需求");
+    await page.getByRole("button", { name: "确认创建一个 Issue" }).click();
     await browserExpect(
       page.getByRole("link", { name: "查看 Issue #2" }),
     ).toBeVisible();
     expect(createIssue).toHaveBeenCalledTimes(1);
-    expect(createIssue.mock.calls[0][0]).toBe("编辑后的子任务");
+    expect(createIssue.mock.calls[0][0]).toBe("编辑后的需求");
     await page.reload();
-    await page.getByRole("button", { name: "需求拆分", exact: true }).click();
+    await page.getByRole("button", { name: "需求草稿", exact: true }).click();
     await browserExpect(page.getByLabel("草稿标题")).toHaveValue(
-      "编辑后的子任务",
+      "编辑后的需求",
     );
     await page.getByRole("button", { name: "知识与经验", exact: true }).click();
     await page.getByText("项目说明、技术栈与测试命令", { exact: true }).click();
@@ -231,6 +223,8 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
     for (const label of flowLabels) await browserExpect(page.getByRole("checkbox", { name: label, exact: true })).toBeChecked();
     await browserExpect(page.getByLabel("最大自动修复轮数")).toHaveValue("3");
     await page.getByLabel("最大自动修复轮数").fill("2");
+    await browserExpect(page.getByLabel("全局 AI 并发额度（默认 4，范围 1～32）")).toHaveValue("4");
+    await page.getByLabel("全局 AI 并发额度（默认 4，范围 1～32）").fill("2");
     for (const label of flowLabels) await page.getByRole("checkbox", { name: label, exact: true }).uncheck();
     await browserExpect(page.getByLabel("最大自动修复轮数")).toBeDisabled();
     await browserExpect(page.getByLabel("Codex 程序路径（留空使用内置程序，Windows 需为 .exe）")).toHaveValue(
@@ -255,6 +249,8 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
     };
     page.on("request", trackDetailRequest);
     await page.goto(base + "/detail?issue=1");
+    await page.getByRole("button", { name: "内部任务", exact: true }).click();
+    await browserExpect(page.getByText("implementation · 实现需求", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "审查", exact: true }).click();
     await browserExpect(
       page.getByRole("button", { name: "通过计划" }),
@@ -300,7 +296,7 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
       workDir: dir,
       configFile: "playwright.config.ts",
       baseUrl: base,
-      timeoutMs: 30000,
+      timeoutMs: 60000,
     });
     expect(result.passed).toBe(true);
     expect(result.screenshots?.length).toBeGreaterThan(0);
@@ -366,4 +362,4 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
   }
-}, 90000);
+}, 180000);

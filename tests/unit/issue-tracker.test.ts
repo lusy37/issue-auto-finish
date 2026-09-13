@@ -42,9 +42,9 @@ describe('IssueTracker', () => {
       tracker.updateState(number, state);
     }
     if (updatedAt) {
-      const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker.json'), 'utf-8'));
-      raw.issues[String(number)].updatedAt = updatedAt;
-      fs.writeFileSync(path.join(tmpDir, 'tracker.json'), JSON.stringify(raw, null, 2));
+      const raw = JSON.parse(fs.readFileSync(tracker.store.file(number), 'utf-8'));
+      raw.record.updatedAt = updatedAt;
+      fs.writeFileSync(tracker.store.file(number), JSON.stringify(raw, null, 2));
       // Reload tracker to pick up the manual edit
       tracker = createTracker(tmpDir);
     }
@@ -57,7 +57,7 @@ describe('IssueTracker', () => {
       { name: '缺失 sourceRef', record: { demandSpec: {} }, reason: '缺少需求来源' },
       { name: '来源不受支持', record: { demandSpec: { sourceRef: { source: 'user-input' } } }, reason: '任务来源必须为 GitHub Issue' },
       { name: '状态无效', record: { demandSpec: { sourceRef: { source: 'github-issue' } }, state: 'unknown' }, reason: '任务状态无效' },
-    ])('$name 时提供可定位的格式错误并保留原文件', ({ record, reason }) => {
+    ])('$name 时提供可定位的格式错误并保留原文件', ({ record }) => {
       const filePath = path.join(tmpDir, 'tracker.json');
       const content = JSON.stringify({ format: 'iaf-mini/v1', issues: { '42': record } });
       fs.writeFileSync(filePath, content);
@@ -67,8 +67,8 @@ describe('IssueTracker', () => {
       expect(failure).toBeInstanceOf(Error);
       expect(failure).not.toBeInstanceOf(TypeError);
       const message = (failure as Error).message;
-      expect(message).toContain('任务 42');
-      expect(message).toContain(reason);
+      expect(message).toContain('旧任务格式不支持');
+      expect(message).toContain('DATA_DIR');
       expect(message).toContain(filePath);
       expect(fs.readFileSync(filePath, 'utf8')).toBe(content);
     });
@@ -141,6 +141,7 @@ describe('IssueTracker', () => {
       tracker.markFailed(1, 'err1', IssueState.PhaseRunning);
       tracker.markFailed(1, 'err2', IssueState.PhaseRunning);
       tracker.markFailed(1, 'err3', IssueState.PhaseRunning);
+      tracker.transaction(1, record => { record.run!.retryUsed.setup = 3; });
       const result = tracker.getDrivableIssues(3);
       expect(result).toHaveLength(0);
     });
@@ -344,9 +345,9 @@ describe('IssueTracker', () => {
       tracker.acquireProcessingLock(1, 'corr-1');
 
       // Manually backdate the lock timestamp to exceed timeout
-      const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker.json'), 'utf-8'));
-      raw.issues['1'].processingLock.ts = new Date(Date.now() - 31 * 60 * 1000).toISOString();
-      fs.writeFileSync(path.join(tmpDir, 'tracker.json'), JSON.stringify(raw, null, 2));
+      const raw = JSON.parse(fs.readFileSync(tracker.store.file(1), 'utf-8'));
+      raw.record.processingLock.ts = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+      fs.writeFileSync(tracker.store.file(1), JSON.stringify(raw, null, 2));
       tracker = createTracker(tmpDir);
 
       const result = tracker.getDrivableIssues(3);
@@ -358,9 +359,9 @@ describe('IssueTracker', () => {
       tracker.acquireProcessingLock(1, 'corr-old');
 
       // Backdate the lock
-      const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker.json'), 'utf-8'));
-      raw.issues['1'].processingLock.ts = new Date(Date.now() - 31 * 60 * 1000).toISOString();
-      fs.writeFileSync(path.join(tmpDir, 'tracker.json'), JSON.stringify(raw, null, 2));
+      const raw = JSON.parse(fs.readFileSync(tracker.store.file(1), 'utf-8'));
+      raw.record.processingLock.ts = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+      fs.writeFileSync(tracker.store.file(1), JSON.stringify(raw, null, 2));
       tracker = createTracker(tmpDir);
 
       expect(tracker.acquireProcessingLock(1, 'corr-new')).toBe(true);

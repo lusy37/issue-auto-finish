@@ -38,6 +38,9 @@ export class CodexRunner implements AIRunner {
       return { success: false, output: '', errorMessage: '服务正在关闭', exitCode: null };
     }
     const controller = new AbortController();
+    const abort = () => controller.abort();
+    options.signal?.addEventListener('abort', abort, { once: true });
+    if (options.signal?.aborted) controller.abort();
     this.active.set(controller, workDirKey(options.workDir));
     let output = '';
     let sessionId = options.continueSession ? options.sessionId : undefined;
@@ -147,6 +150,7 @@ export class CodexRunner implements AIRunner {
       clearTimeout(wallTimer);
       clearTimeout(idleTimer);
       this.active.delete(controller);
+      options.signal?.removeEventListener('abort', abort);
     }
     if (controller.signal.aborted && !timeoutType) errorMessage = 'Codex 执行已取消';
     const success = completed && !errorMessage && !controller.signal.aborted;

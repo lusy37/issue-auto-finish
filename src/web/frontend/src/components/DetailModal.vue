@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TaskGraphPanel from "./TaskGraphPanel.vue";
 import { ref, computed } from 'vue';
 import type { IssueRecord, ProgressData, SupplementInfo, AgentLogEntry, SystemStatus, ReviewRound } from '@/types';
 import type { VerifyFixLoopState } from '@/composables/useAgentLogs';
@@ -146,6 +147,8 @@ function openDetailPage() {
               <div><span class="text-gray-500">{{ $t('detail.updatedAt') }}</span> {{ formatTime(issue.updatedAt) }}</div>
             </div>
           </div>
+
+          <TaskGraphPanel :issue-number="getIssueIid(issue)" :state-version="issue.run?.version" />
 
           <!-- Note Sync Toggle -->
           <div class="flex items-center justify-between text-sm bg-gray-50 rounded-lg px-4 py-2.5 border border-gray-200">

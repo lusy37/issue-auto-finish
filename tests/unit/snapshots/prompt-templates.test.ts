@@ -168,17 +168,17 @@ describe('prompt templates', () => {
     expect(templates.rePlanPrompt(baseCtx, history)).toMatchSnapshot();
   });
 
-  it('rePlanPrompt with oversized planSnapshot is truncated', () => {
+  it('rePlanPrompt 保留超长计划的完整快照', () => {
     const huge = '占位文本'.repeat(3000);
     const history: ReviewRoundForPrompt[] = [
       { round: 1, feedback: '需要重新设计', timestamp: '2024-06-01T10:00:00Z', planSnapshot: huge },
     ];
     const prompt = templates.rePlanPrompt(baseCtx, history);
     expect(prompt).toContain('<rejected-plan>');
-    expect(prompt).toMatch(/已截断至\s*8000\s*字符/);
+    expect(prompt).not.toContain('已截断至');
     const match = prompt.match(/<rejected-plan>\n([\s\S]*?)\n<\/rejected-plan>/);
     expect(match).not.toBeNull();
-    expect(match![1].length).toBeLessThanOrEqual(8000);
+    expect(match![1]).toBe(huge);
   });
 
   it('e2eVerifyPromptSuffix without ports', () => {

@@ -1,4 +1,5 @@
 import type { DemandSpec } from '../demand/DemandSpec.js';
+import type { IssueRun } from '../dag/contracts.js';
 import type { GateReason, PhaseError } from '../orchestration/Intent.js';
 import type { OrchestrationState, PhaseHistoryEntry } from '../orchestration/OrchestrationState.js';
 
@@ -115,6 +116,7 @@ export interface IssuePhaseProgress {
 
 
 export interface IssueOrchestration {
+  run?: IssueRun;
 
   orchestrationState?: OrchestrationState;
   /** 阶段执行历史流水账，用于 Reducer 决策与前端展示 */

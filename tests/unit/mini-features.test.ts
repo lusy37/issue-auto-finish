@@ -25,96 +25,57 @@ afterEach(() => {
     retryDelay: 100,
   });
 });
-describe("轻量草稿", () => {
-  it("部分失败后保留成功项，结果未知时禁止重发，核对后可继续", async () => {
+describe('单需求草稿创建与核对', () => {
+  const content = { title: '完整需求', description: '实现页面与接口', acceptanceCriteria: '联调通过' };
+  function fixture() {
     const runner = createMockAIRunner();
-    runner.run.mockResolvedValue({
-      success: true,
-      output: JSON.stringify({
-        tasks: [
-          {
-            title: "前端",
-            description: "展示任务",
-            acceptanceCriteria: "页面显示任务列表",
-          },
-          {
-            title: "后端",
-            description: "读取任务",
-            acceptanceCriteria: "返回任务记录",
-          },
-        ],
-      }),
-      exitCode: 0,
-    });
-    const createIssue = vi
-      .fn()
-      .mockResolvedValueOnce({ number: 10 })
-      .mockRejectedValueOnce(new Error("连接断开"))
-      .mockResolvedValue({ number: 11 });
-    const service = new DraftService(
-      dir,
-      runner,
-      { createIssue } as never,
-      dir,
-      "https://example.test/demo",
-    );
-    const batch = await service.generate("实现工作台");
-    await service.edit(batch.id, batch.tasks[0].id, {
-      ...batch.tasks[0],
-      title: "新前端",
-    });
-    const result = await service.confirm(
-      batch.id,
-      batch.tasks.map((t) => t.id),
-    );
-    expect(result.tasks.map((t) => t.status)).toEqual(["created", "unknown"]);
-    await expect(
-      service.confirm(
-        batch.id,
-        batch.tasks.map((t) => t.id),
-      ),
-    ).rejects.toThrow("结果未知");
-    expect(createIssue).toHaveBeenCalledTimes(2);
-    await service.reconcile(batch.id, batch.tasks[1].id, null);
-    await service.confirm(
-      batch.id,
-      batch.tasks.map((t) => t.id),
-    );
-    expect(createIssue).toHaveBeenCalledTimes(3);
-    expect(
-      service.get(batch.id).tasks.every((t) => t.status === "created"),
-    ).toBe(true);
-    expect(
-      new DraftService(
-        dir,
-        runner,
-        { createIssue } as never,
-        dir,
-        "https://example.test",
-      ).list()[0].tasks[0].title,
-    ).toBe("新前端");
+    runner.run.mockResolvedValue({ success: true, output: JSON.stringify(content), exitCode: 0 });
+    const client = { createIssue: vi.fn(), getIssueDetail: vi.fn(), listIssues: vi.fn().mockResolvedValue([]) };
+    const service = new DraftService(dir, runner, client as never, dir, 'https://github.com/demo/repo');
+    return { runner, client, service };
+  }
+  it('编辑单需求后重复确认只创建一个 Issue', async () => {
+    const { service, client } = fixture();
+    const draft = await service.generate('完成登录功能');
+    await service.edit(draft.id, { ...content, title: '登录功能' });
+    client.createIssue.mockImplementation(async (_title, body) => ({ number: 5, description: body, html_url: 'https://github.com/demo/repo/issues/5' }));
+    const results = await Promise.all([service.confirm(draft.id), service.confirm(draft.id)]);
+    expect(results.every(result => result.status === 'created')).toBe(true);
+    expect(client.createIssue).toHaveBeenCalledTimes(1);
+    expect(client.createIssue.mock.calls[0][2]).toEqual(['auto-finish']);
+    expect(service.get(draft.id).title).toBe('登录功能');
   });
-  it("上次创建中断显示结果未知，不能把未知结果当作未创建", async () => {
-    const runner = createMockAIRunner();
-    const id = "12345678-1234-1234-1234-123456789012";
-    fs.writeFileSync(
-      path.join(dir, id + ".json"),
-      JSON.stringify({
-        id,
-        createdAt: "2026-09-09",
-        input: "x",
-        tasks: [{ id: "1", status: "creating" }],
-      }),
-    );
-    expect(
-      new DraftService(
-        dir,
-        runner,
-        { createIssue: vi.fn() } as never,
-        dir,
-        "x",
-      ).get(id).tasks[0].status,
-    ).toBe("unknown");
+  it('响应丢失后只核对标记，不再次 POST', async () => {
+    const { service, client } = fixture();
+    const draft = await service.generate('需求');
+    client.createIssue.mockRejectedValue(new Error('响应丢失'));
+    expect((await service.confirm(draft.id)).status).toBe('unknown');
+    await expect(service.confirm(draft.id)).rejects.toThrow('不能再次');
+    expect((await service.reconcile(draft.id, null)).status).toBe('unknown');
+    client.listIssues.mockResolvedValue([{ number: 5, description: draft.marker, html_url: 'https://github.com/demo/repo/issues/5' }]);
+    expect((await service.reconcile(draft.id)).status).toBe('created');
+    expect(client.createIssue).toHaveBeenCalledTimes(1);
+  });
+  it.each(['跨仓库', '错误标记', '查询失败', '重复匹配'])('%s 继续保持 unknown', async kind => {
+    const { service, client } = fixture();
+    const draft = await service.generate('需求');
+    client.createIssue.mockRejectedValue(new Error('响应未知'));
+    await service.confirm(draft.id);
+    const issue = { number: 7, description: draft.marker, html_url: 'https://github.com/demo/repo/issues/7' };
+    if (kind === '跨仓库') issue.html_url = 'https://github.com/other/repo/issues/7';
+    if (kind === '错误标记') issue.description = '其他草稿';
+    client.getIssueDetail.mockResolvedValue(issue);
+    if (kind === '查询失败') client.listIssues.mockRejectedValue(new Error('查询失败'));
+    if (kind === '重复匹配') client.listIssues.mockResolvedValue([issue, { ...issue, number: 8 }]);
+    expect((await service.reconcile(draft.id, ['跨仓库', '错误标记'].includes(kind) ? 7 : undefined)).status).toBe('unknown');
+    expect(client.createIssue).toHaveBeenCalledTimes(1);
+  });
+  it('旧草稿格式启动时报告路径且保留原文件', () => {
+    const { runner, client } = fixture();
+    const file = path.join(dir, '12345678-1234-1234-1234-123456789012.json');
+    fs.writeFileSync(file, JSON.stringify({ tasks: [] }));
+    expect(() => new DraftService(dir, runner, client as never, dir, 'https://github.com/demo/repo')).toThrow(file);
+    expect(fs.readFileSync(file, 'utf8')).toBe('{"tasks":[]}');
   });
 });
 describe("本工具任务统计", () => {

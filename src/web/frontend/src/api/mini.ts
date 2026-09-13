@@ -1,4 +1,4 @@
-export type {TaskDraft,DraftBatch,UatResult as UatRun,TaskSummary} from '../../../../shared/workbench';
+export type {DemandDraft,UatResult as UatRun,TaskSummary} from '../../../../shared/workbench';
 export { json } from './http';
 
 export interface KnowledgeItem {

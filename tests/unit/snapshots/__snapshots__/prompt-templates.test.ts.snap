@@ -141,53 +141,11 @@ exports[`prompt templates > issueProgressComment - in progress 1`] = `
 `;
 
 exports[`prompt templates > planModeVerifyPrompt 1`] = `
-"你是**严格的**测试工程师。验证代码变更的正确性。
-
-## Issue 信息
-- IID: #42
-- 标题: 实现用户登录功能
-
-## 幂等性检查（最先执行）
-在执行任何操作之前，先检查是否已存在验证报告：
-1. 读取 .claude-plan/issue-42/02-verify-report.md（如果存在）
-2. 如果报告存在且"总结"部分包含"验证通过"，则**直接结束**，不要重复执行任何验证步骤
-3. 如果报告不存在或总结为"验证失败"，继续执行下面的验证步骤
-
-**重要**：此检查的目的是防止重复执行导致破坏性操作（如删除已通过的测试文件）。
-
-## 前置检查
-在执行验证前，先确认依赖环境:
-1. 检查 node_modules/.bin/eslint 是否存在
-2. 如不存在，运行 npm install；如果失败，尝试 npm install
-3. 如果依赖始终无法安装完整，在报告中标注为"环境问题"并继续后续检查
-
-## 验证步骤
-1. 运行 npm run lint 检查代码风格
-2. 运行 npm run build 检查编译
-3. 运行 npm test -- {files} 运行相关测试
-4. 检查代码变更与 .claude-plan/issue-42/01-plan.md 实施计划的一致性
-5. **严格检查** .claude-plan/issue-42/01-plan.md 中 Todolist 是否**所有项**都已完成（- [x]）
-
-## 已知的预存问题（忽略即可）
-- 无已知预存问题
-- 如果某个 lint/build/test 的失败**不涉及本次变更的文件**，标注为"预存问题"
-
-## 验证标准（必须全部满足才算通过）
-- Lint 零错误（本次变更相关）
-- Build 成功
-- 所有测试通过
-- Todolist 100% 完成（无未勾选项）
-- 代码符合实施计划
-
-将验证结果写入 .claude-plan/issue-42/02-verify-report.md，**必须**包括以下各节：
-- **Lint 结果**: 通过/失败 + 详情（区分本次变更 vs 预存问题）
-- **Build 结果**: 通过/失败 + 详情（区分本次变更 vs 预存问题）
-- **Test 结果**: 通过/失败 + 详情
-- **Todolist 检查**: X/Y 项完成 + 未完成项列表
-- **计划一致性检查**: 是否符合实施计划
-- **总结**: 验证通过/验证失败 + 具体原因
-
-**重要**: 如果任何一项检查失败，必须在"总结"中明确写"验证失败"。"
+"验证 Issue #42：实现用户登录功能
+需要添加用户名密码登录，支持 OAuth2.0 第三方登录
+依次执行 npm run lint、npm run build、npm test，按实际命令结果判断。
+不要修改源码、配置、测试或计划，不要提交或推送，不要写报告文件；报告由服务端保存。临时文件用完后清理。最终回复完整 Markdown 报告，包含 **Lint 结果**: 通过/失败、**Build 结果**: 通过/失败、**Test 结果**: 通过/失败，并列出失败命令及诊断。没有实际执行或无法确定时必须报告失败。任务完成由服务端核对，不依赖计划中的勾选标记。
+项目检查说明：- 无已知预存问题"
 `;
 
 exports[`prompt templates > planPrompt with supplement 1`] = `
@@ -223,16 +181,13 @@ exports[`prompt templates > planPrompt with supplement 1`] = `
 4. **接口设计** — API 接口定义
 5. **详细实施步骤** — 按顺序列出实施步骤
 
-### 第三部分：实施 Todolist
-- [ ] 步骤1: 具体描述
-- [ ] 步骤2: 具体描述
-...
-
-请确保 Todolist 足够详细，每个步骤可独立执行和验证。
-不要修改任何代码文件。
-实施 Todolist 只包含编码代理在 build/verify 阶段能够实际完成的代码、测试、文档与检查，步骤数量按需求复杂度确定。
-计划审核、正式 UAT、Git 提交/推送和 PR 创建由外层工作台执行，须放在独立的后续流程说明中，不能列为待勾选项；尤其不能要求在 verify 之前完成 PR 创建。
-本地浏览器自检可以列入实施清单，但不能替代工作台后续生成的正式 UAT 结果。"
+### 第三部分：内部任务图
+将上述分析和设计写入 description。每个任务使用 id、title、instructions、acceptanceCriteria、dependsOn 字段；明确任务产物和验收标准，只引用已定义的任务 ID。
+完整计划使用 title、description、acceptanceCriteria、tasks 字段，最终只返回严格 JSON，不输出 Markdown 文档。
+不要修改任何文件；结构化计划由服务端持久化并生成只读展示。
+所有内部任务共同完成一个父 Issue；任务只包含业务代码、文档、配置、测试等有效仓库变化。
+任务依赖使用 dependsOn，不能成环；所有任务完成后统一 verify、UAT 和 PR 交付。
+审核、Git 提交/推送和 PR 创建由工作台执行，不列为子任务。最终输出严格 JSON。"
 `;
 
 exports[`prompt templates > planPrompt without supplement 1`] = `
@@ -263,16 +218,13 @@ exports[`prompt templates > planPrompt without supplement 1`] = `
 4. **接口设计** — API 接口定义
 5. **详细实施步骤** — 按顺序列出实施步骤
 
-### 第三部分：实施 Todolist
-- [ ] 步骤1: 具体描述
-- [ ] 步骤2: 具体描述
-...
-
-请确保 Todolist 足够详细，每个步骤可独立执行和验证。
-不要修改任何代码文件。
-实施 Todolist 只包含编码代理在 build/verify 阶段能够实际完成的代码、测试、文档与检查，步骤数量按需求复杂度确定。
-计划审核、正式 UAT、Git 提交/推送和 PR 创建由外层工作台执行，须放在独立的后续流程说明中，不能列为待勾选项；尤其不能要求在 verify 之前完成 PR 创建。
-本地浏览器自检可以列入实施清单，但不能替代工作台后续生成的正式 UAT 结果。"
+### 第三部分：内部任务图
+将上述分析和设计写入 description。每个任务使用 id、title、instructions、acceptanceCriteria、dependsOn 字段；明确任务产物和验收标准，只引用已定义的任务 ID。
+完整计划使用 title、description、acceptanceCriteria、tasks 字段，最终只返回严格 JSON，不输出 Markdown 文档。
+不要修改任何文件；结构化计划由服务端持久化并生成只读展示。
+所有内部任务共同完成一个父 Issue；任务只包含业务代码、文档、配置、测试等有效仓库变化。
+任务依赖使用 dependsOn，不能成环；所有任务完成后统一 verify、UAT 和 PR 交付。
+审核、Git 提交/推送和 PR 创建由工作台执行，不列为子任务。最终输出严格 JSON。"
 `;
 
 exports[`prompt templates > rePlanPrompt with latest planSnapshot （只读计划） 1`] = `
@@ -296,7 +248,7 @@ exports[`prompt templates > rePlanPrompt with latest planSnapshot （只读计�
 ### 第 2 轮 (2024-06-01T11:00:00Z)
 第二轮:加权限校验
 
-## 上一轮被驳回的实施计划（请基于此做实质性修改，避免与原方案高度雷同）
+## 上一轮被驳回的完整实施计划
 
 <rejected-plan>
 # V2 方案
@@ -315,12 +267,12 @@ exports[`prompt templates > rePlanPrompt with latest planSnapshot （只读计�
 - 不要原样照搬被驳回方案，也不要只做措辞润色
 - 避免空洞口号（如"提升健壮性"），代之以具体的设计/接口/步骤/验收标准
 
-请输出修改后的完整新版实施计划，保持相同的文档结构。
+请输出修改后的完整新版结构化计划，使用规定的 JSON 字段。
 重点关注最新一轮的反馈，同时确保之前轮次提出的问题也已得到解决。
-不要修改任何代码文件。
-实施 Todolist 只包含编码代理在 build/verify 阶段能够实际完成的代码、测试、文档与检查，步骤数量按需求复杂度确定。
-计划审核、正式 UAT、Git 提交/推送和 PR 创建由外层工作台执行，须放在独立的后续流程说明中，不能列为待勾选项；尤其不能要求在 verify 之前完成 PR 创建。
-本地浏览器自检可以列入实施清单，但不能替代工作台后续生成的正式 UAT 结果。"
+不要修改任何文件；结构化计划由服务端持久化并生成只读展示。
+所有内部任务共同完成一个父 Issue；任务只包含业务代码、文档、配置、测试等有效仓库变化。
+任务依赖使用 dependsOn，不能成环；所有任务完成后统一 verify、UAT 和 PR 交付。
+审核、Git 提交/推送和 PR 创建由工作台执行，不列为子任务。最终输出严格 JSON。"
 `;
 
 exports[`prompt templates > rePlanPrompt with no planSnapshot （无计划快照） 1`] = `
@@ -352,12 +304,12 @@ exports[`prompt templates > rePlanPrompt with no planSnapshot （无计划快照
 - 不要原样照搬被驳回方案，也不要只做措辞润色
 - 避免空洞口号（如"提升健壮性"），代之以具体的设计/接口/步骤/验收标准
 
-请输出修改后的完整新版实施计划，保持相同的文档结构。
+请输出修改后的完整新版结构化计划，使用规定的 JSON 字段。
 重点关注最新一轮的反馈，同时确保之前轮次提出的问题也已得到解决。
-不要修改任何代码文件。
-实施 Todolist 只包含编码代理在 build/verify 阶段能够实际完成的代码、测试、文档与检查，步骤数量按需求复杂度确定。
-计划审核、正式 UAT、Git 提交/推送和 PR 创建由外层工作台执行，须放在独立的后续流程说明中，不能列为待勾选项；尤其不能要求在 verify 之前完成 PR 创建。
-本地浏览器自检可以列入实施清单，但不能替代工作台后续生成的正式 UAT 结果。"
+不要修改任何文件；结构化计划由服务端持久化并生成只读展示。
+所有内部任务共同完成一个父 Issue；任务只包含业务代码、文档、配置、测试等有效仓库变化。
+任务依赖使用 dependsOn，不能成环；所有任务完成后统一 verify、UAT 和 PR 交付。
+审核、Git 提交/推送和 PR 创建由工作台执行，不列为子任务。最终输出严格 JSON。"
 `;
 
 exports[`prompt templates > rePlanPrompt with review history 1`] = `
@@ -392,10 +344,10 @@ API 接口缺少权限校验
 - 不要原样照搬被驳回方案，也不要只做措辞润色
 - 避免空洞口号（如"提升健壮性"），代之以具体的设计/接口/步骤/验收标准
 
-请输出修改后的完整新版实施计划，保持相同的文档结构。
+请输出修改后的完整新版结构化计划，使用规定的 JSON 字段。
 重点关注最新一轮的反馈，同时确保之前轮次提出的问题也已得到解决。
-不要修改任何代码文件。
-实施 Todolist 只包含编码代理在 build/verify 阶段能够实际完成的代码、测试、文档与检查，步骤数量按需求复杂度确定。
-计划审核、正式 UAT、Git 提交/推送和 PR 创建由外层工作台执行，须放在独立的后续流程说明中，不能列为待勾选项；尤其不能要求在 verify 之前完成 PR 创建。
-本地浏览器自检可以列入实施清单，但不能替代工作台后续生成的正式 UAT 结果。"
+不要修改任何文件；结构化计划由服务端持久化并生成只读展示。
+所有内部任务共同完成一个父 Issue；任务只包含业务代码、文档、配置、测试等有效仓库变化。
+任务依赖使用 dependsOn，不能成环；所有任务完成后统一 verify、UAT 和 PR 交付。
+审核、Git 提交/推送和 PR 创建由工作台执行，不列为子任务。最终输出严格 JSON。"
 `;

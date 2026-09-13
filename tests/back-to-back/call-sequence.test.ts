@@ -15,7 +15,6 @@ import { IssueTracker } from '../../src/tracker/IssueTracker.js';
 import { IssueState } from '../../src/tracker/IssueState.js';
 import {
   PLAN_MODE_PIPELINE,
-  createLifecycleManager,
 } from '../../src/pipeline/PipelineDefinition.js';
 
 // ---------------------------------------------------------------------------
@@ -105,7 +104,7 @@ describe('Back-to-Back: tracker state update sequences', () => {
     tracker.updateState(1, IssueState.PhaseDone, { currentPhase: 'plan' });
     stateLog.push(tracker.get(1)!.state);
 
-    tracker.updateState(1, IssueState.WaitingForReview);
+    tracker.updateState(1, IssueState.PhaseWaiting);
     stateLog.push(tracker.get(1)!.state);
 
     tracker.updateState(1, IssueState.PhaseApproved);
@@ -185,7 +184,6 @@ describe('Back-to-Back: tracker state update sequences', () => {
   });
 
   it('pipeline lifecycle manager phase order', () => {
-    const lm = createLifecycleManager(PLAN_MODE_PIPELINE);
     const phaseOrder = PLAN_MODE_PIPELINE.phases.map(p => ({
       name: p.name,
       kind: p.kind,

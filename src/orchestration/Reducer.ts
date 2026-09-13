@@ -58,7 +58,6 @@ export interface ReducerOutput {
  * 由 Orchestrator 翻译为具体调用。这样保证 Reducer 的纯函数性。
  */
 export type ReducerSideEffect =
-  | { readonly kind: 'commit-artifacts'; readonly phaseId: string }
   | { readonly kind: 'sync-result-to-issue'; readonly phaseId: string }
   | { readonly kind: 'emit-event'; readonly type: string; readonly payload: Record<string, unknown> }
   | { readonly kind: 'comment-progress'; readonly phaseId: string; readonly message: string }
@@ -123,7 +122,6 @@ function reduceCompleted(input: ReducerInput, phaseId: string): ReducerOutput {
   };
 
   const sideEffects: ReducerSideEffect[] = [
-    { kind: 'commit-artifacts', phaseId },
     { kind: 'sync-result-to-issue', phaseId },
   ];
 
@@ -178,7 +176,7 @@ function reduceFailed(input: ReducerInput, phaseId: string): ReducerOutput {
   ];
 
   if (action.kind === 'retry-same-phase') {
-    const newAttempts = intent.error.retryable === 'soft' ? attempts : attempts + 1;
+    const newAttempts = attempts + 1;
     if (newAttempts >= action.maxAttempts) {
       return {
         nextState: {
@@ -233,7 +231,6 @@ function reduceAwaitGate(input: ReducerInput, phaseId: string): ReducerOutput {
   };
 
   const sideEffects: ReducerSideEffect[] = [
-    { kind: 'commit-artifacts', phaseId },
     {
       kind: 'emit-event',
       type: 'gate:requested',
@@ -313,7 +310,7 @@ function reduceRequestRetryFrom(input: ReducerInput, phaseId: string): ReducerOu
 
   if (action.kind === 'retry-from') {
     const iterations = history.filter(
-      (h) => h.phaseId === phaseId && h.outcome === 'retried-from',
+      (h) => h.outcome === 'retried-from',
     ).length + 1;
 
     if (iterations > action.maxIterations) {

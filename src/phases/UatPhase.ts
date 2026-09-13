@@ -4,6 +4,7 @@ import { BasePhase, type PhaseContext } from "./BasePhase.js";
 import type { PhaseCallbacks } from "./PhaseCallbacks.js";
 import type { PhaseIntent } from "../orchestration/Intent.js";
 import { executeUat } from "../e2e/PlaywrightRunner.js";
+import { getIssueContext } from '../context/IssueContext.js';
 /** 每次重试执行真实浏览器测试，不复用遗留 Markdown 报告。 */
 export class UatPhase extends BasePhase {
   readonly phaseName = "uat";
@@ -19,23 +20,10 @@ export class UatPhase extends BasePhase {
   ): Promise<PhaseIntent> {
     const number = Number(ctx.demand.sourceRef.displayId),
       workDir = ctx.workDir || this.plan.baseDir;
-    if (!fs.existsSync(path.resolve(workDir, this.config.e2e.configFile))) {
-      const prepared = await this.aiRunner.run({
-        prompt: this.buildPrompt(ctx),
-        workDir,
-        timeoutMs: this.config.ai.phaseTimeoutMs,
-        onStreamEvent: callbacks?.onStreamEvent,
-      });
-      if (!prepared.success)
-        return {
-          kind: "failed",
-          error: {
-            message: prepared.errorMessage || "生成浏览器测试失败",
-            retryable: "hard",
-          },
-        };
-    }
+    if (!fs.existsSync(path.resolve(workDir, this.config.e2e.configFile))) return { kind: 'failed', error: { message: '构建收尾未生成 Playwright 配置，请人工检查环境', retryable: 'hard-no-auto' } };
     const result = await executeUat({
+      onTemporaryFile: ctx.onTemporaryFile,
+      signal: getIssueContext()?.signal,
       issueIid: number,
       workDir,
       configFile: this.config.e2e.configFile,
@@ -60,6 +48,7 @@ export class UatPhase extends BasePhase {
       path.join(this.plan.planDir, "03-uat-report.md"),
       markdown,
     );
+    if (!result.passed && result.failureKind === 'assertion' && this.config.verifyFixLoop.enabled) return { kind: 'requestRetryFrom', targetPhaseId: 'build', reason: 'uat-assertion-failed', context: { verifyFailures: [result.error || '浏览器断言失败'], rawReport: markdown } };
     return result.passed
       ? {
           kind: "completed",

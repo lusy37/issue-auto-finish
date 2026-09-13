@@ -1,3 +1,4 @@
+import { ManagedCodexRunner } from '../../src/ai-runner/ManagedCodexRunner.js';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import type { ThreadEvent, TurnOptions } from '@openai/codex-sdk';
 import { CodexRunner } from '../../src/ai-runner/CodexRunner.js';
@@ -45,7 +46,7 @@ afterEach(() => vi.useRealTimers());
 
 describe('Codex SDK 适配器', () => {
   it('仅内置 Codex，默认使用随 SDK 安装的程序', () => {
-    expect(createAIRunner({ mode: 'codex', binary: '', phaseTimeoutMs: 1000 })).toBeInstanceOf(CodexRunner);
+    expect(createAIRunner({ mode: 'codex', binary: '', phaseTimeoutMs: 1000 })).toBeInstanceOf(ManagedCodexRunner);
     expect(isRegisteredRunner('claude')).toBe(false);
   });
 

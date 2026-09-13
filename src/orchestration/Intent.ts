@@ -76,7 +76,7 @@ export interface RequestRetryFromIntent {
  * 阶段失败结构化错误信息。
  *
  * `retryable` 三态：
- * - `soft`：超时但 AI 仍在活跃输出 — 不消耗 retry budget，下次直接续跑
+ * - `soft`：超时但 AI 仍在活跃输出 — 同样消耗有限重试预算，下次尝试可以续跑
  * - `hard`：常规失败 — 消耗 retry budget，达到上限后转 manual
  * - `hard-no-auto`：非自动可恢复（如 verify-fix 反复失败）— 不消耗 budget，但必须用户介入
  */

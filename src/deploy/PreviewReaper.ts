@@ -104,7 +104,7 @@ export class PreviewReaper {
         const hours = Math.round(age / (60 * 60 * 1000));
 
         try {
-          this.orchestrator.stopPreviewServers(number);
+          await this.orchestrator.stopPreviewServers(number);
           reaped.push(number);
           logger.info(t('reaper.reaped', { number, hours }));
         } catch (err) {

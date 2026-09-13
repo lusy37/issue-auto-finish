@@ -51,11 +51,12 @@ export function useAgentLogs() {
     issueIid: number,
     selectedIid: Ref<number | undefined>,
     phase: string | undefined,
-    streamEvent: { type?: string; content?: unknown; timestamp?: string },
+    streamEvent: { identity?: AgentLogEntry['identity']; type?: string; content?: unknown; timestamp?: string },
   ) {
     if (selectedIid.value !== issueIid) return;
     pushLog({
       type: streamEvent.type ?? 'raw',
+      identity: streamEvent.identity,
       phase,
       timestamp: streamEvent.timestamp ?? new Date().toISOString(),
       summary: summarizeAgentEvent(streamEvent),

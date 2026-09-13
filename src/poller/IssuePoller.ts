@@ -257,7 +257,7 @@ export class IssuePoller {
         });
 
         // 统一更新编排状态、阶段进度与历史，并发出 review:approved 事件
-        await this.orchestrator.applyGateAction(number, { action: 'approve', source: 'label' });
+        await this.orchestrator.applyGateAction(number, { action: 'approve', source: 'label' }, record.run?.planRevision);
 
         try {
           await this.github.createIssueNote(

@@ -1,3 +1,4 @@
+import { validateDraftStorage } from "./demand/DraftService.js";
 import path from "node:path";
 import { loadConfig } from "./config.js";
 import { setLocale } from "./i18n/index.js";
@@ -46,6 +47,7 @@ export async function main(): Promise<void> {
       dataDir,
       new Map([[pipeline.mode, createLifecycleManager(pipeline)]]),
     );
+    validateDraftStorage(path.join(dataDir, "drafts"));
     const github = new GitHubClient(config.github);
     const aiRunner = createAIRunner(config.ai);
     const mainGit = new GitOperations(config.project.gitRootDir);
@@ -142,8 +144,10 @@ export async function main(): Promise<void> {
       setShuttingDown();
       poller.stop();
       aiRunner.killAll();
+      await orchestrator.stopExecutions();
+      await aiRunner.waitForIdle?.();
       orchestrator.cancelUat();
-      orchestrator.getDevServerManager().stopAll();
+      await orchestrator.getDevServerManager().stopAllAndWait();
       previewReaper.stop();
       worktreeReaper.stop();
       diaryCollector.stop();

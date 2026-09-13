@@ -61,7 +61,7 @@ it.each([
     async run(options) {
       calls.push(options);
       if (options.phaseName === 'verify') plan.writeFile('02-verify-report.md', '# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: 通过\n\n## 总结\n所有检查通过。');
-      return { success: true, exitCode: 0, output: JSON.stringify({ actions: [] }) };
+      return { success: true, exitCode: 0, output: options.phaseName === 'verify' ? plan.readFile('02-verify-report.md')! : JSON.stringify({ actions: [] }) };
     },
   };
   const git = createMockGitOperations();

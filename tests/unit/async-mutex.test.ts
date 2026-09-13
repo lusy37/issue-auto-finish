@@ -85,3 +85,18 @@ describe('AsyncMutex', () => {
     expect(counter).toBe(10);
   });
 });
+
+it('取消等待中的 Git 锁不会执行回调，也不会释放别人的锁', async () => {
+  const mutex = new AsyncMutex();
+  let release!: () => void;
+  const held = mutex.runExclusive(() => new Promise<void>(resolve => { release = resolve; }));
+  await Promise.resolve();
+  const controller = new AbortController();
+  let called = false;
+  const waiting = mutex.runExclusive(async () => { called = true; }, controller.signal);
+  controller.abort(new Error('已取消'));
+  await expect(waiting).rejects.toThrow('已取消');
+  expect(mutex.queueLength).toBe(0); expect(mutex.isLocked).toBe(true);
+  release(); await held;
+  expect(called).toBe(false); expect(mutex.isLocked).toBe(false);
+});

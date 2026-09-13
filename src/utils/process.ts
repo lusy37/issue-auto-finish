@@ -1,7 +1,8 @@
 import { execa, type Options } from "execa";
 import which from "which";
+import { getIssueContext } from '../context/IssueContext.js';
 
-type ProcessOptions = Pick<Options, "cwd" | "env" | "timeout" | "cancelSignal"> & { stdio?: "inherit" | "ignore" | ["ignore", "pipe", "pipe"] };
+type ProcessOptions = Pick<Options, "cwd" | "env" | "timeout" | "cancelSignal" | "ipc"> & { stdio?: "inherit" | "ignore" | ["ignore", "pipe", "pipe"] };
 
 /** 统一进程树生命周期；业务调用方只传程序及参数，不拼接 shell 命令。 */
 export function spawnProcess(binary: string, args: string[] = [], options: ProcessOptions = {}) {
@@ -38,6 +39,7 @@ export async function runProcess(
     onOutput?: (text: string) => void;
   },
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  options = { ...options, signal: options.signal ?? getIssueContext()?.signal };
   if (options.signal?.aborted) throw new Error("操作已取消");
   const child = spawnProcess(binary, args, {
     cwd: options.cwd,
@@ -46,16 +48,34 @@ export async function runProcess(
     cancelSignal: options.signal,
   });
   let stdout = "", stderr = "";
+  let callbackError: unknown;
+  const emitOutput = (text: string) => {
+    try { options.onOutput?.(text); }
+    catch (error) { callbackError ??= error; stopProcess(child); }
+  };
   // 保留日志尾部，不因构建输出超过缓冲上限而终止命令。
   child.nodeChildProcess.stdout?.setEncoding("utf8").on("data", (text: string) => {
     stdout = (stdout + text).slice(-8_000_000);
-    options.onOutput?.(text);
+    emitOutput(text);
   });
   child.nodeChildProcess.stderr?.setEncoding("utf8").on("data", (text: string) => {
     stderr = (stderr + text).slice(-2_000_000);
-    options.onOutput?.(text);
+    emitOutput(text);
   });
-  const result = await child;
+  const lifecycle = getIssueContext();
+  let callId: string | undefined;
+  let result;
+  try {
+    if (child.pid) callId = lifecycle?.processStarted?.(child.pid, options.cwd);
+    result = await child;
+  } catch (error) {
+    stopProcess(child);
+    await child;
+    throw error;
+  } finally {
+    if (callId) lifecycle?.processExited?.(callId);
+  }
+  if (callbackError) throw callbackError;
   if (result.timedOut) throw new Error("命令执行超时", { cause: result });
   if (result.isCanceled || options.signal?.aborted) throw new Error("操作已取消", { cause: result });
   if (result.failed && result.exitCode === undefined && !result.isTerminated) throw result;

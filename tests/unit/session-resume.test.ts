@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { structuredPlanOutput } from '../helpers/structured-plan.js';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -257,7 +258,7 @@ describe('Session Resume — BasePhase.run()', () => {
     };
     const freshResult: RunResult = {
       success: true,
-      output: '完整实施计划：包含步骤、边界与验收标准。'.repeat(8),
+      output: structuredPlanOutput('完整实施计划：包含步骤、边界与验收标准。'.repeat(8)),
       sessionId: 'fresh-session',
       exitCode: 0,
     };
@@ -358,7 +359,7 @@ describe('Session Resume — BasePhase.run()', () => {
         content: { type: 'init', session_id: 'stream-captured-session' },
         timestamp: new Date().toISOString(),
       });
-      return { success: true, output: '完整实施计划：包含步骤、边界与验收标准。'.repeat(8), sessionId: 'stream-captured-session', exitCode: 0 };
+      return { success: true, output: structuredPlanOutput('完整实施计划：包含步骤、边界与验收标准。'.repeat(8)), sessionId: 'stream-captured-session', exitCode: 0 };
     });
 
     writePlanFile(tmpDir);

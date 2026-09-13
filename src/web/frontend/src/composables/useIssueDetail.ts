@@ -204,7 +204,7 @@ export function useIssueDetail() {
     if (!confirm(t('confirm.approve', { number }))) return;
     reviewSubmitting.value = true;
     try {
-      await api.approvePlan(number);
+      await api.approvePlan(number, selectedIssue.value?.run?.planRevision ?? 0);
       await refreshIssues();
       if (selectedIssue.value && getIssueIid(selectedIssue.value) === number) {
         await selectIssue(selectedIssue.value, { value: [] });
@@ -217,7 +217,7 @@ export function useIssueDetail() {
     if (!reviewFeedback.value.trim()) { alert(t('confirm.reject.noFeedback')); return; }
     reviewSubmitting.value = true;
     try {
-      await api.rejectPlan(number, reviewFeedback.value);
+      await api.rejectPlan(number, reviewFeedback.value, selectedIssue.value?.run?.planRevision ?? 0);
       reviewFeedback.value = '';
       await refreshIssues();
       if (selectedIssue.value && getIssueIid(selectedIssue.value) === number) {
@@ -231,7 +231,7 @@ export function useIssueDetail() {
     if (!confirm(t('confirm.skip', { number }))) return;
     reviewSubmitting.value = true;
     try {
-      await api.skipReview(number);
+      await api.skipReview(number, selectedIssue.value?.run?.planRevision ?? 0);
       await refreshIssues();
       if (selectedIssue.value && getIssueIid(selectedIssue.value) === number) {
         await selectIssue(selectedIssue.value, { value: [] });

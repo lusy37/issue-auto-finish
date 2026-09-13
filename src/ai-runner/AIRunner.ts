@@ -1,5 +1,7 @@
+import type { ExecutionIdentity } from '../dag/contracts.js';
 /** AI 执行扩展接口；当前提供 Codex SDK 适配器。 */
 export interface StreamEvent {
+  identity?: ExecutionIdentity;
   type: string;
   content: unknown;
   timestamp: string;
@@ -7,6 +9,9 @@ export interface StreamEvent {
   sessionId?: string;
 }
 export interface RunOptions {
+  identity?: ExecutionIdentity;
+  signal?: AbortSignal;
+  onWorkerStarted?: (pid: number) => void;
   prompt: string;
   workDir: string;
   timeoutMs: number;
@@ -24,6 +29,7 @@ export interface RunOptions {
   onStreamEvent?: (event: StreamEvent) => void;
 }
 export interface RunResult {
+  identity?: ExecutionIdentity;
   success: boolean;
   output: string;
   errorMessage?: string;
@@ -33,6 +39,7 @@ export interface RunResult {
   wasActiveAtTimeout?: boolean;
 }
 export interface AIRunner {
+  waitForIdle?(): Promise<void>;
   canResumeSession?(sessionId: string): boolean;
   run(options: RunOptions): Promise<RunResult>;
   killAll(): void;

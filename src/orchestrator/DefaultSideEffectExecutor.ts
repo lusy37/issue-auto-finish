@@ -8,7 +8,7 @@ import type {
   SideEffectExecutor,
 } from '../orchestration/index.js';
 import { logger as rootLogger } from '../logger.js';
-import { commitPlanFiles, syncResultToIssue } from './steps/PhaseHelpers.js';
+import { syncResultToIssue } from './steps/PhaseHelpers.js';
 import { issueProgressComment } from '../prompts/templates.js';
 import type { IssueProcessingContext, OrchestratorDeps } from './IssueProcessingContext.js';
 
@@ -16,7 +16,6 @@ import type { IssueProcessingContext, OrchestratorDeps } from './IssueProcessing
  * 默认副作用执行器 — 把 ReducerSideEffect 翻译为对外部组件的具体调用。
  *
  * 委托给以下子系统：
- * - commit-artifacts          → wtGit (git add/commit/push)
  * - sync-result-to-issue      → GitHubClient.createIssueNote + 产物同步
  * - emit-event                → EventBus
  * - comment-progress          → GitHubClient.createIssueNote
@@ -29,7 +28,6 @@ export class DefaultSideEffectExecutor implements SideEffectExecutor {
   private readonly deps: OrchestratorDeps;
   private readonly github: GitHubClient;
   private readonly eventBus: EventBus;
-  private readonly wtGit: GitOperations;
   private readonly wtPlan: PlanPersistence;
   private readonly phaseFactory: (phaseId: string) => BasePhase;
 
@@ -44,16 +42,12 @@ export class DefaultSideEffectExecutor implements SideEffectExecutor {
     this.deps = args.deps;
     this.github = args.deps.github;
     this.eventBus = args.deps.eventBus;
-    this.wtGit = args.wtGit;
     this.wtPlan = args.wtPlan;
     this.phaseFactory = args.phaseFactory;
   }
 
   async execute(number: number, _phaseId: string, effect: ReducerSideEffect): Promise<void> {
     switch (effect.kind) {
-      case 'commit-artifacts':
-        await this.commitArtifacts(effect.phaseId);
-        break;
       case 'sync-result-to-issue':
         await this.syncResult(effect.phaseId);
         break;
@@ -74,20 +68,6 @@ export class DefaultSideEffectExecutor implements SideEffectExecutor {
           },
         });
         break;
-    }
-  }
-
-  private async commitArtifacts(phaseId: string): Promise<void> {
-    try {
-      const phaseCtx = this.issueCtx.phaseCtx;
-      await commitPlanFiles(
-        phaseCtx,
-        this.wtGit,
-        phaseId,
-        this.issueCtx.issue.number,
-      );
-    } catch (err) {
-      this.logger.warn('commit-artifacts failed', { phaseId, error: (err as Error).message });
     }
   }
 

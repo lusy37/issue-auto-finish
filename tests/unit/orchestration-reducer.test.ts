@@ -109,7 +109,7 @@ describe('Reducer: failed intent → retry / fail-pipeline', () => {
       makeInput({
         state: { kind: 'running', phaseId: 'build' },
         intent: { kind: 'failed', error: { message: 'AI crashed', retryable: 'hard' } },
-        attempts: 2,
+        attempts: 3,
       }),
     );
     expect(out.nextState).toEqual({
@@ -120,7 +120,7 @@ describe('Reducer: failed intent → retry / fail-pipeline', () => {
     });
   });
 
-  it('FAIL-5: soft 失败不消耗 attempts', () => {
+  it('FAIL-5: soft 失败同样消耗有限预算', () => {
     const out = applyIntent(
       makeInput({
         state: { kind: 'running', phaseId: 'verify' },
@@ -131,8 +131,8 @@ describe('Reducer: failed intent → retry / fail-pipeline', () => {
         attempts: 5,
       }),
     );
-    expect(out.nextState).toEqual({ kind: 'running', phaseId: 'verify' });
-    expect(out.nextAttempts).toBe(5);
+    expect(out.nextState).toMatchObject({ kind: 'pipeline-failed', failedAt: 'verify', retryable: 'manual' });
+    expect(out.nextAttempts).toBe(6);
   });
 
   it('hard-no-auto 失败 → pipeline-failed manual（不消耗 attempts）', () => {

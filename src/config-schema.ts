@@ -114,6 +114,7 @@ export const envSchema = z.object({
   POLL_DISCOVERY_INTERVAL_MS: envMs("60000"),
   POLL_DRIVE_INTERVAL_MS: envMs("15000"),
   MAX_RETRIES: envInt("3", { min: 0, max: 100 }),
+  AI_MAX_CONCURRENCY: envInt("4", { min: 1, max: 32 }),
   MAX_CONCURRENT_ISSUES: envInt("1", { min: 1 }),
 
   // --- Review ---
@@ -247,6 +248,7 @@ export function transformEnvToConfig(env: ParsedEnv, dirname: string) {
       projectSubDir: env.PROJECT_SUBDIR,
     },
     ai: {
+      maxConcurrency: env.AI_MAX_CONCURRENCY,
       mode: aiMode,
       binary: resolveAIBinary(aiMode, env),
       phaseTimeoutMs: env.AI_PHASE_TIMEOUT_MS,

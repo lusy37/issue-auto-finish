@@ -5,6 +5,7 @@ exports[`裁剪版配置 > 只有公开执行器及当前模块 1`] = `
   "ai": {
     "binary": "",
     "idleTimeoutMs": 1200000,
+    "maxConcurrency": 4,
     "mode": "codex",
     "model": "",
     "phaseTimeoutMs": 2700000,

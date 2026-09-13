@@ -7,6 +7,7 @@ export type PipelineMode = string;
 export type PhaseStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'paused' | 'gate_waiting';
 
 export interface IssueRecord {
+  run?: import('../../../../shared/workbench').IssueRun;
   state: IssueState;
   currentPhase?: string;
   branchName: string;
@@ -57,6 +58,7 @@ export interface ProgressData {
 }
 
 export interface AgentLogEntry {
+  identity?: import('../../../../shared/workbench').ExecutionIdentity;
   type: string;
   phase?: string;
   timestamp: string;

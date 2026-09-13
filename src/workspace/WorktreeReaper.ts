@@ -2,9 +2,8 @@
  * WorktreeReaper — 已完成 issue 的 worktree 延迟清理。
  *
  * 系统默认不再于 issue 完成时立即删除 worktree，而是保留
- * config.worktree.retentionMs（默认 7 天）。本 reaper 周期性扫描各租户 tracker，
- * 将「保留期已满且尚未清理」的已完成 / 已部署 issue 的 worktree（含多仓 workspace
- * 根目录）清理掉；远端分支保留以便后续 PR。
+ * config.worktree.retentionMs（默认 7 天）。本 reaper 周期性扫描 tracker，
+ * 将「保留期已满且尚未清理」的已完成 / 已部署 issue 的 worktree（单仓工作目录）清理掉；远端分支保留以便后续 PR。
  *
  * 保留期内用户仍可重启预览、检查代码或修复冲突。失败态的 worktree 不在回收范围内
  * （保留以便调试），与既有行为一致。
@@ -21,7 +20,7 @@ const logger = rootLogger.child('WorktreeReaper');
 const REAPABLE_STATES = new Set<string>([IssueState.Completed]);
 
 export interface WorktreeReaperDeps {
-  /** 各租户的编排器，每个内部持有自己的 tracker 与清理能力。 */
+  /** 单实例编排器，每个内部持有自己的 tracker 与清理能力。 */
   orchestrator: PipelineOrchestrator;
   /** 扫描间隔（毫秒）。 */
   intervalMs: number;
@@ -96,6 +95,7 @@ export class WorktreeReaper {
     const reaped: number[] = [];
 
     try {
+      await this.orchestrator.cleanupExpiredTaskWorkspaces(this.retentionMs);
       const now = Date.now();
       { const orchestrator = this.orchestrator;
         const tracker = orchestrator.getTracker();
@@ -137,6 +137,7 @@ export class WorktreeReaper {
 
   /** 判定某条记录是否到达回收条件：终态 + 未清理 + 已超过保留期。 */
   private shouldReap(record: IssueRecord, now: number): boolean {
+    if (record.run?.recoveryRequired || Object.values(record.run?.calls ?? {}).some(call => call.status !== 'exited')) return false;
     if (!REAPABLE_STATES.has(record.state)) return false;
     if (record.worktreeCleanedAt) return false;
     if (!record.completedAt) return false;

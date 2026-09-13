@@ -1,7 +1,8 @@
 import type { AIRunner } from "./AIRunner.js";
-import { CodexRunner } from "./CodexRunner.js";
+import { ManagedCodexRunner, configureAIConcurrency } from "./ManagedCodexRunner.js";
 import { findExecutable } from "../utils/process.js";
 export interface AIConfig {
+  maxConcurrency?: number;
   mode: string;
   binary: string;
   phaseTimeoutMs: number;
@@ -20,7 +21,7 @@ export interface RunnerRegistryEntry {
 }
 const registry: Record<string, RunnerRegistryEntry> = {
   codex: {
-    ctor: CodexRunner,
+    ctor: ManagedCodexRunner,
     defaultBinary: "",
     binaryEnvKey: "CODEX_BINARY",
     capabilities: { nativePlanMode: true, planModeResumable: true },
@@ -65,6 +66,7 @@ export function validateRunnerRegistry(modes: string[]): void {
     if (!registry[mode]) throw new Error(`未注册执行器：${mode}`);
 }
 export function createAIRunner(ai: AIConfig): AIRunner {
+  if (ai.maxConcurrency !== undefined) configureAIConcurrency(ai.maxConcurrency);
   validateRunnerRegistry([ai.mode]);
   const entry = registry[ai.mode];
   return entry.factoryFn
