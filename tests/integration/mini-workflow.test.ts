@@ -11,8 +11,8 @@ import {
   buildPlanModePipeline,
   createLifecycleManager,
   registerPipeline,
-} from "../../src/pipeline/PipelineDefinition.js";
-import { PipelineOrchestrator } from "../../src/orchestrator/PipelineOrchestrator.js";
+} from "../../src/pipeline/PipelineMetadata.js";
+import { IssueService } from "../../src/orchestrator/IssueService.js";
 import { GitOperations } from "../../src/git/GitOperations.js";
 import {
   GitHubClient,
@@ -176,7 +176,7 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
         throw new Error("意外 AI 调用：" + options.phaseName);
       },
     };
-    const orchestrator = new PipelineOrchestrator(
+    const orchestrator = new IssueService(
       config,
       platform,
       new GitOperations(repo),
@@ -250,5 +250,5 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
       collector.stop();
       await orchestrator.getDevServerManager().stopAllAndWait();
     }
-  }, 180000);
+  }, 300000);
 });

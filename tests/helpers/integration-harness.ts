@@ -9,7 +9,7 @@ import { IssueTracker } from '../../src/tracker/IssueTracker.js';
 import {
   PLAN_MODE_PIPELINE,
   createLifecycleManager,
-} from '../../src/pipeline/PipelineDefinition.js';
+} from '../../src/pipeline/PipelineMetadata.js';
 import { ActionLifecycleManager } from '../../src/lifecycle/ActionLifecycleManager.js';
 
 

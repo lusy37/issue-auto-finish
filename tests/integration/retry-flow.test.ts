@@ -1,7 +1,7 @@
 vi.mock('../../src/orchestrator/DagPhaseRunner.js', () => ({ DagPhaseRunner: isolatedPhaseRunner((...args) => mockPhaseRun(...args)) }));
 import { isolatedPhaseRunner } from '../helpers/isolated-phase-runner.js';
 // 本组验证核心调度；真实 Git、UAT 及交付门禁由 mini-workflow 集成测试覆盖。
-vi.mock('../../src/orchestrator/steps/CompletionStep.js', () => ({ executeCompletion: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.updateState(ctx.issue.number, 'completed', {prUrl:pr.html_url,deliveryPending:false,completedAt:new Date().toISOString()}); } }));
+vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.updateState(ctx.issue.number, 'completed', {prUrl:pr.html_url,deliveryPending:false,completedAt:new Date().toISOString()}); } }));
 /**
  * 集成测试：失败重试流程
  *
@@ -98,7 +98,7 @@ vi.mock('node:util', async (importOriginal) => {
   };
 });
 
-const { PipelineOrchestrator } = await import('../../src/orchestrator/PipelineOrchestrator.js');
+const { IssueService } = await import('../../src/orchestrator/IssueService.js');
 
 describe('集成测试：失败重试流程', () => {
   let harness: IntegrationHarness;
@@ -120,7 +120,7 @@ describe('集成测试：失败重试流程', () => {
     // plan 阶段失败
     mockPhaseRun.mockRejectedValueOnce(new Error('AI runner crashed'));
 
-    const orchestrator = new PipelineOrchestrator(
+    const orchestrator = new IssueService(
       harness.config,
       harness.github as any,
       harness.git as any,
@@ -151,7 +151,7 @@ describe('集成测试：失败重试流程', () => {
     // 第一次执行：plan 阶段失败
     mockPhaseRun.mockRejectedValueOnce(new Error('Temporary failure'));
 
-    const orchestrator = new PipelineOrchestrator(
+    const orchestrator = new IssueService(
       harness.config,
       harness.github as any,
       harness.git as any,
@@ -187,7 +187,7 @@ describe('集成测试：失败重试流程', () => {
 
     const issue = createIntegrationTestIssue();
 
-    const orchestrator = new PipelineOrchestrator(
+    const orchestrator = new IssueService(
       harness.config,
       harness.github as any,
       harness.git as any,
@@ -227,7 +227,7 @@ describe('集成测试：失败重试流程', () => {
     // 首次执行：plan 阶段失败
     mockPhaseRun.mockRejectedValueOnce(new Error('crash'));
 
-    const orchestrator = new PipelineOrchestrator(
+    const orchestrator = new IssueService(
       harness.config,
       harness.github as any,
       harness.git as any,

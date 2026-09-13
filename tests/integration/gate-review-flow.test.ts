@@ -1,7 +1,7 @@
 vi.mock('../../src/orchestrator/DagPhaseRunner.js', () => ({ DagPhaseRunner: isolatedPhaseRunner((...args) => mockPhaseRun(...args)) }));
 import { isolatedPhaseRunner } from '../helpers/isolated-phase-runner.js';
 // 本组验证核心调度；真实 Git、UAT 及交付门禁由 mini-workflow 集成测试覆盖。
-vi.mock('../../src/orchestrator/steps/CompletionStep.js', () => ({ executeCompletion: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.updateState(ctx.issue.number, 'completed', {prUrl:pr.html_url,deliveryPending:false,completedAt:new Date().toISOString()}); } }));
+vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.updateState(ctx.issue.number, 'completed', {prUrl:pr.html_url,deliveryPending:false,completedAt:new Date().toISOString()}); } }));
 /**
  * 集成测试：Gate 审核流程 (plan-mode)
  *
@@ -99,7 +99,7 @@ vi.mock('node:util', async (importOriginal) => {
   };
 });
 
-const { PipelineOrchestrator } = await import('../../src/orchestrator/PipelineOrchestrator.js');
+const { IssueService } = await import('../../src/orchestrator/IssueService.js');
 
 describe('集成测试：Gate 审核流程', () => {
   let harness: IntegrationHarness;
@@ -117,7 +117,7 @@ describe('集成测试：Gate 审核流程', () => {
 
     const issue = createIntegrationTestIssue();
 
-    const orchestrator = new PipelineOrchestrator(
+    const orchestrator = new IssueService(
       harness.config,
       harness.github as any,
       harness.git as any,
@@ -134,7 +134,7 @@ describe('集成测试：Gate 审核流程', () => {
     expect(mockPhaseRun).toHaveBeenCalledTimes(1);
 
     // 模拟用户批准
-    harness.tracker.updateState(issue.number, IssueState.PhaseApproved, { currentPhase: 'review' });
+    await orchestrator.applyGateAction(issue.number, { action: 'approve' }, harness.tracker.get(issue.number)!.run!.planRevision);
 
     const recordApproved = harness.tracker.get(issue.number);
     expect(recordApproved!.state).toBe(IssueState.PhaseApproved);
@@ -146,7 +146,7 @@ describe('集成测试：Gate 审核流程', () => {
     const finalRecord = harness.tracker.get(issue.number);
     expect(finalRecord!.state).toBe(IssueState.Completed);
     // 恢复后应执行 build + verify = 2 个阶段
-    expect(mockPhaseRun).toHaveBeenCalledTimes(2);
+    expect(mockPhaseRun).toHaveBeenCalledTimes(3);
   });
 
   it('驳回后从头重新规划', async () => {
@@ -154,7 +154,7 @@ describe('集成测试：Gate 审核流程', () => {
 
     const issue = createIntegrationTestIssue();
 
-    const orchestrator = new PipelineOrchestrator(
+    const orchestrator = new IssueService(
       harness.config,
       harness.github as any,
       harness.git as any,
@@ -169,10 +169,10 @@ describe('集成测试：Gate 审核流程', () => {
     expect(recordPaused!.state).toBe(IssueState.PhaseWaiting);
 
     // 模拟用户驳回：将状态重置到 BranchCreated（模拟 CommandExecutor.handleReject）
-    harness.tracker.updateState(issue.number, IssueState.BranchCreated);
+    await orchestrator.applyGateAction(issue.number, { action: 'reject', feedback: '增加边界处理' }, harness.tracker.get(issue.number)!.run!.planRevision);
 
     const recordRejected = harness.tracker.get(issue.number);
-    expect(recordRejected!.state).toBe(IssueState.BranchCreated);
+    expect(recordRejected!.state).toBe(IssueState.Pending);
 
     // 第二次调用：从 BranchCreated 重新开始（plan → review gate 再次暂停）
     vi.clearAllMocks();
@@ -194,7 +194,7 @@ describe('集成测试：Gate 审核流程', () => {
       labels: ['auto-finish', 'fast-track'],
     });
 
-    const orchestrator = new PipelineOrchestrator(
+    const orchestrator = new IssueService(
       harness.config,
       harness.github as any,
       harness.git as any,
@@ -208,7 +208,7 @@ describe('集成测试：Gate 审核流程', () => {
     // 应该直接完成，不暂停
     expect(record!.state).toBe(IssueState.Completed);
     // plan + build + verify = 3
-    expect(mockPhaseRun).toHaveBeenCalledTimes(3);
+    expect(mockPhaseRun).toHaveBeenCalledTimes(4);
   });
 
   it('auto-approve 标签不匹配时仍暂停', async () => {
@@ -220,7 +220,7 @@ describe('集成测试：Gate 审核流程', () => {
       labels: ['auto-finish'], // 不含 fast-track
     });
 
-    const orchestrator = new PipelineOrchestrator(
+    const orchestrator = new IssueService(
       harness.config,
       harness.github as any,
       harness.git as any,

@@ -7,11 +7,11 @@ import { PlanPersistence } from '../persistence/PlanPersistence.js';
 
 import { Config } from '../config.js';
 
-import type { PortPair } from '../deploy/PortAllocator.js';
+import type { PortPair } from '../preview/PortAllocator.js';
 import type { DemandSpec } from '../demand/DemandSpec.js';
 import type { WorkspaceLayout } from '../prompts/templates.js';
 import type { PhaseCallbacks } from './PhaseCallbacks.js';
-import type { PhaseIntent, PhaseError, ArtifactRef } from '../orchestration/Intent.js';
+import type { PhaseResult, PhaseError, ArtifactRef } from '../orchestration/PhaseResult.js';
 import { logger as rootLogger, Logger } from '../logger.js';
 import { t } from '../i18n/index.js';
 
@@ -44,7 +44,7 @@ export interface PhaseContext {
  * 阶段抽象基类 — 纯逻辑执行，零编排副作用。
  *
  * 阶段约定：
- * - run() 返回 PhaseIntent（completed / failed / awaitGate / awaitAsync / requestRetryFrom）。
+ * - run() 返回 PhaseResult（completed / failed / awaitGate / awaitAsync / requestRetryFrom）。
  * - 阶段内部不直接调用 tracker / eventBus / git commit / GitHub评论，
  *   这些副作用由编排器根据返回的 Intent 驱动。
  * - 阶段可以读写自己的产物文件（plan.writeFile）和会话 ID（plan.updatePhaseSessionId）。
@@ -94,7 +94,7 @@ export abstract class BasePhase {
    * 子类可 override 此方法以表达更丰富的意图（如 VerifyPhase 返回 requestRetryFrom，
    * 审核阶段返回 awaitGate）。默认行为：成功 → completed，失败 → failed。
    */
-  async run(ctx: PhaseContext, callbacks?: PhaseCallbacks): Promise<PhaseIntent> {
+  async run(ctx: PhaseContext, callbacks?: PhaseCallbacks): Promise<PhaseResult> {
     const displayId = Number(ctx.demand.sourceRef.displayId);
     const expectedResultFiles = this.getResultFiles(ctx);
 

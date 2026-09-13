@@ -28,23 +28,23 @@ import {
   type PhaseSpec,
   type ReducerSideEffect,
   type SideEffectExecutor,
-} from '../../src/orchestration/index.js';
-import { PlanPersistence } from '../../src/persistence/PlanPersistence.js';
-import { VerifyPhase } from '../../src/phases/VerifyPhase.js';
-import { BuildPhase } from '../../src/phases/BuildPhase.js';
+} from '../../orchestration/index.js';
+import { PlanPersistence } from '../../../../src/persistence/PlanPersistence.js';
+import { VerifyPhase } from '../../../../src/phases/VerifyPhase.js';
+import { BuildPhase } from '../../../../src/phases/BuildPhase.js';
 import {
   ScriptedAIRunner,
   successScript,
   writeArtifact,
-} from '../helpers/scripted-ai-runner.js';
-import { createMockGitOperations, createTestConfig } from '../helpers/mock-factories.js';
+} from '../../../helpers/scripted-ai-runner.js';
+import { createMockGitOperations, createTestConfig } from '../../../helpers/mock-factories.js';
 
-vi.mock('../../src/knowledge/index.js', () => ({
+vi.mock('../../../../src/knowledge/index.js', () => ({
   getProjectKnowledge: vi.fn().mockReturnValue(null),
 }));
 
 let mockDataDir: string;
-vi.mock('../../src/paths.js', () => ({
+vi.mock('../../../../src/paths.js', () => ({
   resolveDataDir: () => mockDataDir,
 }));
 

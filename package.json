@@ -58,6 +58,8 @@
     "test:windows": "vitest run tests/integration/windows-preview.test.ts"
   },
   "dependencies": {
+    "@langchain/core": "1.1.48",
+    "@langchain/langgraph": "1.4.15",
     "@openai/codex-sdk": "0.154.0",
     "@playwright/test": "^1.58.0",
     "@types/diff": "^7.0.2",

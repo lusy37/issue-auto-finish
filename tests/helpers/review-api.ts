@@ -1,10 +1,11 @@
+import { suspendAtReview } from './native-review.js';
 import express from 'express';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { Server } from 'node:http';
 import { createApiRouter } from '../../src/web/routes/api.js';
-import { PipelineOrchestrator } from '../../src/orchestrator/PipelineOrchestrator.js';
+import { IssueService } from '../../src/orchestrator/IssueService.js';
 import { IssueState } from '../../src/tracker/IssueState.js';
 import { PlanPersistence } from '../../src/persistence/PlanPersistence.js';
 import { newTracker } from './dag-repository.js';
@@ -21,15 +22,16 @@ export async function reviewApi(subdir = '') {
   const config = createTestConfig();
   Object.assign(config.project, { workDir: directory, gitRootDir: directory, worktreeBaseDir: path.join(directory, 'worktrees'), projectSubDir: subdir });
   const github = createMockGitHubClient();
-  const orchestrator = new PipelineOrchestrator(config, github as never, createMockGitOperations() as never, createMockAIRunner(), tracker);
+  const orchestrator = new IssueService(config, github as never, createMockGitOperations() as never, createMockAIRunner(), tracker);
   tracker.create({ state: IssueState.PhaseWaiting, currentPhase: 'review', branchName: 'iaf-42', pipelineMode: 'plan-mode',
     demandSpec: { demandId: 'gh-42', sourceRef: { source: 'github-issue', externalId: '42', displayId: '42' }, title: '实现页面', description: '父需求快照', createdAt: new Date().toISOString() } });
-  const newPlan = (description = '补充页面、错误处理和边界测试') => {
+  const newPlan = async (description = '补充页面、错误处理和边界测试') => {
     const plan = tracker.store.savePlan(42, JSON.parse(structuredPlanOutput(description)), tracker.get(42)!.run!.version);
     tracker.updateState(42, IssueState.PhaseWaiting, { currentPhase: 'review' });
+    await suspendAtReview(tracker, 42);
     return plan;
   };
-  newPlan();
+  await newPlan();
   const persistence = new PlanPersistence(directory, 42, data, tracker);
   const app = express(); app.use(express.json());
   app.use(createApiRouter({ tracker, config, github, orchestrator, agentLogStore: { getLogs: () => [] } as never, supplementStore: undefined as never }));

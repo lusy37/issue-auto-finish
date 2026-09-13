@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
 import { IssueState } from '../../src/tracker/IssueState.js';
-import { PLAN_MODE_PIPELINE, createLifecycleManager } from '../../src/pipeline/PipelineDefinition.js';
+import { PLAN_MODE_PIPELINE, createLifecycleManager } from '../../src/pipeline/PipelineMetadata.js';
 import type { TaskDefinition } from '../../src/dag/contracts.js';
 import { GitOperations } from '../../src/git/GitOperations.js';
 import { AsyncMutex } from '../../src/utils/AsyncMutex.js';

@@ -4,12 +4,14 @@
 
 六个入口：任务工作台、需求草稿、知识与经验、蒸馏、任务统计、设置。固定流程为 plan → review → build → verify → uat。一个草稿创建一个 Issue；计划包含 1～20 个内部任务，统一审核后在 build 中按依赖并行执行，汇总后绑定同一提交完成验证和浏览器验收，最后更新该 Issue 唯一的 PR、回写 Issue 并采集经验。
 
+当前分支使用 LangGraph 原生工作流，详见 [迁移说明与学习入口](docs/langgraph-native.md)。审核中断、检查点恢复、节点重试和 build 内的依赖调度由框架负责。
+
 ## 快速演示
 
 需要 Node.js ≥22.12、Git 和可用浏览器。本轮 DAG 验收使用 Windows、Edge；依赖版本由 package-lock.json 锁定。
 
 ~~~powershell
-cd E:\Edge_Load\issue-auto-finish
+cd E:\Edge_Load\issue-auto-finish\.iaf-mini\worktrees\langgraph-native
 npm ci
 npm run e2e:install
 npm run build
@@ -17,7 +19,7 @@ npm run web:build
 npm run demo
 ~~~
 
-打开 http://127.0.0.1:3000，在任务工作台手动启动演示 Issue，打开详情查看计划并审核通过。演示使用模拟 GitHub 与 AI，Git、状态持久化和浏览器验收真实执行；数据写入 .iaf-mini/demo-dag-v2。同时保留其他演示实例时，分别设置 `IAF_DEMO_PORT` 和 `IAF_DEMO_PLATFORM_PORT` 为未占用端口；端口冲突会报错停止。使用本机 Edge 时先设置 $env:IAF_TEST_BROWSER_CHANNEL='msedge'。
+打开 http://127.0.0.1:3000，在任务工作台手动启动演示 Issue，打开详情查看计划并审核通过。演示使用模拟 GitHub 与 AI，Git、状态持久化和浏览器验收真实执行；数据写入 .iaf-mini/demo-langgraph-v3。同时保留其他演示实例时，分别设置 `IAF_DEMO_PORT` 和 `IAF_DEMO_PLATFORM_PORT` 为未占用端口；端口冲突会报错停止。使用本机 Edge 时先设置 $env:IAF_TEST_BROWSER_CHANNEL='msedge'。
 
 ## 连接真实仓库
 

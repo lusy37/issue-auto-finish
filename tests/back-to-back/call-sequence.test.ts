@@ -15,7 +15,7 @@ import { IssueTracker } from '../../src/tracker/IssueTracker.js';
 import { IssueState } from '../../src/tracker/IssueState.js';
 import {
   PLAN_MODE_PIPELINE,
-} from '../../src/pipeline/PipelineDefinition.js';
+} from '../../src/pipeline/PipelineMetadata.js';
 
 // ---------------------------------------------------------------------------
 // Harness (minimal, focused on call sequence recording)

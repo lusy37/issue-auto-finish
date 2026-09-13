@@ -1,5 +1,5 @@
 /**
- * 从 PhaseLoopStep 提取的编排级辅助函数。
+ * 从 RunWorkflowStep 提取的编排级辅助函数。
  *
  * 供阶段副作用执行器和交付步骤共用。
  */
@@ -32,13 +32,20 @@ export async function syncResultToIssue(
   deps: OrchestratorDeps,
   issueId: number,
   wtPlan: PlanPersistence,
+  operation?: string,
 ): Promise<void> {
   try {
+    const notes = operation ? await deps.github.listIssueNotes(issueId) : [];
+    const commentOnce = async (key: string, body: string) => {
+      const marker = operation ? `<!-- iaf-phase:${operation}:${key} -->` : '';
+      if (marker && notes.some(note => note.body.includes(marker))) return;
+      await safeComment(deps, issueId, marker ? `${body}\n${marker}` : body);
+    };
     const enabled = isNoteSyncEnabledForIssue(displayId, deps.tracker, deps.config);
     const resultFiles = phase.getResultFiles(ctx);
 
     if (!enabled || resultFiles.length === 0) {
-      await safeComment(deps, issueId, issueProgressComment(phaseName, 'completed'));
+      await commentOnce('summary', issueProgressComment(phaseName, 'completed'));
       return;
     }
 
@@ -56,23 +63,11 @@ export async function syncResultToIssue(
         phaseName, file.label || phaseLabel, docUrl, dashboardUrl, summary,
       );
 
-      await safeComment(deps, issueId, comment);
+      await commentOnce(file.filename, comment);
       logger.info('Result synced to issue', { issueIid: displayId, file: file.filename });
     }
   } catch (err) {
     logger.warn('Failed to sync result to issue', { error: (err as Error).message });
-    await safeComment(deps, issueId, issueProgressComment(phaseName, 'completed'));
+    if (!operation) await safeComment(deps, issueId, issueProgressComment(phaseName, 'completed'));
   }
-}
-
-// ── 工具函数 ──
-
-export function findPreviousAiPhaseIndex(
-  phases: readonly { kind: string }[],
-  currentIdx: number,
-): number {
-  for (let j = currentIdx - 1; j >= 0; j--) {
-    if (phases[j].kind === 'ai') return j;
-  }
-  return -1;
 }

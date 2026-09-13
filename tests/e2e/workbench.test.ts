@@ -1,3 +1,4 @@
+import { suspendAtReview } from '../helpers/native-review.js';
 import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { it, expect, vi } from "vitest";
 import { chromium, expect as browserExpect, type Request } from "@playwright/test";
@@ -10,8 +11,8 @@ import {
   buildPlanModePipeline,
   registerPipeline,
   createLifecycleManager,
-} from "../../src/pipeline/PipelineDefinition.js";
-import { PipelineOrchestrator } from "../../src/orchestrator/PipelineOrchestrator.js";
+} from "../../src/pipeline/PipelineMetadata.js";
+import { IssueService } from "../../src/orchestrator/IssueService.js";
 import { GitHubClient } from "../../src/clients/GitHubClient.js";
 import { GitOperations } from "../../src/git/GitOperations.js";
 import { SupplementStore } from "../../src/supplement/SupplementStore.js";
@@ -72,6 +73,7 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
   tracker.initPhaseProgress(1, pipeline);
   tracker.updatePhaseProgress(1, "plan", { status: "completed" });
   tracker.updatePhaseProgress(1, "review", { status: "gate_waiting" });
+  await suspendAtReview(tracker, 1);
   const plan = new PlanPersistence(
     path.join(config.project.worktreeBaseDir, "issue-1"),
     1,
@@ -142,7 +144,7 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
       confidenceThreshold: 0.7,
     }),
   });
-  const orchestrator = new PipelineOrchestrator(
+  const orchestrator = new IssueService(
     config,
     platform,
     new GitOperations(dir),
@@ -355,6 +357,10 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
         2,
       ),
     );
+  } catch (error) {
+    await page.screenshot({ path: path.join(dir, '失败现场.png'), fullPage: true }).catch(() => {});
+    fs.writeFileSync(path.join(dir, '失败现场.json'), JSON.stringify({ url: page.url(), errors, body: await page.locator('body').innerText().catch(() => ''), issue: tracker.get(1) }, null, 2));
+    throw error;
   } finally {
     await browser.close();
     web.stop();

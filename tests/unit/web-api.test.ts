@@ -7,7 +7,7 @@ import express from 'express';
 import http from 'node:http';
 import { createApiRouter } from '../../src/web/routes/api.js';
 import { createMockIssueTracker, createMockGitOperations, createTestConfig } from '../helpers/mock-factories.js';
-import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineDefinition.js';
+import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 import type { IssueRecord } from '../../src/tracker/IssueState.js';
 
 function createTestRecord(overrides?: Partial<IssueRecord>): IssueRecord {

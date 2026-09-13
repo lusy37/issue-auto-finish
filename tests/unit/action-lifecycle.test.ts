@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { IssueState } from '../../src/tracker/IssueState.js';
-import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineDefinition.js';
+import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 import { ActionLifecycleManager } from '../../src/lifecycle/ActionLifecycleManager.js';
 
 const OLD_TERMINAL_STATES = new Set([IssueState.Completed, IssueState.Failed, IssueState.Skipped, IssueState.Cancelled, IssueState.Deployed]);

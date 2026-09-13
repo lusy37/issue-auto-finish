@@ -9,8 +9,7 @@ import { validatePlan, type PlanContent, newIssueRun } from '../../src/dag/contr
 import { writeJsonAtomicSync } from '../../src/utils/atomicFile.js';
 import { ConcurrencyLimiter } from '../../src/ai-runner/ConcurrencyLimiter.js';
 import { scopedRunner } from '../../src/dag/ScopedRunner.js';
-import { TrackerStateStore } from '../../src/orchestrator/TrackerStateStore.js';
-import { createLifecycleManager, PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineDefinition.js';
+import { createLifecycleManager, PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 import { eventBus } from '../../src/events/EventBus.js';
 
 let directory: string;
@@ -61,10 +60,9 @@ describe('聚合事务与不可变计划', () => {
   });
   it('父状态、历史和阶段进度在同一版本提交，磁盘故障不发送事件', () => {
     const tracked = tracker(); tracked.create(record(1));
-    const adapter = new TrackerStateStore(tracked);
-    adapter.transitionToRunning(1, 'plan', '2026-01-01T00:00:00Z');
+    tracked.updateState(1, IssueState.PhaseRunning, { currentPhase: 'plan' });
     const version = tracked.get(1)!.run!.version;
-    adapter.applyTransition(1, { nextState: { kind: 'running', phaseId: 'review' }, nextAttempts: 0, historyEntry: { phaseId: 'plan', attemptId: 1, startedAt: '2026-01-01T00:00:00Z', outcome: 'completed' } });
+    tracked.transaction(1, record => { record.state = IssueState.PhaseDone; record.phaseProgress = { plan: { status: 'completed' } }; record.phaseHistory = [{ phaseId: 'plan', attemptId: 1, startedAt: '2026-01-01T00:00:00Z', outcome: 'completed' }]; });
     const current = tracked.get(1)!;
     expect(current.run!.version).toBe(version + 1);
     expect(current.phaseHistory).toHaveLength(1);

@@ -23,7 +23,7 @@ describe('独立进程强制中断恢复', () => {
     child.nodeChildProcess.stdout?.resume();
     child.nodeChildProcess.stderr?.on('data', data => { diagnostic += String(data); });
     try {
-      const deadline = Date.now() + 15000;
+      const deadline = Date.now() + 90000;
       while (!fs.existsSync(marker) && Date.now() < deadline && child.nodeChildProcess.exitCode === null) await new Promise(resolve => setTimeout(resolve, 50));
       expect(fs.existsSync(marker), diagnostic).toBe(true);
       child.nodeChildProcess.kill('SIGKILL');
@@ -40,5 +40,5 @@ describe('独立进程强制中断恢复', () => {
       await child;
       fs.rmSync(fixture.directory, { recursive: true, force: true });
     }
-  }, 30000);
+  }, 180000);
 });

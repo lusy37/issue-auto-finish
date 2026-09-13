@@ -1,7 +1,7 @@
-import { renderPlan } from '../dag/contracts.js';
-import type { IssueTracker } from '../tracker/IssueTracker.js';
-import { IssueState } from '../tracker/IssueState.js';
-import type { PlanPersistence } from '../persistence/PlanPersistence.js';
+import { renderPlan } from '../../../src/dag/contracts.js';
+import type { IssueTracker } from '../../../src/tracker/IssueTracker.js';
+import { IssueState } from '../../../src/tracker/IssueState.js';
+import type { PlanPersistence } from '../../../src/persistence/PlanPersistence.js';
 import type { OrchestratorStateStore, OrchestrationStateSnapshot, OrchestrationTransition, OrchestrationState } from '../orchestration/index.js';
 import { recordToOrchestrationState, orchestrationStateToTrackerUpdate } from './StateAdapter.js';
 

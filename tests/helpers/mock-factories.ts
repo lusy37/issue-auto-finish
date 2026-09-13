@@ -97,7 +97,9 @@ export function createMockAIRunner() {
   };
 }
 
+let mockStoreSequence = 0;
 export function createMockIssueTracker() {
+  const storeId = ++mockStoreSequence;
   const tracker = {
     transaction: vi.fn((number: number, update: (record: any) => void) => {
       const record = tracker.get(number);
@@ -108,6 +110,9 @@ export function createMockIssueTracker() {
     }),
     assertIdentity: vi.fn(),
     store: {
+      file: (number: number) => 'mock-store-' + storeId + '/' + number,
+      get: (number: number) => tracker.get(number),
+      transaction: (number: number, update: (record: any) => void) => tracker.transaction(number, update),
       dataDir: process.env.DATA_DIR!, isBlocked: vi.fn().mockReturnValue(false),
       savePlan: vi.fn((number: number, content: PlanContent) => {
         const record = tracker.get(number); record.run ??= newIssueRun();

@@ -4,7 +4,7 @@ import { IssueTracker } from '../tracker/IssueTracker.js';
 import { IssueRecord, IssueState } from '../tracker/IssueState.js';
 import { getIssueNumber } from '../tracker/IssueRecordHelper.js';
 import { githubIssueToDemandSpec } from '../demand/adapters/GitHubAdapter.js';
-import { PipelineOrchestrator } from '../orchestrator/PipelineOrchestrator.js';
+import { IssueService } from '../orchestrator/IssueService.js';
 import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
 import { logger as rootLogger } from '../logger.js';
 import { t } from '../i18n/index.js';
@@ -20,7 +20,7 @@ export class IssuePoller {
   private config: Config;
   private github: GitHubClient;
   private tracker: IssueTracker;
-  private orchestrator: PipelineOrchestrator;
+  private orchestrator: IssueService;
   private discoveryTimer: ReturnType<typeof setInterval> | null = null;
   private driveTimer: ReturnType<typeof setInterval> | null = null;
   private activeIssues = new Set<number>();
@@ -33,7 +33,7 @@ export class IssuePoller {
     config: Config,
     github: GitHubClient,
     tracker: IssueTracker,
-    orchestrator: PipelineOrchestrator,
+    orchestrator: IssueService,
   ) {
     this.config = config;
     this.github = github;

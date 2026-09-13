@@ -1,9 +1,10 @@
+import { suspendAtReview } from '../helpers/native-review.js';
 import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { newIssueRun } from '../../src/dag/contracts.js';
 vi.mock('../../src/orchestrator/DagPhaseRunner.js', () => ({ DagPhaseRunner: isolatedPhaseRunner((...args) => mockPhaseRun(...args)) }));
 import { isolatedPhaseRunner } from '../helpers/isolated-phase-runner.js';
 // 本组验证核心调度；真实 Git、UAT 及交付门禁由 mini-workflow 集成测试覆盖。
-vi.mock('../../src/orchestrator/steps/CompletionStep.js', () => ({ executeCompletion: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.updateState(ctx.issue.number, 'completed', {prUrl:pr.html_url,deliveryPending:false,completedAt:new Date().toISOString()}); } }));
+vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.updateState(ctx.issue.number, 'completed', {prUrl:pr.html_url,deliveryPending:false,completedAt:new Date().toISOString()}); } }));
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueState } from '../../src/tracker/IssueState.js';
@@ -116,9 +117,9 @@ vi.mock('node:util', async (importOriginal) => {
   };
 });
 
-const { PipelineOrchestrator } = await import('../../src/orchestrator/PipelineOrchestrator.js');
+const { IssueService } = await import('../../src/orchestrator/IssueService.js');
 
-describe('PipelineOrchestrator', () => {
+describe('IssueService', () => {
   let config = createTestConfig();
   let mockGitHub = createMockGitHubClient();
   let mockMainGit = createMockGitOperations();
@@ -190,7 +191,7 @@ describe('PipelineOrchestrator', () => {
   });
 
   function createOrchestrator(overrideConfig?: any) {
-    return new PipelineOrchestrator(
+    return new IssueService(
       overrideConfig || config,
       mockGitHub as any,
       mockMainGit as any,
@@ -340,7 +341,7 @@ describe('PipelineOrchestrator', () => {
       const orchestrator = createOrchestrator(cfg);
       await orchestrator.processIssue(issue);
 
-      expect(mockPhaseRun).toHaveBeenCalledTimes(3);
+      expect(mockPhaseRun).toHaveBeenCalledTimes(4);
       const finalRecord = mockTracker.get(issue.number);
       expect(finalRecord?.state).toBe(IssueState.Completed);
       expect(finalRecord?.prUrl).toEqual(expect.any(String));
@@ -382,8 +383,11 @@ describe('PipelineOrchestrator', () => {
 
       const orchestrator = createOrchestrator();
       await orchestrator.processIssue(issue);
+      await orchestrator.applyGateAction(issue.number, { action: 'approve' }, mockTracker.get(issue.number)!.run!.planRevision);
+      vi.clearAllMocks();
+      await orchestrator.processIssue(issue);
 
-      expect(mockPhaseRun).toHaveBeenCalledTimes(2);
+      expect(mockPhaseRun).toHaveBeenCalledTimes(3);
       const finalRecord = mockTracker.get(issue.number);
       expect(finalRecord?.state).toBe(IssueState.Completed);
       expect(finalRecord?.prUrl).toEqual(expect.any(String));
@@ -480,7 +484,7 @@ describe('PipelineOrchestrator', () => {
     });
   });
 
-  describe('applyGateAction (review gate approve via正统 Reducer 路径)', () => {
+  describe('applyGateAction（LangGraph 原生审核恢复）', () => {
     function captureEvent(name: string): Array<EventPayload<never>> {
       const events: Array<EventPayload<never>> = [];
       const listener = (payload: EventPayload<never>) => events.push(payload);
@@ -508,6 +512,7 @@ describe('PipelineOrchestrator', () => {
 
       const orchestrator = createOrchestrator();
       mockTracker.store.savePlan(42, JSON.parse(structuredPlanOutput()));
+      await suspendAtReview(mockTracker as any, 42);
       await orchestrator.applyGateAction(42, { action: 'approve' }, 1);
 
       const record = mockTracker.get(42);
@@ -576,10 +581,11 @@ describe('PipelineOrchestrator', () => {
 
       const orchestrator = createOrchestrator();
       mockTracker.store.savePlan(42, JSON.parse(structuredPlanOutput()));
+      await suspendAtReview(mockTracker as any, 42);
       await orchestrator.applyGateAction(42, { action: 'reject', feedback: '需要补充错误处理' }, 1);
 
       const record = mockTracker.get(42);
-      expect(record?.state).toBe(IssueState.BranchCreated);
+      expect(record?.state).toBe(IssueState.Pending);
       expect(record?.currentPhase).toBeUndefined();
       expect(record?.orchestrationState).toEqual({ kind: 'queued' });
 

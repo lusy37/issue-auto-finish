@@ -1,0 +1,897 @@
+{
+  "recordedAt": "2026-09-13T13:02:49.178Z",
+  "branch": "codex/langgraph-native",
+  "baselineCommit": "dee9fe4972cf880def3e1a963cbeeb26d5713492",
+  "verifiedFiles": {
+    "count": 345,
+    "sha256": "d73c34b469fa99015c8cff8119ee7a9680f379a31570f87f17abc3954a7c1c2c",
+    "scope": "Git 跟踪的 src、scripts、tests、依赖清单及 TypeScript/Vitest 配置；按路径排序后依次散列路径、零字节、原始内容、零字节。"
+  },
+  "environment": {
+    "platform": "win32",
+    "node": "v22.18.0",
+    "browserChannel": "chrome"
+  },
+  "checks": [
+    {
+      "command": "npm run typecheck",
+      "passed": true,
+      "log": ".iaf-mini/native-validation/acceptance-typecheck.log"
+    },
+    {
+      "command": "npm run build",
+      "passed": true,
+      "log": ".iaf-mini/native-validation/acceptance-build.log"
+    },
+    {
+      "command": "npm run web:build",
+      "passed": true,
+      "log": ".iaf-mini/native-validation/web-build.log"
+    },
+    {
+      "command": "$env:IAF_TEST_BROWSER_CHANNEL='chrome'; node node_modules/vitest/vitest.mjs run --maxWorkers=1 --testTimeout=180000 --hookTimeout=60000 --reporter=dot --reporter=json --outputFile=.iaf-mini/native-validation/acceptance.json",
+      "passed": false,
+      "log": ".iaf-mini/native-validation/acceptance.log",
+      "report": ".iaf-mini/native-validation/acceptance.json"
+    },
+    {
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/uat-results.test.ts --maxWorkers=1 --testTimeout=180000 --hookTimeout=60000 --reporter=dot --reporter=json --outputFile=.iaf-mini/native-validation/acceptance-uat-recheck.json",
+      "passed": true,
+      "log": ".iaf-mini/native-validation/acceptance-uat-recheck.log",
+      "report": ".iaf-mini/native-validation/acceptance-uat-recheck.json"
+    }
+  ],
+  "acceptance": {
+    "startedAt": "2026-09-13T12:02:16.423Z",
+    "finishedAt": "2026-09-13T13:00:15.012Z",
+    "files": 109,
+    "tests": 1017,
+    "passed": 1017,
+    "failed": 0,
+    "pending": 0,
+    "todo": 0,
+    "fullRun": {
+      "files": 109,
+      "tests": 1017,
+      "passed": 1016,
+      "failed": 1,
+      "durationMs": 3290795.6123046875
+    },
+    "targetedRecheck": {
+      "files": 1,
+      "tests": 1,
+      "passed": 1,
+      "failed": 0
+    },
+    "note": "完整执行 109 个测试文件后，唯一失败是 UAT 成功样例超过夹具的 20 秒进程启动时限。仅将该夹具进程等待改为 60 秒、整项等待改为 300 秒，保留 Playwright 的 200ms 测试超时和全部结果断言，随后复验原文件。生产代码未再修改；这里统计完整运行与定向复验合并后的覆盖，不声称首轮全绿。",
+    "referenceContracts": {
+      "files": 8,
+      "tests": 78,
+      "passed": 78,
+      "note": "冻结的旧引擎契约参考，不作为 LangGraph 运行时验收；公共业务模块仍为当前实现。"
+    },
+    "currentImplementation": {
+      "files": 101,
+      "tests": 939,
+      "passed": 939
+    },
+    "nativeWorkflowCases": [
+      {
+        "name": "LangGraph 原生持久化和人工介入 审核中断跨实例保存；批准只恢复审核，下一次驱动只执行剩余节点",
+        "passed": true
+      },
+      {
+        "name": "LangGraph 原生持久化和人工介入 驳回绑定不可变版本，保留完整计划与反馈，重新规划后再次中断",
+        "passed": true
+      },
+      {
+        "name": "LangGraph 原生持久化和人工介入 同一审核只能决定一次，重复并发批准不会推进两次",
+        "passed": true
+      },
+      {
+        "name": "LangGraph 原生持久化和人工介入 节点自动重试使用持久预算；耗尽后显式重试只增加一次执行",
+        "passed": true
+      },
+      {
+        "name": "LangGraph 原生持久化和人工介入 阶段成功后检查点写入失败，重启复用已提交结果，不重复调用 AI",
+        "passed": true
+      },
+      {
+        "name": "LangGraph 原生持久化和人工介入 拒绝读取旧聚合格式，不自动迁移或改写原文件",
+        "passed": true
+      },
+      {
+        "name": "LangGraph 原生持久化和人工介入 手动回退创建新图轮次，只重跑目标及下游，旧执行器不能覆盖新检查点",
+        "passed": true
+      },
+      {
+        "name": "LangGraph 原生持久化和人工介入 取消在途阶段后保留检查点，暂停继续重入未完成节点且不重复上游",
+        "passed": true
+      },
+      {
+        "name": "LangGraph 原生持久化和人工介入 修复额度耗尽进入人工失败状态，不滞留运行中或重新循环",
+        "passed": true
+      },
+      {
+        "name": "LangGraph 原生持久化和人工介入 审核事务成功后检查点写入失败，重启不重复审核且继续剩余节点",
+        "passed": true
+      }
+    ],
+    "testFiles": [
+      {
+        "path": "tests/architecture/no-phase-name-switch.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 2,
+        "passed": 2
+      },
+      {
+        "path": "tests/back-to-back/call-sequence.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 5,
+        "passed": 5
+      },
+      {
+        "path": "tests/contracts/ai-output-contracts.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 18,
+        "passed": 18
+      },
+      {
+        "path": "tests/contracts/phase-intents.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 4,
+        "passed": 4
+      },
+      {
+        "path": "tests/e2e/workbench.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 1,
+        "passed": 1
+      },
+      {
+        "path": "tests/integration/configured-phase-loop.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 9,
+        "passed": 9
+      },
+      {
+        "path": "tests/integration/dag-crash-recovery.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 5,
+        "passed": 5
+      },
+      {
+        "path": "tests/integration/dag-delivery.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 10,
+        "passed": 10
+      },
+      {
+        "path": "tests/integration/dag-execution.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 8,
+        "passed": 8
+      },
+      {
+        "path": "tests/integration/gate-phase-isolation.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 9,
+        "passed": 9
+      },
+      {
+        "path": "tests/integration/gate-review-flow.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 4,
+        "passed": 4
+      },
+      {
+        "path": "tests/integration/knowledge-feature-switches.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 4,
+        "passed": 4
+      },
+      {
+        "path": "tests/integration/langgraph-native.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 10,
+        "passed": 10
+      },
+      {
+        "path": "tests/integration/mini-workflow.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 1,
+        "passed": 1
+      },
+      {
+        "path": "tests/integration/phase-ai-integration.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 7,
+        "passed": 7
+      },
+      {
+        "path": "tests/integration/pipeline-flow.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 4,
+        "passed": 4
+      },
+      {
+        "path": "tests/integration/plan-diff-api.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 5,
+        "passed": 5
+      },
+      {
+        "path": "tests/integration/process-lifecycle.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 7,
+        "passed": 7
+      },
+      {
+        "path": "tests/integration/reject-plan-feedback-flow.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 7,
+        "passed": 7
+      },
+      {
+        "path": "tests/integration/reject-plan-orchestrator-e2e.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 2,
+        "passed": 2
+      },
+      {
+        "path": "tests/integration/reject-plan-worktree-missing.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 5,
+        "passed": 5
+      },
+      {
+        "path": "tests/integration/retry-flow.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 4,
+        "passed": 4
+      },
+      {
+        "path": "tests/integration/review-history-backup-fallback.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 1,
+        "passed": 1
+      },
+      {
+        "path": "tests/integration/review-history-path.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 2,
+        "passed": 2
+      },
+      {
+        "path": "tests/integration/uat-project-runtime.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 1,
+        "passed": 1
+      },
+      {
+        "path": "tests/integration/uat-results.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance-uat-recheck",
+        "tests": 1,
+        "passed": 1
+      },
+      {
+        "path": "tests/integration/windows-preview.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 1,
+        "passed": 1
+      },
+      {
+        "path": "tests/unit/action-lifecycle.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 69,
+        "passed": 69
+      },
+      {
+        "path": "tests/unit/agent-note-marker.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 7,
+        "passed": 7
+      },
+      {
+        "path": "tests/unit/agent-rule-distiller-datadir.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 2,
+        "passed": 2
+      },
+      {
+        "path": "tests/unit/ai-runner-registry.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 2,
+        "passed": 2
+      },
+      {
+        "path": "tests/unit/architecture.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 15,
+        "passed": 15
+      },
+      {
+        "path": "tests/unit/async-mutex.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 6,
+        "passed": 6
+      },
+      {
+        "path": "tests/unit/atomic-file.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 6,
+        "passed": 6
+      },
+      {
+        "path": "tests/unit/base-tracker.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 9,
+        "passed": 9
+      },
+      {
+        "path": "tests/unit/cancel-issue.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 10,
+        "passed": 10
+      },
+      {
+        "path": "tests/unit/codex-runner.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 17,
+        "passed": 17
+      },
+      {
+        "path": "tests/unit/concurrency.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 7,
+        "passed": 7
+      },
+      {
+        "path": "tests/unit/config.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 15,
+        "passed": 15
+      },
+      {
+        "path": "tests/unit/dag-budget-review.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 7,
+        "passed": 7
+      },
+      {
+        "path": "tests/unit/dag-state.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 15,
+        "passed": 15
+      },
+      {
+        "path": "tests/unit/demand-spec.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 12,
+        "passed": 12
+      },
+      {
+        "path": "tests/unit/dev-server-manager.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 4,
+        "passed": 4
+      },
+      {
+        "path": "tests/unit/errors.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 19,
+        "passed": 19
+      },
+      {
+        "path": "tests/unit/executable-task.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 18,
+        "passed": 18
+      },
+      {
+        "path": "tests/unit/failure-handler.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 5,
+        "passed": 5
+      },
+      {
+        "path": "tests/unit/frontend-http.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 15,
+        "passed": 15
+      },
+      {
+        "path": "tests/unit/git-operations.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 11,
+        "passed": 11
+      },
+      {
+        "path": "tests/unit/github-client-pr.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 12,
+        "passed": 12
+      },
+      {
+        "path": "tests/unit/health.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 2,
+        "passed": 2
+      },
+      {
+        "path": "tests/unit/issue-context.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 6,
+        "passed": 6
+      },
+      {
+        "path": "tests/unit/issue-note-sync.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 12,
+        "passed": 12
+      },
+      {
+        "path": "tests/unit/issue-poller.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 22,
+        "passed": 22
+      },
+      {
+        "path": "tests/unit/issue-tracker.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 44,
+        "passed": 44
+      },
+      {
+        "path": "tests/unit/knowledge-loader-datadir.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 2,
+        "passed": 2
+      },
+      {
+        "path": "tests/unit/knowledge-loader.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 9,
+        "passed": 9
+      },
+      {
+        "path": "tests/unit/knowledge-storage.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 19,
+        "passed": 19
+      },
+      {
+        "path": "tests/unit/managed-sdk-worker.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 2,
+        "passed": 2
+      },
+      {
+        "path": "tests/unit/mini-features.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 21,
+        "passed": 21
+      },
+      {
+        "path": "tests/unit/paths.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 8,
+        "passed": 8
+      },
+      {
+        "path": "tests/unit/phase-factory.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 6,
+        "passed": 6
+      },
+      {
+        "path": "tests/unit/phase-helpers-commit-message.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 1,
+        "passed": 1
+      },
+      {
+        "path": "tests/unit/pipeline-definition.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 26,
+        "passed": 26
+      },
+      {
+        "path": "tests/unit/pipeline-orchestrator.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 24,
+        "passed": 24
+      },
+      {
+        "path": "tests/unit/plan-persistence-backup.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 13,
+        "passed": 13
+      },
+      {
+        "path": "tests/unit/plan-persistence.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 17,
+        "passed": 17
+      },
+      {
+        "path": "tests/unit/plan-phase.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 13,
+        "passed": 13
+      },
+      {
+        "path": "tests/unit/port-allocator.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 9,
+        "passed": 9
+      },
+      {
+        "path": "tests/unit/preview-port-restore.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 6,
+        "passed": 6
+      },
+      {
+        "path": "tests/unit/pull-request-helper.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 2,
+        "passed": 2
+      },
+      {
+        "path": "tests/unit/retry-policy.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 9,
+        "passed": 9
+      },
+      {
+        "path": "tests/unit/review-gate-status.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 29,
+        "passed": 29
+      },
+      {
+        "path": "tests/unit/semaphore.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 3,
+        "passed": 3
+      },
+      {
+        "path": "tests/unit/session-replay.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 13,
+        "passed": 13
+      },
+      {
+        "path": "tests/unit/session-resume.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 16,
+        "passed": 16
+      },
+      {
+        "path": "tests/unit/settings-api.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 2,
+        "passed": 2
+      },
+      {
+        "path": "tests/unit/start-concurrency.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 2,
+        "passed": 2
+      },
+      {
+        "path": "tests/unit/supplement-replan.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 1,
+        "passed": 1
+      },
+      {
+        "path": "tests/unit/supplement-store.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 9,
+        "passed": 9
+      },
+      {
+        "path": "tests/unit/todolist-extractor.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 13,
+        "passed": 13
+      },
+      {
+        "path": "tests/unit/uat-repair.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 2,
+        "passed": 2
+      },
+      {
+        "path": "tests/unit/verify-report-parser.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 18,
+        "passed": 18
+      },
+      {
+        "path": "tests/unit/web-api.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 28,
+        "passed": 28
+      },
+      {
+        "path": "tests/unit/workspace-manager.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 4,
+        "passed": 4
+      },
+      {
+        "path": "tests/unit/workspace.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 1,
+        "passed": 1
+      },
+      {
+        "path": "tests/unit/worktree-reaper.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 10,
+        "passed": 10
+      },
+      {
+        "path": "tests/unit/distill/agent-rule-distiller.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 4,
+        "passed": 4
+      },
+      {
+        "path": "tests/unit/distill/diary-collector-review-history.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 8,
+        "passed": 8
+      },
+      {
+        "path": "tests/unit/distill/diary-collector.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 6,
+        "passed": 6
+      },
+      {
+        "path": "tests/unit/distill/diary-store.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 8,
+        "passed": 8
+      },
+      {
+        "path": "tests/unit/distill/memory-distiller.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 4,
+        "passed": 4
+      },
+      {
+        "path": "tests/unit/distill/mini-distill.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 1,
+        "passed": 1
+      },
+      {
+        "path": "tests/unit/distill/version-store.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 5,
+        "passed": 5
+      },
+      {
+        "path": "tests/unit/phases/build-phase-scenarios.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 5,
+        "passed": 5
+      },
+      {
+        "path": "tests/unit/phases/plan-phase-scenarios.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 7,
+        "passed": 7
+      },
+      {
+        "path": "tests/unit/phases/verify-phase-scenarios.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 8,
+        "passed": 8
+      },
+      {
+        "path": "tests/unit/snapshots/config-transform.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 3,
+        "passed": 3
+      },
+      {
+        "path": "tests/unit/snapshots/demand-adapter.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 5,
+        "passed": 5
+      },
+      {
+        "path": "tests/unit/snapshots/pipeline-definition.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 12,
+        "passed": 12
+      },
+      {
+        "path": "tests/unit/snapshots/pr-helper.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 2,
+        "passed": 2
+      },
+      {
+        "path": "tests/unit/snapshots/prompt-templates.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 17,
+        "passed": 17
+      },
+      {
+        "path": "tests/reference/tests/integration/auto-approve-cache.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 2,
+        "passed": 2
+      },
+      {
+        "path": "tests/reference/tests/integration/codex-session-recovery.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 4,
+        "passed": 4
+      },
+      {
+        "path": "tests/reference/tests/integration/failure-recovery.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 10,
+        "passed": 10
+      },
+      {
+        "path": "tests/reference/tests/integration/verify-fix-context-e2e.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 2,
+        "passed": 2
+      },
+      {
+        "path": "tests/reference/tests/contracts/intent-schema.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 7,
+        "passed": 7
+      },
+      {
+        "path": "tests/reference/tests/unit/orchestration-orchestrator.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 16,
+        "passed": 16
+      },
+      {
+        "path": "tests/reference/tests/unit/orchestration-reducer.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 29,
+        "passed": 29
+      },
+      {
+        "path": "tests/reference/tests/unit/snapshots/pipeline-matrix.test.ts",
+        "status": "passed",
+        "verifiedBy": "acceptance",
+        "tests": 8,
+        "passed": 8
+      }
+    ]
+  },
+  "externalValidation": {
+    "git": "真实临时 Git 仓库，覆盖任务依赖、合并、并行隔离和进程强杀恢复。",
+    "browser": "真实本机 Chrome；工作台页面、审核交互、报告和截图通过，业务 AI 与平台使用模拟实现。",
+    "codex": "未调用真实 Codex；不将模拟 AI 结果记作真实 AI 验收。",
+    "github": "未执行真实 GitHub 写入。"
+  },
+  "compatibility": {
+    "runFormat": "iaf-mini/issue-run/v3-langgraph",
+    "requiresFreshDataDirectory": true,
+    "note": "拒绝自动迁移旧运行数据；原 main 与旧实验工作树继续保留。"
+  }
+}

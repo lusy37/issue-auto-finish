@@ -83,9 +83,9 @@
 
 - `src/config-schema.ts`、`src/config.ts`、`env.example`：有效配置、校验和旧配置提示。
 - `src/web/routes/setup.ts`、`src/web/frontend/src/components/SettingsPanel.vue`：沿用现有表单与 API，补充审核、知识引用、蒸馏和自动修复设置。
-- `src/orchestration/Transitions.ts`、`src/orchestrator/steps/PhaseLoopStep.ts`：根据服务配置构造修复规则。
+- `src/orchestration/Transitions.ts`、`src/orchestrator/steps/RunWorkflowStep.ts`：根据服务配置构造修复规则。
 - `src/phases/VerifyPhase.ts`：自动修复关闭时的明确失败意图。
-- `src/index.ts`、`src/phases/BasePhase.ts`、`src/prompts/templates.ts`、`src/orchestrator/PipelineOrchestrator.ts`：核对知识引用入口，区分任务执行配置与可选知识注入。
+- `src/index.ts`、`src/phases/BasePhase.ts`、`src/prompts/templates.ts`、`src/orchestrator/IssueService.ts`：核对知识引用入口，区分任务执行配置与可选知识注入。
 - `src/distill/DistillScheduler.ts`、`src/web/routes/distill.ts`：在实际执行入口检查蒸馏开关，状态接口返回真实启用状态。
 - `src/web/routes/api.ts`、前端状态类型、`KnowledgePanel.vue`、`DistillPanel.vue` 及审核状态展示：保留三个有效开关的状态回显，展示配置禁用原因及自动通过来源。
 - 如涉及导出调整，同步更新 `src/orchestration/index.ts` 和实际调用点。

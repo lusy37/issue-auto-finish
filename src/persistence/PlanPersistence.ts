@@ -3,7 +3,7 @@ import { renderPlan } from '../dag/contracts.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ProgressData, PhaseProgress, type PhaseStatus } from '../tracker/IssueState.js';
-import type { PipelineDef } from '../pipeline/PipelineDefinition.js';
+import type { PipelineDef } from '../pipeline/PipelineMetadata.js';
 import { resolveDataDir } from '../paths.js';
 import { logger as rootLogger } from '../logger.js';
 

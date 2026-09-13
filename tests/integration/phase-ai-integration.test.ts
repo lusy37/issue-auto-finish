@@ -2,7 +2,7 @@
  * 跨层集成测试 — 真实 Phase + ScriptedAIRunner + 真实 PlanPersistence。
  *
  * 验证"阶段 + AI Runner"的端到端交互，
- * 不涉及编排器（PipelineOrchestrator），聚焦单阶段行为。
+ * 不涉及编排器（IssueService），聚焦单阶段行为。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';

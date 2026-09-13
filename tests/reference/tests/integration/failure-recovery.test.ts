@@ -14,7 +14,7 @@ import {
   type PhaseSpec,
   type ReducerSideEffect,
   type SideEffectExecutor,
-} from '../../src/orchestration/index.js';
+} from '../../orchestration/index.js';
 
 /**
  * 失败/恢复路径集成测试 — 覆盖 plan 中的 FAIL-1 ~ FAIL-7。

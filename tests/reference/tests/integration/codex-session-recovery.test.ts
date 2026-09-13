@@ -1,17 +1,17 @@
-import { structuredPlanOutput } from '../helpers/structured-plan.js';
+import { structuredPlanOutput } from '../../../helpers/structured-plan.js';
 import { beforeEach, afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { PlanPersistence } from '../../src/persistence/PlanPersistence.js';
-import { IssueTracker } from '../../src/tracker/IssueTracker.js';
-import { IssueState } from '../../src/tracker/IssueState.js';
-import { TrackerStateStore } from '../../src/orchestrator/TrackerStateStore.js';
-import { PlanPhase } from '../../src/phases/PlanPhase.js';
-import { CodexRunner } from '../../src/ai-runner/CodexRunner.js';
-import { createTestConfig, createMockGitOperations, createMockAIRunner } from '../helpers/mock-factories.js';
-import { createLifecycleManager, getPipelineDef } from '../../src/pipeline/PipelineDefinition.js';
-import type { AIRunner } from '../../src/ai-runner/AIRunner.js';
+import { PlanPersistence } from '../../../../src/persistence/PlanPersistence.js';
+import { IssueTracker } from '../../../../src/tracker/IssueTracker.js';
+import { IssueState } from '../../../../src/tracker/IssueState.js';
+import { TrackerStateStore } from '../../orchestrator/TrackerStateStore.js';
+import { PlanPhase } from '../../../../src/phases/PlanPhase.js';
+import { CodexRunner } from '../../../../src/ai-runner/CodexRunner.js';
+import { createTestConfig, createMockGitOperations, createMockAIRunner } from '../../../helpers/mock-factories.js';
+import { createLifecycleManager, getPipelineDef } from '../../../../src/pipeline/PipelineMetadata.js';
+import type { AIRunner } from '../../../../src/ai-runner/AIRunner.js';
 
 let dir: string;
 let plan: PlanPersistence;

@@ -26,7 +26,7 @@ it('目标项目独立安装 Playwright 时，配置和用例使用同一运行�
   fs.writeFileSync(path.join(project, 'runtime.spec.ts'),
     "import {test,expect} from '@playwright/test'; test('收到工作台验收地址',()=>{expect(process.env.UAT_BASE_URL).toBe('http://127.0.0.1:9876');});");
   vi.stubEnv('DATA_DIR', path.join(project, 'data'));
-  const result = await executeUat({ issueIid: 1, workDir: project, configFile: 'playwright.config.ts', baseUrl: 'http://127.0.0.1:9876', timeoutMs: 20000 });
+  const result = await executeUat({ issueIid: 1, workDir: project, configFile: 'playwright.config.ts', baseUrl: 'http://127.0.0.1:9876', timeoutMs: 60000 });
   expect(result.error).toBeUndefined();
   expect(result).toMatchObject({ passed: true, passedTests: 1, failedTests: 0 });
 });

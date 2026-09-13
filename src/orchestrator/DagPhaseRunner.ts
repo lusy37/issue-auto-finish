@@ -4,7 +4,7 @@ import { getKnowledgeForPrompt } from '../prompts/templates.js';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { PhaseIntent, PhaseSpec, PhaseRunnerContext } from '../orchestration/index.js';
+import type { PhaseResult, PhaseSpec, PhaseRunnerContext } from '../orchestration/index.js';
 import type { PhaseContext } from '../phases/BasePhase.js';
 import type { OrchestratorDeps } from './IssueProcessingContext.js';
 import { GitOperations } from '../git/GitOperations.js';
@@ -17,7 +17,7 @@ import { validatePlan, renderPlan } from '../dag/contracts.js';
 /** 外层阶段适配：DAG 限定在 build，verify/UAT 的凭证绑定实际候选提交。 */
 export class DagPhaseRunner {
   constructor(private deps: OrchestratorDeps, private git: GitOperations, private plan: PlanPersistence) {}
-  async run(spec: PhaseSpec, context: PhaseRunnerContext): Promise<PhaseIntent> {
+  async run(spec: PhaseSpec, context: PhaseRunnerContext): Promise<PhaseResult> {
     const { tracker, config } = this.deps;
     const number = context.issueIid;
     const signal = this.deps.signal ?? new AbortController().signal;
@@ -28,7 +28,7 @@ export class DagPhaseRunner {
     ctx.onTemporaryFile = (file, present) => tracker.transaction(number, record => {
       record.run!.temporaryFiles = [...new Set([...(record.run!.temporaryFiles ?? []).filter(existing => existing !== file), ...(present ? [file] : [])])];
     });
-    if (spec.kind === 'gate') return { kind: 'awaitGate', reason: 'human-review', payload: { planRevision: state().planRevision } };
+    if (spec.kind === 'gate') throw new Error('审核必须由 LangGraph interrupt 执行');
     try {
       signal.throwIfAborted();
       if (spec.id === 'build') {

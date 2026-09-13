@@ -1,12 +1,14 @@
+// 本组隔离交付；真实浏览器凭证和平台幂等交付由 mini-workflow / dag-delivery 验证。
+vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { deps.tracker.updateState(ctx.issue.number, 'completed', { deliveryPending: false }); } }));
 import { newIssueRun } from '../../src/dag/contracts.js';
 vi.mock('../../src/orchestrator/DagPhaseRunner.js', () => ({ DagPhaseRunner: isolatedPhaseRunner((...args) => mockPhaseRun(...args)) }));
 import { isolatedPhaseRunner } from '../helpers/isolated-phase-runner.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueState } from '../../src/tracker/IssueState.js';
-import { buildPlanModePipeline } from '../../src/pipeline/PipelineDefinition.js';
+import { buildPlanModePipeline } from '../../src/pipeline/PipelineMetadata.js';
 import type { IssueProcessingContext, OrchestratorDeps } from '../../src/orchestrator/IssueProcessingContext.js';
 import type { PhaseContext } from '../../src/phases/BasePhase.js';
-import type { PortPair } from '../../src/deploy/PortAllocator.js';
+import type { PortPair } from '../../src/preview/PortAllocator.js';
 import type { WorktreeContext } from '../../src/git/WorktreeContext.js';
 import {
   createMockGitOperations,
@@ -27,7 +29,7 @@ vi.mock('../../src/phases/PhaseFactory.js', () => ({
   })),
 }));
 
-const { executePhaseLoop } = await import('../../src/orchestrator/steps/PhaseLoopStep.js');
+const { runWorkflow } = await import('../../src/orchestrator/steps/RunWorkflowStep.js');
 
 function createMockWtPlan() {
   return {
@@ -86,6 +88,7 @@ describe('Preview port restore on retry', () => {
 
   function bindTrackerToRecord(ctx: IssueProcessingContext): void {
     ctx.record.run ??= newIssueRun();
+    ctx.record.run.workflow.entry = (ctx.record.currentPhase ?? 'plan') as any;
     mockTracker.get.mockImplementation(() => ctx.record as any);
   }
 
@@ -122,7 +125,7 @@ describe('Preview port restore on retry', () => {
     };
 
     bindTrackerToRecord(ctx);
-    await executePhaseLoop(ctx, deps, createMockGitOperations() as any, createMockWtPlan());
+    await runWorkflow(ctx, deps, createMockGitOperations() as any, createMockWtPlan());
 
     expect(deps.getPortsForIssue).toHaveBeenCalledWith(42);
     expect(phaseCtx.ports).toEqual(MOCK_PORTS);
@@ -162,7 +165,7 @@ describe('Preview port restore on retry', () => {
     };
 
     bindTrackerToRecord(ctx);
-    await executePhaseLoop(ctx, deps, createMockGitOperations() as any, createMockWtPlan());
+    await runWorkflow(ctx, deps, createMockGitOperations() as any, createMockWtPlan());
 
     expect(deps.getPortsForIssue).toHaveBeenCalledWith(42);
     expect(deps.startPreviewServers).toHaveBeenCalledWith(wtCtx, issue);
@@ -202,7 +205,7 @@ describe('Preview port restore on retry', () => {
     };
 
     bindTrackerToRecord(ctx);
-    await executePhaseLoop(ctx, deps, createMockGitOperations() as any, createMockWtPlan());
+    await runWorkflow(ctx, deps, createMockGitOperations() as any, createMockWtPlan());
 
     expect(deps.getPortsForIssue).toHaveBeenCalledWith(42);
     expect(deps.isPreviewRunning).toHaveBeenCalledWith(42);
@@ -239,7 +242,7 @@ describe('Preview port restore on retry', () => {
 
     // Plan phase executes, then hits review gate and pauses
     bindTrackerToRecord(ctx);
-    await executePhaseLoop(ctx, deps, createMockGitOperations() as any, createMockWtPlan());
+    await runWorkflow(ctx, deps, createMockGitOperations() as any, createMockWtPlan());
 
     expect(deps.getPortsForIssue).not.toHaveBeenCalled();
     expect(phaseCtx.ports).toBeUndefined();
@@ -280,7 +283,7 @@ describe('Preview port restore on retry', () => {
     };
 
     bindTrackerToRecord(ctx);
-    await executePhaseLoop(ctx, deps, createMockGitOperations() as any, createMockWtPlan());
+    await runWorkflow(ctx, deps, createMockGitOperations() as any, createMockWtPlan());
 
     expect(deps.getPortsForIssue).not.toHaveBeenCalled();
     expect(phaseCtx.ports).toEqual(preExistingPorts);

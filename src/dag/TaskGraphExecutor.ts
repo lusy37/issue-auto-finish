@@ -8,6 +8,8 @@ import type { AIRunner } from '../ai-runner/AIRunner.js';
 import type { IssueTracker } from '../tracker/IssueTracker.js';
 import type { TaskDefinition, TaskRun } from './contracts.js';
 import { scopedRunner } from './ScopedRunner.js';
+import { END, START, StateGraph, StateSchema } from '@langchain/langgraph';
+import { z } from 'zod';
 
 export interface GraphDependencies {
   number: number;
@@ -26,7 +28,7 @@ export interface GraphDependencies {
   checkpoint?: (name: string, task: TaskRun) => Promise<void>;
 }
 
-/** 只负责 build 内的任务图；父阶段失败及重试预算由外层状态机统一处理。 */
+/** LangGraph 负责依赖调度与汇合；任务成功凭证和串行 Git 合并仍由业务事务管理。 */
 export class TaskGraphExecutor {
   private readonly mergeMutex = new AsyncMutex();
   private failure?: Error;
@@ -60,26 +62,28 @@ export class TaskGraphExecutor {
       if (task.status === 'merged') continue;
       if (task.success) await this.integrate(task.taskId);
     }
-    const inFlight = new Map<string, Promise<void>>();
-    try {
-    while (true) {
-      this.check();
-      const tasks = this.state().tasks;
-      if (!this.failure) for (const definition of plan.tasks) {
-        const task = tasks[definition.id];
-        if (task.status === 'merged' || task.success || inFlight.has(task.taskId)) continue;
-        if (!definition.dependsOn.every(id => tasks[id].status === 'merged')) continue;
-        const running = this.executeTask(definition).catch(error => { this.failure ??= error as Error; }).finally(() => { inFlight.delete(definition.id); });
-        inFlight.set(definition.id, running);
-      }
-      if (!inFlight.size) break;
-      await Promise.race(inFlight.values());
-      if (this.failure || this.deps.signal.aborted) {
-        await Promise.allSettled(inFlight.values());
-        break;
-      }
+    const taskState = new StateSchema({ issueNumber: z.number() });
+    const graph = new StateGraph(taskState).addNode(Object.fromEntries(plan.tasks.map(definition => [definition.id, async () => {
+      // 不向框架抛出首个任务错误，先收齐同一超步的在途调用；失败后不派发下游任务。
+      if (this.failure || this.deps.signal.aborted) return {};
+      try {
+        this.check();
+        const task = this.state().tasks[definition.id];
+        if (task.status === 'merged') return {};
+        if (!definition.dependsOn.every(id => this.state().tasks[id].status === 'merged')) throw new Error('前置任务尚未确认合并');
+        if (task.success) await this.mergeMutex.runExclusive(() => this.integrate(definition.id));
+        else await this.executeTask(definition);
+      } catch (error) { this.failure ??= error as Error; }
+      return {};
+    }])));
+    const predecessors = new Set(plan.tasks.flatMap(task => task.dependsOn));
+    for (const definition of plan.tasks) {
+      if (definition.dependsOn.length) graph.addEdge(definition.dependsOn, definition.id);
+      else graph.addEdge(START, definition.id);
+      if (!predecessors.has(definition.id)) graph.addEdge(definition.id, END);
     }
-    } finally { await Promise.allSettled(inFlight.values()); }
+    // 显式保留业务成功凭证检查。恢复后即使重入子图，也不会重新执行已合并的任务。
+    await graph.compile().invoke({ issueNumber: number }, { recursionLimit: plan.tasks.length + 2 });
     if (this.failure) throw this.failure;
     this.check();
     if (Object.values(this.state().tasks).some(t => t.status !== 'merged')) throw new Error('任务图存在无法执行的阻塞任务');

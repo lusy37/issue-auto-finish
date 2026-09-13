@@ -1,4 +1,4 @@
-import { buildPlanModePipeline } from '../../src/pipeline/PipelineDefinition.js';
+import { buildPlanModePipeline } from '../../src/pipeline/PipelineMetadata.js';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';

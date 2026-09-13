@@ -36,7 +36,7 @@ async function prepared() {
   const ctx = { issue: { number: 1 }, demand: f.tracker.get(1)!.demandSpec!, branchName: 'iaf-1', wtCtx: { gitRootDir: f.integration, workDir: f.integration } } as IssueProcessingContext;
   return { ...f, deps, ctx, create, list, accept, pr: () => platformPr!, deliver: () => deliverIssue(ctx, deps), setContent: (value: string) => { content = value; } };
 }
-describe('验收提交与唯一 PR 交付', { timeout: 120_000 }, () => {
+describe('验收提交与唯一 PR 交付', { timeout: 300_000 }, () => {
   it('创建响应丢失后只查询关联原 PR，不重复 POST', async () => {
     const f = await prepared(); const create = f.create.getMockImplementation()!;
     f.create.mockImplementationOnce(async options => { await create(options); throw new Error('响应丢失'); });

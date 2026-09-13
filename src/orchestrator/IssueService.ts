@@ -18,22 +18,16 @@ import { PlanPersistence } from '../persistence/PlanPersistence.js';
 import type { WorktreeContext } from '../git/WorktreeContext.js';
 import { getLocalIP } from '../utils/network.js';
 import type { PhaseContext } from '../phases/BasePhase.js';
-import { resolvePipelineMode, getPipelineDef, buildPlanModePipeline, registerPipeline, createLifecycleManager, PipelineDef } from '../pipeline/PipelineDefinition.js';
+import { resolvePipelineMode, getPipelineDef, buildPlanModePipeline, registerPipeline, createLifecycleManager, PipelineDef } from '../pipeline/PipelineMetadata.js';
 import { SupplementStore } from '../supplement/SupplementStore.js';
 import { githubIssueToDemandSpec } from '../demand/adapters/GitHubAdapter.js';
 import { getIssueNumber } from '../tracker/IssueRecordHelper.js';
 import { eventBus as defaultEventBus, type EventBus } from '../events/EventBus.js';
-import {
-  applyGateAction,
-  buildPipeline,
-  GateActionError,
-  PLAN_MODE_TRANSITIONS,
-  type GateAction,
-} from '../orchestration/index.js';
-import { TrackerStateStore } from './TrackerStateStore.js';
+import { GateActionError, type GateAction } from '../orchestration/index.js';
+import { IssueWorkflow, ReviewConflictError } from './IssueWorkflow.js';
 import { AsyncMutex } from '../utils/AsyncMutex.js';
-import { PortAllocator, type PortPair } from '../deploy/PortAllocator.js';
-import { DevServerManager } from '../deploy/DevServerManager.js';
+import { PortAllocator, type PortPair } from '../preview/PortAllocator.js';
+import { DevServerManager } from '../preview/DevServerManager.js';
 import { isE2eEnabledForIssue } from '../e2e/E2eSettings.js';
 import { getProjectKnowledge } from '../knowledge/index.js';
 import { KNOWLEDGE_DEFAULTS } from '../knowledge/KnowledgeDefaults.js';
@@ -44,8 +38,7 @@ import type { OrchestratorDeps, IssueProcessingContext } from './IssueProcessing
 import { WorkspaceManager, buildSingleRepoWorkspace } from '../workspace/index.js';
 import type { WorkspaceConfig } from '../workspace/index.js';
 import { executeSetup } from './steps/SetupStep.js';
-import { executePhaseLoop } from './steps/PhaseLoopStep.js';
-import { executeCompletion } from './steps/CompletionStep.js';
+import { runWorkflow } from './steps/RunWorkflowStep.js';
 import { handleFailure } from './steps/FailureHandler.js';
 
 
@@ -61,9 +54,9 @@ export interface WorktreeStatus {
 }
 
 
-const logger = rootLogger.child('PipelineOrchestrator');
+const logger = rootLogger.child('IssueService');
 
-export class PipelineOrchestrator {
+export class IssueService {
   private config: Config;
   private github: GitHubClient;
   private mainGit: GitOperations;
@@ -114,7 +107,7 @@ export class PipelineOrchestrator {
 
     const mode = resolvePipelineMode(config.pipeline?.mode === 'auto' ? undefined : config.pipeline?.mode);
     this.pipelineDef = mode === 'plan-mode'
-      ? buildPlanModePipeline({ e2eEnabled: config.e2e.enabled })
+      ? buildPlanModePipeline({ e2eEnabled: true })
       : getPipelineDef(mode);
     registerPipeline(this.pipelineDef);
     logger.info('Pipeline mode resolved', { mode: this.pipelineDef.mode, aiMode: config.ai.mode });
@@ -191,48 +184,30 @@ export class PipelineOrchestrator {
 
 
   async applyGateAction(number: number, action: GateAction, planRevision?: number): Promise<void> {
+    await this.executions.get(number);
     const record = this.tracker.get(number);
     if (!record) throw new IssueNotFoundError(number);
-
-    const stateStore = new TrackerStateStore(this.tracker);
-    const snapshot = stateStore.getSnapshot(number);
-    if (snapshot.state.kind !== 'gate-waiting') {
-      throw new GateActionError(
-        `Gate action requires gate-waiting state, got '${snapshot.state.kind}'`,
-        'invalid-state',
-      );
-    }
-    const gatePhaseId = snapshot.state.phaseId;
-
-
-    const pipeline = buildPipeline(
-      {
-        e2e: isE2eEnabledForIssue(number, this.tracker, this.config),
-      },
-      PLAN_MODE_TRANSITIONS,
-    );
-
-    const out = applyGateAction({
-      state: snapshot.state,
-      action,
-      pipeline,
-      now: new Date().toISOString(),
-    });
-
     if (planRevision === undefined || planRevision !== record.run!.planRevision) throw new GateActionError('审核计划版本已过期，请刷新页面', 'invalid-state');
-    if (out.historyEntry) stateStore.applyTransition(number, {
-      nextState: out.nextState, nextAttempts: snapshot.attempts, historyEntry: out.historyEntry,
-      expectedPlanRevision: planRevision, reviewFeedback: action.action === 'reject' ? action.feedback : undefined,
+    if (action.action === 'supplement') throw new GateActionError('请通过补充需求入口更新计划', 'invalid-state');
+    const workflow = new IssueWorkflow({
+      tracker: this.tracker, number, events: this.eventBus,
+      maxRetries: this.config.poll.maxRetries, maxRepairs: this.config.verifyFixLoop.maxIterations,
+      context: { issueIid: number, demand: record.demandSpec!, branchName: record.branchName, workDir: this.computeWorktreeContext(number, record.branchName).workDir, pipelineMode: 'plan-mode' },
+      runner: { run: async () => { throw new Error('审核请求不能执行开发阶段'); } },
     });
-    for (const se of out.sideEffects) if (se.kind === 'emit-event') this.eventBus.emitTyped(se.type as never, { issueIid: number, ...se.payload });
-
+    try {
+      await workflow.resumeReview({ ...action, planRevision });
+    } catch (error) {
+      if (error instanceof ReviewConflictError) throw new GateActionError(error.message, 'invalid-state');
+      throw error;
+    }
     if (action.action === 'reject') {
       const current = this.tracker.get(number)!;
       await this.syncRejectFeedbackToIssue(current, number, action.feedback, current.run!.reviewHistory?.length ?? 1);
     }
 
     logger.info('Gate action applied', {
-      number, phaseId: gatePhaseId, action: action.action, nextStateKind: out.nextState.kind,
+      number, phaseId: 'review', action: action.action, planRevision,
     });
   }
 
@@ -521,9 +496,9 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
   }
 
 
-  private getIssueSpecificPipelineDef(issueIid: number): PipelineDef {
+  private getIssueSpecificPipelineDef(_issueIid: number): PipelineDef {
     return buildPlanModePipeline({
-      e2eEnabled: isE2eEnabledForIssue(issueIid, this.tracker, this.config),
+      e2eEnabled: true,
     });
   }
 
@@ -651,10 +626,6 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     const deps = this.buildDeps(issue.number);
 
     try {
-      if (record.deliveryPending) {
-        await executeCompletion(ctx, deps, { serversStarted: this.devServerManager.getStatus(issue.number).running });
-        return;
-      }
       const { wtGit, wtPlan } = await executeSetup(ctx, deps);
 
       // Inject workspace layout into phaseCtx after worktree/workspace is prepared
@@ -664,14 +635,12 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
           workspaceRoot: wtCtx.workspace.workspaceRoot,
         };
       }
-      const phaseResult = await executePhaseLoop(ctx, deps, wtGit, wtPlan);
-      if (phaseResult.paused) return;
-      await executeCompletion(ctx, deps, phaseResult);
+      await runWorkflow(ctx, deps, wtGit, wtPlan);
     } catch (err) {
       if (this.tracker.get(issue.number)?.run?.stopIntent) return;
       // 拦截用户发起的中止和重做。
 
-      // Path A: PhaseAbortedError — 来自 PhaseLoopStep 阶段间检查（无 AI 运行时）
+      // Path A: PhaseAbortedError — 来自 RunWorkflowStep 阶段间检查（无 AI 运行时）
       if (err instanceof PhaseAbortedError) {
         if (err.action === 'restart') return; // restartIssue 已自行处理所有清理
         this.applyPendingAction(err.action, issue.number, wtCtx, issuePipelineDef);

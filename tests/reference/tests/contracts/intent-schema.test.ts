@@ -7,7 +7,7 @@ import type {
   AwaitAsyncIntent,
   RequestRetryFromIntent,
   PhaseError,
-} from '../../src/orchestration/Intent.js';
+} from '../../orchestration/Intent.js';
 
 /**
  * Intent 类型契约（INV-3）

@@ -12,7 +12,7 @@ import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
 import { IssueState } from '../tracker/IssueState.js';
 import { getIssueNumber } from '../tracker/IssueRecordHelper.js';
 import type { IssueTracker } from '../tracker/IssueTracker.js';
-import type { PipelineOrchestrator } from '../orchestrator/PipelineOrchestrator.js';
+import type { IssueService } from '../orchestrator/IssueService.js';
 import type { EventBus } from '../events/EventBus.js';
 import { t } from '../i18n/index.js';
 
@@ -22,7 +22,7 @@ const TERMINAL_STATES = new Set<string>([IssueState.Completed, IssueState.Failed
 
 export interface PreviewReaperDeps {
   tracker: IssueTracker;
-  orchestrator: PipelineOrchestrator;
+  orchestrator: IssueService;
   intervalMs: number;
   ttlMs: number;
   eventBus?: EventBus;
@@ -43,7 +43,7 @@ export interface PreviewReaperStatus {
 
 export class PreviewReaper {
   private tracker: IssueTracker;
-  private orchestrator: PipelineOrchestrator;
+  private orchestrator: IssueService;
   private intervalMs: number;
   private ttlMs: number;
   private bus: EventBus;

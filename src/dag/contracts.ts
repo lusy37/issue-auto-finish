@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { DemandSpec } from '../demand/DemandSpec.js';
+import { newWorkflowStorage, workflowStorageSchema, type WorkflowStorage } from '../orchestration/WorkflowState.js';
 
 export const PLAN_FORMAT = 'iaf-mini/task-plan/v2' as const;
-export const RUN_FORMAT = 'iaf-mini/issue-run/v2' as const;
+export const RUN_FORMAT = 'iaf-mini/issue-run/v3-langgraph' as const;
 export const taskPlanInput = z.object({
   title: z.string().trim().min(1),
   description: z.string().trim().min(1),
@@ -94,6 +95,7 @@ export interface DeliveryIdentity {
   issueWriteIntent?: { commit: string; marker: string; requestedAt: string };
 }
 export interface IssueRun {
+  workflow: WorkflowStorage;
   activeCalls?: Record<string, string>;
   budgetHistory?: Array<{ planRevision: number; buildGeneration: number; retryUsed: Record<string, number>; phaseExecutions: Record<string, number>; repairRounds: number }>;
   workspaces?: Array<{ directory: string; branch: string; taskId: string; attemptNo: number; createdAt: string; cleanedAt?: string }>;
@@ -123,7 +125,7 @@ export interface IssueRun {
   recoveryRequired?: boolean;
 }
 export function newIssueRun(): IssueRun {
-  return { version: 0, planRevision: 0, buildGeneration: 0, tasks: {}, calls: {}, retryUsed: {}, phaseExecutions: {}, buildEntry: 'execute-graph', repairRounds: 0, repairs: [] };
+  return { workflow: newWorkflowStorage(), version: 0, planRevision: 0, buildGeneration: 0, tasks: {}, calls: {}, retryUsed: {}, phaseExecutions: {}, buildEntry: 'execute-graph', repairRounds: 0, repairs: [] };
 }
 export function sameIdentity(a: ExecutionIdentity | undefined, b: ExecutionIdentity): boolean {
   return !!a && (Object.keys(b) as Array<keyof ExecutionIdentity>).every(k => a[k] === b[k]);
@@ -163,6 +165,7 @@ const mergeSchema = z.object({ operationId: text, stage: z.enum(['rebasing', 're
 const taskSchema = z.object({ taskId: text, status: z.enum(['pending', 'running', 'waiting-merge', 'merging', 'merged', 'failed', 'uncertain']), attemptNo: counter, conflictCallsUsed: counter.max(2), identity: identitySchema.optional(), startCommit: text.optional(), branch: text.optional(), workDir: text.optional(), success: successSchema.optional(), merge: mergeSchema.optional(), error: z.string().optional() });
 const receiptSchema = z.object({ commit: text, completedAt: text, passed: z.literal(true), reportPath: text, runId: text.optional() });
 const runSchema = z.object({
+  workflow: workflowStorageSchema,
   version: counter, planRevision: counter, planDigest: text.optional(), buildGeneration: counter, dispatchId: text.optional(),
   stopIntent: z.object({ kind: z.enum(['pause', 'cancel', 'redo']), requestedAt: text }).optional(),
   review: z.object({ revision: counter, decision: z.enum(['waiting', 'approved', 'rejected']), feedback: z.string().optional(), source: z.string().optional() }).optional(),

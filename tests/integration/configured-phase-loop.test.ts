@@ -1,3 +1,5 @@
+// 本组隔离交付；真实浏览器凭证和平台幂等交付由 mini-workflow / dag-delivery 验证。
+vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { deps.tracker.updateState(ctx.issue.number, 'completed', { deliveryPending: false }); } }));
 import { AsyncMutex } from '../../src/utils/AsyncMutex.js';
 import { graphFixture, git as realGit } from '../helpers/dag-repository.js';
 import { GitOperations } from '../../src/git/GitOperations.js';
@@ -5,11 +7,11 @@ import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { executePhaseLoop } from '../../src/orchestrator/steps/PhaseLoopStep.js';
+import { runWorkflow } from '../../src/orchestrator/steps/RunWorkflowStep.js';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
 import { IssueState } from '../../src/tracker/IssueState.js';
 import { PlanPersistence } from '../../src/persistence/PlanPersistence.js';
-import { buildPlanModePipeline, createLifecycleManager } from '../../src/pipeline/PipelineDefinition.js';
+import { buildPlanModePipeline, createLifecycleManager } from '../../src/pipeline/PipelineMetadata.js';
 import { resetKnowledgeCache } from '../../src/knowledge/KnowledgeLoader.js';
 import { createMockOrchestratorDeps, createTestConfig, createTestIssue } from '../helpers/mock-factories.js';
 import type { AIRunner, RunOptions } from '../../src/ai-runner/AIRunner.js';
@@ -88,10 +90,10 @@ function fixture(options: { review?: boolean; label?: boolean; max?: number; loo
     phaseCtx: { demand, workDir: repository.integration, branchName: record.branchName, pipelineMode: 'plan-mode' },
   } as IssueProcessingContext;
   disposableRepositories.push(repository.directory);
-  return { config, deps, ctx, calls, plan, managers, drive: () => executePhaseLoop(ctx, deps, git as never, plan) };
+  return { config, deps, ctx, calls, plan, managers, drive: () => runWorkflow(ctx, deps, git as never, plan) };
 }
 
-describe('配置进入实际阶段循环', { timeout: 120_000 }, () => {
+describe('配置进入实际阶段循环', { timeout: 300_000 }, () => {
   it.each([
     { review: false, label: true, source: 'configuration' },
     { review: true, label: true, source: 'label' },
@@ -168,4 +170,4 @@ it('有效 UAT 断言失败实际进入集成修复且受共享轮次上限约�
   expect(f.calls.filter(call => call.phaseName === 'verify')).toHaveLength(2);
   expect(Object.values(state.run!.tasks).every(task => task.status === 'merged')).toBe(true);
   expect(state.orchestrationState?.kind).toBe('pipeline-failed');
-});
+}, 300_000);

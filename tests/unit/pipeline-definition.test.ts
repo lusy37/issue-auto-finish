@@ -9,10 +9,9 @@ import {
   _resetPipelineRegistry,
   PLAN_MODE_PIPELINE,
   buildPlanModePipeline,
-} from '../../src/pipeline/PipelineDefinition.js';
+} from '../../src/pipeline/PipelineMetadata.js';
 import { IssueState } from '../../src/tracker/IssueState.js';
-import { buildPipeline } from '../../src/orchestration/Pipeline.js';
-import { PLAN_MODE_TRANSITIONS } from '../../src/orchestration/Transitions.js';
+import { getPlanModePhases } from '../../src/orchestration/Phases.js';
 
 describe('PipelineDefinition', () => {
   beforeEach(() => {
@@ -114,7 +113,7 @@ describe('PipelineDefinition', () => {
   describe('PLAN_MODE_PIPELINE', () => {
     it.each([false, true])('展示与执行阶段一致，且展示修改不污染执行定义：e2e=%s', (e2eEnabled) => {
       const view = buildPlanModePipeline({ e2eEnabled });
-      const execution = buildPipeline({ e2e: e2eEnabled }, PLAN_MODE_TRANSITIONS);
+      const execution = { phases: getPlanModePhases(e2eEnabled) };
       expect(view.phases.map(({ name, label, kind, artifacts, retryable, deploysPreview }) => ({
         id: name, label, kind, artifacts, retryable, deploysPreview,
       }))).toEqual(execution.phases.map(({ id, label, kind, artifacts, retryable, deploysPreview }) => ({

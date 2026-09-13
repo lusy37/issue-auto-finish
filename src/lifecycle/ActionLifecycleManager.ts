@@ -1,5 +1,5 @@
 import { IssueState } from '../tracker/IssueState.js';
-import type { PipelineDef, PhaseSpec, PlanFileSpec } from '../pipeline/PipelineDefinition.js';
+import type { PipelineDef, PhaseSpec, PlanFileSpec } from '../pipeline/PipelineMetadata.js';
 import type { ActionState, ActionStatus } from './ActionLifecycle.js';
 import { t } from '../i18n/index.js';
 
@@ -7,7 +7,7 @@ import { t } from '../i18n/index.js';
  * ActionLifecycleManager — 查询层抽象。
  *
  * 从 PipelineDef 自动构建 IssueState ↔ ActionState 双向映射表，
- * 集中散布在 IssueTracker/PipelineOrchestrator/BasePhase 中的状态分类逻辑。
+ * 集中散布在 IssueTracker/IssueService/BasePhase 中的状态分类逻辑。
  *
  * 不改变持久化格式（tracker.json 中的状态字符串值完全保留）。
  */

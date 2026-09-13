@@ -1,57 +1,38 @@
 
 import type { GitOperations } from '../../git/GitOperations.js';
 import type { PlanPersistence } from '../../persistence/PlanPersistence.js';
-import type { IssueProcessingContext, OrchestratorDeps, PhaseLoopResult } from '../IssueProcessingContext.js';
-import {
-  Orchestrator,
-  buildPipeline,
-  createPlanModeTransitions,
-} from '../../orchestration/index.js';
+import type { IssueProcessingContext, OrchestratorDeps, WorkflowRunResult } from '../IssueProcessingContext.js';
+import { IssueWorkflow } from '../IssueWorkflow.js';
 import { DagPhaseRunner } from '../DagPhaseRunner.js';
 import { isShuttingDown } from '../../shutdown/ShutdownSignal.js';
 import { ServiceShutdownError, PhaseAbortedError } from '../../errors/index.js';
-import { TrackerStateStore } from '../TrackerStateStore.js';
-import { DefaultSideEffectExecutor } from '../DefaultSideEffectExecutor.js';
+import { deliverIssueStep } from './DeliverIssueStep.js';
+import { syncResultToIssue } from './PhaseHelpers.js';
 import { createPhase } from '../../phases/PhaseFactory.js';
-import { isE2eEnabledForIssue } from '../../e2e/E2eSettings.js';
 import { IssueState } from '../../tracker/IssueState.js';
 import { logger as rootLogger } from '../../logger.js';
 
-const logger = rootLogger.child('PhaseLoopStep');
+const logger = rootLogger.child('RunWorkflowStep');
 
-export async function executePhaseLoop(
+export async function runWorkflow(
   ctx: IssueProcessingContext,
   deps: OrchestratorDeps,
   wtGit: GitOperations,
   wtPlan: PlanPersistence,
-): Promise<PhaseLoopResult & { paused: boolean }> {
+): Promise<WorkflowRunResult & { paused: boolean }> {
   const issueIid = ctx.issue.number;
-  const pipeline = buildPipeline(
-    {
-      e2e: isE2eEnabledForIssue(issueIid, deps.tracker, deps.config),
-    },
-    createPlanModeTransitions(deps.config.verifyFixLoop.maxIterations, deps.config.poll.maxRetries),
-  );
-
-
-
   const phaseRunner = new DagPhaseRunner(deps, wtGit, wtPlan);
-
-  const stateStore = new TrackerStateStore(deps.tracker, wtPlan);
-
-  const sideEffectExecutor = new DefaultSideEffectExecutor({
-    issueCtx: ctx,
-    deps,
-    wtGit,
-    wtPlan,
-    phaseFactory: phaseId => createPhase(phaseId, deps.aiRunner, wtGit, wtPlan, deps.config),
-  });
 
   let serversStarted = await maybeStartPreviewServers(ctx, deps);
 
-  const orchestrator = new Orchestrator(
-    pipeline,
-    {
+  const workflow = new IssueWorkflow({
+    tracker: deps.tracker,
+    events: deps.eventBus,
+    number: issueIid,
+    maxRetries: deps.config.poll.maxRetries,
+    maxRepairs: deps.config.verifyFixLoop.enabled ? deps.config.verifyFixLoop.maxIterations : 0,
+    signal: deps.signal,
+    runner: {
       async run(spec, phaseContext) {
         if (spec.id === 'uat' && deps.config.preview.enabled) {
           // 同一次 drive 中完成构建后才启动预览，并把实际端口传给本次 UAT。
@@ -67,10 +48,6 @@ export async function executePhaseLoop(
         return phaseRunner.run(spec, phaseContext);
       },
     },
-    stateStore,
-    sideEffectExecutor,
-    {
-      maxIterations: 100,
       checkShutdown: () => {
         if (deps.signal?.aborted || deps.tracker.get(issueIid)?.run?.stopIntent || deps.tracker.get(issueIid)?.state === IssueState.Cancelled) throw new PhaseAbortedError('', 'restart');
         if (isShuttingDown()) throw new ServiceShutdownError();
@@ -80,23 +57,24 @@ export async function executePhaseLoop(
           throw new PhaseAbortedError(phaseId, pendingAction);
         }
       },
-      onGateWaiting: (_iid, state) => {
-        if (state.phaseId !== 'review') return undefined;
+      autoReview: () => {
         if (!deps.config.review.enabled) {
           if (!wtPlan.isArtifactReady('01-plan.md')) throw new Error('完整计划尚未保存，不能按配置自动通过审核');
           logger.info('计划已保存，按配置自动通过审核', { number: issueIid });
-          return { action: 'approve', source: 'configuration' };
+          return 'configuration';
         }
         if (deps.shouldAutoApprove(ctx.issue.labels ?? [])) {
           logger.info('Auto-approving review gate by label match', { number: issueIid });
-          return { action: 'approve', source: 'label' };
+          return 'label';
         }
         return undefined;
       },
+    publish: async (phaseId, operation) => {
+      const phase = createPhase(phaseId, deps.aiRunner, wtGit, wtPlan, deps.config);
+      await syncResultToIssue(phase, ctx.phaseCtx, issueIid, phaseId, deps, issueIid, wtPlan, operation);
     },
-  );
-
-  await orchestrator.drive(issueIid, {
+    deliver: () => deliverIssueStep(ctx, deps, { serversStarted }),
+    context: {
     issueIid,
     demand: ctx.demand,
     branchName: ctx.branchName,
@@ -104,7 +82,9 @@ export async function executePhaseLoop(
     pipelineMode: ctx.pipelineDef.mode,
     ports: ctx.phaseCtx.ports,
     workspace: ctx.phaseCtx.workspace,
+    },
   });
+  await workflow.drive();
 
   const finalRecord = deps.tracker.get(issueIid);
   const paused = finalRecord !== undefined && isPipelinePaused(finalRecord.state);
@@ -123,7 +103,7 @@ export async function executePhaseLoop(
  * - Paused：用户主动暂停
  * - Failed：失败（manual 重试由用户触发）
  *
- * 这些状态下 PhaseLoopStep 应该 return paused=true，让 PipelineOrchestrator 不要继续走 CompletionStep。
+ * 这些状态供调用方展示暂停原因；图自身保存待恢复节点。
  */
 function isPipelinePaused(state: IssueState): boolean {
   return (
@@ -137,7 +117,7 @@ function isPipelinePaused(state: IssueState): boolean {
  * 在 drive 之前启动或恢复预览服务器。
  *
  * 仅在「断点恢复且已跨过 deploysPreview 阶段」时才尝试恢复，
- * 否则交由 deploysPreview 阶段（通常是 build）自己触发启动。
+ * 同一次执行完成 build 时，在进入 UAT 前启动预览。
  *
  * - phaseCtx.ports 已存在 → 直接复用
  * - 已分配过端口且服务器仍在跑 → 复用

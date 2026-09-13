@@ -34,7 +34,8 @@ it("真实 Playwright 的失败、零测试、全跳过和超时均不通过，�
         workDir,
         configFile,
         baseUrl: "http://127.0.0.1:9",
-        timeoutMs: 20000,
+        // 允许 Windows 上的 Node/Playwright 冷启动；测试自身的 200ms 超时仍由上方配置验证。
+        timeoutMs: 60000,
       });
       expect(result.passed, name + ": " + result.error).toBe(name === "通过");
       expect(runIds.has(result.runId)).toBe(false);
@@ -57,4 +58,4 @@ it("真实 Playwright 的失败、零测试、全跳过和超时均不通过，�
   } finally {
     vi.unstubAllEnvs();
   }
-}, 90000);
+}, 300000);

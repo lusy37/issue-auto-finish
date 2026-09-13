@@ -11,7 +11,7 @@ import {
   type PhaseIntent,
   type ReducerInput,
   type PhaseHistoryEntry,
-} from '../../src/orchestration/index.js';
+} from '../../orchestration/index.js';
 
 /**
  * Reducer 单元测试 — 覆盖 SM-1~10 状态机转移 + EDGE-6/7。

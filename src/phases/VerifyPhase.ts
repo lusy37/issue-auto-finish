@@ -2,7 +2,7 @@ import { BasePhase, PhaseContext } from './BasePhase.js';
 import { planModeVerifyPrompt, demandToPromptContext } from '../prompts/templates.js';
 import { VerifyReportParser } from '../verify/index.js';
 import type { PhaseCallbacks } from './PhaseCallbacks.js';
-import type { PhaseIntent } from '../orchestration/Intent.js';
+import type { PhaseResult } from '../orchestration/PhaseResult.js';
 
 /**
  * 验证阶段 — 执行验证后根据报告判定通过/失败。
@@ -21,7 +21,7 @@ export class VerifyPhase extends BasePhase {
     return [{ filename, label: '验证报告' }];
   }
 
-  async run(ctx: PhaseContext, callbacks?: PhaseCallbacks): Promise<PhaseIntent> {
+  async run(ctx: PhaseContext, callbacks?: PhaseCallbacks): Promise<PhaseResult> {
     const intent = await super.run(ctx, callbacks);
     if (intent.kind !== 'completed') return intent;
 

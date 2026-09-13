@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { WorktreeReaper } from '../../src/workspace/WorktreeReaper.js';
 import { IssueState, type IssueRecord } from '../../src/tracker/IssueState.js';
-import type { PipelineOrchestrator } from '../../src/orchestrator/PipelineOrchestrator.js';
+import type { IssueService } from '../../src/orchestrator/IssueService.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 const RETENTION_MS = 7 * DAY;
@@ -33,11 +33,11 @@ function makeOrchestrator(records: IssueRecord[]) {
     getTracker: () => ({ getAll: () => records }),
     cleanupCompletedWorktree: cleanup,
     cleanupExpiredTaskWorkspaces: vi.fn().mockResolvedValue(undefined),
-  } as unknown as PipelineOrchestrator;
+  } as unknown as IssueService;
   return { orchestrator, cleanup };
 }
 
-function makeReaper(orchestrators: PipelineOrchestrator[], enabled = true) {
+function makeReaper(orchestrators: IssueService[], enabled = true) {
   return new WorktreeReaper({
     orchestrator: orchestrators[0],
     intervalMs: 60_000,
@@ -110,7 +110,7 @@ describe('WorktreeReaper.reap', () => {
       getTracker: () => ({ getAll: () => [makeRecord(1), makeRecord(2)] }),
       cleanupCompletedWorktree: cleanup,
     cleanupExpiredTaskWorkspaces: vi.fn().mockResolvedValue(undefined),
-    } as unknown as PipelineOrchestrator;
+    } as unknown as IssueService;
 
     const result = await makeReaper([orchestrator]).reap();
 

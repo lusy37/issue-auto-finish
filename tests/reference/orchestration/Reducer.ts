@@ -480,12 +480,8 @@ export function applyGateAction(input: GateActionInput): GateActionOutput {
 }
 
 /** Gate 操作非法的结构化错误（API 层翻译为 409） */
-export class GateActionError extends Error {
-  constructor(message: string, public readonly code: 'invalid-state' | 'reject-not-allowed') {
-    super(message);
-    this.name = 'GateActionError';
-  }
-}
+export { GateActionError } from '../../../src/orchestration/ReviewDecision.js';
+import { GateActionError } from '../../../src/orchestration/ReviewDecision.js';
 
 // ---------------------------------------------------------------------------
 // 内部辅助函数

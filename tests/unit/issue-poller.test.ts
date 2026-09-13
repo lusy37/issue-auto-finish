@@ -8,7 +8,7 @@ import {
   createTestIssue,
 } from '../helpers/mock-factories.js';
 
-vi.mock('../../src/orchestrator/PipelineOrchestrator.js');
+vi.mock('../../src/orchestrator/IssueService.js');
 
 describe('IssuePoller', () => {
   let config: ReturnType<typeof createTestConfig>;

@@ -44,7 +44,7 @@ import {
   getPhaseLabel,
   getPlanFileLabel,
   _resetPipelineRegistry,
-} from '../../../src/pipeline/PipelineDefinition.js';
+} from '../../../src/pipeline/PipelineMetadata.js';
 
 describe('Pipeline Definitions', () => {
   it('PLAN_MODE_PIPELINE definition (snapshot)', () => {

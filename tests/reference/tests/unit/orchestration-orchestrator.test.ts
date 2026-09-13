@@ -14,7 +14,7 @@ import {
   type PhaseRunnerContext,
   type PhaseSpec,
   type ReducerSideEffect,
-} from '../../src/orchestration/index.js';
+} from '../../orchestration/index.js';
 
 /**
  * Orchestrator.drive() 单元测试 — 覆盖 FAIL-1/6/7、GATE-5/6 的核心驱动逻辑。

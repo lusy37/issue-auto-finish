@@ -12,7 +12,7 @@ import { logger as rootLogger } from '../logger.js';
 import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
 import { IssueState, type IssueRecord } from '../tracker/IssueState.js';
 import { getIssueNumber } from '../tracker/IssueRecordHelper.js';
-import type { PipelineOrchestrator } from '../orchestrator/PipelineOrchestrator.js';
+import type { IssueService } from '../orchestrator/IssueService.js';
 
 const logger = rootLogger.child('WorktreeReaper');
 
@@ -21,7 +21,7 @@ const REAPABLE_STATES = new Set<string>([IssueState.Completed]);
 
 export interface WorktreeReaperDeps {
   /** 单实例编排器，每个内部持有自己的 tracker 与清理能力。 */
-  orchestrator: PipelineOrchestrator;
+  orchestrator: IssueService;
   /** 扫描间隔（毫秒）。 */
   intervalMs: number;
   /** 完成后保留时长（毫秒），超过即回收。 */
@@ -45,7 +45,7 @@ export interface WorktreeReaperStatus {
 }
 
 export class WorktreeReaper {
-  private orchestrator: PipelineOrchestrator;
+  private orchestrator: IssueService;
   private intervalMs: number;
   private retentionMs: number;
   private enabled: boolean;

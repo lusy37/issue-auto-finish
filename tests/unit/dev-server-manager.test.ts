@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { DevServerManager } from '../../src/deploy/DevServerManager.js';
+import { DevServerManager } from '../../src/preview/DevServerManager.js';
 import type { WorktreeContext } from '../../src/git/WorktreeContext.js';
 
 function makeWtCtx(number: number): WorktreeContext {

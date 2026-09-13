@@ -5,8 +5,8 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { newTracker } from '../helpers/dag-repository.js';
 import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { IssueState } from '../../src/tracker/IssueState.js';
-import { TrackerStateStore } from '../../src/orchestrator/TrackerStateStore.js';
-import { Orchestrator, buildPipeline, createPlanModeTransitions } from '../../src/orchestration/index.js';
+import { IssueWorkflow } from '../../src/orchestrator/IssueWorkflow.js';
+import { suspendAtReview } from '../helpers/native-review.js';
 
 let directory: string;
 beforeEach(() => { directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dag-budget-')); });
@@ -20,15 +20,15 @@ describe('持久重试预算', () => {
   it.each([['hard',0], ['hard',1], ['soft',0], ['soft',1]] as const)('%s 失败时 MAX_RETRIES=%s 的首次执行和边界', async (retryable, retries) => {
     const tracker = prepared();
     const run = vi.fn().mockResolvedValue({ kind: 'failed', error: { message: '持续失败', retryable } });
-    const create = () => new Orchestrator(buildPipeline({ e2e: true }, createPlanModeTransitions(3, retries)), { run }, new TrackerStateStore(tracker), { execute: async () => {} } as never);
+
     const context = { issueIid: 1, demand: tracker.get(1)!.demandSpec!, branchName: 'iaf-1', workDir: directory, pipelineMode: 'plan-mode' };
-    await create().drive(1, context);
+    await new IssueWorkflow({ tracker, number: 1, runner: { run }, context, maxRetries: retries, maxRepairs: 3 }).drive();
     expect(run).toHaveBeenCalledTimes(retries + 1);
     expect(tracker.get(1)!.run!.retryUsed.plan ?? 0).toBe(retries);
     expect(tracker.get(1)!.state).toBe(IssueState.Failed);
     expect(newTracker(directory).get(1)!.run!.retryUsed).toEqual(tracker.get(1)!.run!.retryUsed);
     tracker.resetForRetry(1);
-    await create().drive(1, context);
+    await new IssueWorkflow({ tracker, number: 1, runner: { run }, context, maxRetries: retries, maxRepairs: 3 }).drive();
     expect(run).toHaveBeenCalledTimes(retries + 2);
     expect(tracker.get(1)!.run!.retryUsed.plan ?? 0).toBe(retries);
   });
@@ -44,20 +44,21 @@ describe('持久重试预算', () => {
   });
 });
 describe('审核事务', () => {
-  it.each(['gate-approved', 'gate-rejected'] as const)('过期 %s 不改变新计划，当前版本只能决定一次', outcome => {
+  it.each(['gate-approved', 'gate-rejected'] as const)('过期 %s 不改变新计划，当前版本只能决定一次', async outcome => {
     const tracker = prepared();
     const plan = JSON.parse(structuredPlanOutput());
     tracker.store.savePlan(1, plan, tracker.get(1)!.run!.version);
     tracker.store.savePlan(1, plan, tracker.get(1)!.run!.version);
     tracker.updateState(1, IssueState.PhaseWaiting, { currentPhase: 'review' });
-    const adapter = new TrackerStateStore(tracker);
-    const transition = { nextState: { kind: 'gate-approved' as const, phaseId: 'review' }, nextAttempts: 0, historyEntry: { phaseId: 'review', attemptId: 0, startedAt: new Date().toISOString(), outcome }, reviewFeedback: '补充错误处理' };
+    await suspendAtReview(tracker, 1);
+    const workflow = new IssueWorkflow({ tracker, number: 1, runner: { run: async () => { throw new Error('不能执行 AI'); } }, context: { issueIid: 1, demand: tracker.get(1)!.demandSpec, branchName: 'iaf-1', workDir: directory }, maxRetries: 0, maxRepairs: 0 });
+    const action = outcome === 'gate-approved' ? 'approve' as const : 'reject' as const;
     const previous = tracker.get(1);
-    expect(() => adapter.applyTransition(1, { ...transition, expectedPlanRevision: 1 })).toThrow('冲突');
+    await expect(workflow.resumeReview({ action, planRevision: 1, feedback: '补充错误处理' })).rejects.toThrow('版本');
     expect(tracker.get(1)).toEqual(previous);
-    adapter.applyTransition(1, { ...transition, expectedPlanRevision: 2 });
+    await workflow.resumeReview({ action, planRevision: 2, feedback: '补充错误处理' });
     expect(tracker.get(1)!.run!.review?.decision).toBe(outcome === 'gate-approved' ? 'approved' : 'rejected');
-    expect(() => adapter.applyTransition(1, { ...transition, expectedPlanRevision: 2 })).toThrow('冲突');
+    await expect(workflow.resumeReview({ action, planRevision: 2, feedback: '补充错误处理' })).rejects.toThrow('状态');
     if (outcome === 'gate-rejected') expect(tracker.get(1)!.run!.reviewHistory?.[0]).toMatchObject({ revision: 2, feedback: '补充错误处理' });
   });
 });

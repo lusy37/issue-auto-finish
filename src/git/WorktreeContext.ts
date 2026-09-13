@@ -1,4 +1,4 @@
-import type { PortPair } from '../deploy/PortAllocator.js';
+import type { PortPair } from '../preview/PortAllocator.js';
 import type { WorkspaceContext } from '../workspace/index.js';
 
 export interface WorktreeContext {

@@ -9,12 +9,12 @@ import { GitOperations } from "./git/GitOperations.js";
 import { createAIRunner } from "./ai-runner/index.js";
 import { IssueTracker } from "./tracker/IssueTracker.js";
 import { SupplementStore } from "./supplement/SupplementStore.js";
-import { PipelineOrchestrator } from "./orchestrator/PipelineOrchestrator.js";
+import { IssueService } from "./orchestrator/IssueService.js";
 import {
   buildPlanModePipeline,
   registerPipeline,
   createLifecycleManager,
-} from "./pipeline/PipelineDefinition.js";
+} from "./pipeline/PipelineMetadata.js";
 import { IssuePoller } from "./poller/IssuePoller.js";
 import { WebServer } from "./web/WebServer.js";
 import { AgentLogStore } from "./web/AgentLogStore.js";
@@ -29,7 +29,7 @@ import { MemoryDistiller } from "./distill/MemoryDistiller.js";
 import { AgentRuleDistiller } from "./distill/AgentRuleDistiller.js";
 import { VersionStore } from "./distill/VersionStore.js";
 import { DistillScheduler } from "./distill/DistillScheduler.js";
-import { PreviewReaper } from "./deploy/PreviewReaper.js";
+import { PreviewReaper } from "./preview/PreviewReaper.js";
 import { WorktreeReaper } from "./workspace/WorktreeReaper.js";
 import { acquireInstanceLock } from "./utils/InstanceLock.js";
 
@@ -52,7 +52,7 @@ export async function main(): Promise<void> {
     const aiRunner = createAIRunner(config.ai);
     const mainGit = new GitOperations(config.project.gitRootDir);
     const supplementStore = new SupplementStore(dataDir);
-    const orchestrator = new PipelineOrchestrator(
+    const orchestrator = new IssueService(
       config,
       github,
       mainGit,

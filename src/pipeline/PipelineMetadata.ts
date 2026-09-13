@@ -2,7 +2,7 @@ import { IssueState } from '../tracker/IssueState.js';
 import { ActionLifecycleManager } from '../lifecycle/ActionLifecycleManager.js';
 import { PipelineNotFoundError } from '../errors/index.js';
 import { t } from '../i18n/index.js';
-import { getPlanModePhases } from '../orchestration/Pipeline.js';
+import { getPlanModePhases } from '../orchestration/Phases.js';
 
 export type PipelineMode = string;
 export type KnownPipelineMode = 'plan-mode';

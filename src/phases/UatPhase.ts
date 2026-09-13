@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { BasePhase, type PhaseContext } from "./BasePhase.js";
 import type { PhaseCallbacks } from "./PhaseCallbacks.js";
-import type { PhaseIntent } from "../orchestration/Intent.js";
+import type { PhaseResult } from "../orchestration/PhaseResult.js";
 import { executeUat } from "../e2e/PlaywrightRunner.js";
 import { getIssueContext } from '../context/IssueContext.js';
 /** 每次重试执行真实浏览器测试，不复用遗留 Markdown 报告。 */
@@ -17,7 +17,7 @@ export class UatPhase extends BasePhase {
   async run(
     ctx: PhaseContext,
     callbacks?: PhaseCallbacks,
-  ): Promise<PhaseIntent> {
+  ): Promise<PhaseResult> {
     const number = Number(ctx.demand.sourceRef.displayId),
       workDir = ctx.workDir || this.plan.baseDir;
     if (!fs.existsSync(path.resolve(workDir, this.config.e2e.configFile))) return { kind: 'failed', error: { message: '构建收尾未生成 Playwright 配置，请人工检查环境', retryable: 'hard-no-auto' } };

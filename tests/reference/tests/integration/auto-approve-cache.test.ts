@@ -15,7 +15,7 @@ import {
   type PhaseSpec,
   type ReducerSideEffect,
   type SideEffectExecutor,
-} from '../../src/orchestration/index.js';
+} from '../../orchestration/index.js';
 
 /**
  * GATE-5 / GATE-6：自动 gate 通过缓存命中场景集成测试。

@@ -1,5 +1,5 @@
 import { IssueRecord, IssueState, type PhaseProgress, deriveOrchestrationState } from './IssueState.js';
-import { type PipelineDef } from '../pipeline/PipelineDefinition.js';
+import { type PipelineDef } from '../pipeline/PipelineMetadata.js';
 import { IssueNotFoundError } from '../errors/index.js';
 import { ActionLifecycleManager } from '../lifecycle/ActionLifecycleManager.js';
 import { IssueRunStore } from '../dag/IssueRunStore.js';
@@ -9,6 +9,7 @@ import { getIssueNumber } from './IssueRecordHelper.js';
 import { logger as rootLogger } from '../logger.js';
 import { eventBus } from '../events/EventBus.js';
 import type { OrchestrationState, PhaseHistoryEntry } from '../orchestration/index.js';
+import { PHASE_IDS, type PhaseId } from '../orchestration/WorkflowState.js';
 
 const logger = rootLogger.child('IssueTracker');
 
@@ -411,11 +412,15 @@ export class IssueTracker {
   resetToPhase(issueIid: number, phase: string, def: PipelineDef): boolean {
     const record = this.get(issueIid);
     if (!record) return false;
+    if (!PHASE_IDS.includes(phase as PhaseId) || phase === 'review') return false;
     // Always create a fresh lifecycle manager from the provided def.
     // The cached lifecycleManagers may be stale (e.g., missing dynamically added phases like 'uat').
     const lm = new ActionLifecycleManager(def);
     const targetState = lm.getPhasePreState(phase);
     if (!targetState) return false;
+    // 显式回退开始新图执行轮次；暂停继续和失败重试则保留原检查点。
+    record.run!.workflow.generation++;
+    record.run!.workflow.entry = phase as PhaseId;
     record.state = targetState;
     record.run!.stopIntent = undefined;
     record.deliveryPending=undefined;record.uatRunId=undefined;record.completedAt=undefined;

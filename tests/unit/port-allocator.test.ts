@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { PortAllocator } from '../../src/deploy/PortAllocator.js';
+import { PortAllocator } from '../../src/preview/PortAllocator.js';
 
 describe('PortAllocator', () => {
   let allocator: PortAllocator;

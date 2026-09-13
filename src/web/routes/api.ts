@@ -14,12 +14,12 @@ import type { DemandSpec } from '../../demand/DemandSpec.js';
 import { getIssueNumber, getTitle } from '../../tracker/IssueRecordHelper.js';
 import { Config } from '../../config.js';
 import { AgentLogStore } from '../AgentLogStore.js';
-import { PipelineOrchestrator } from '../../orchestrator/PipelineOrchestrator.js';
+import { IssueService } from '../../orchestrator/IssueService.js';
 import { GitOperations } from '../../git/GitOperations.js';
 import { GitHubClient } from '../../clients/GitHubClient.js';
 import { SupplementStore } from '../../supplement/SupplementStore.js';
-import { getPipelineDef, getAllPipelineDefs, createLifecycleManager } from '../../pipeline/PipelineDefinition.js';
-import type { PipelineDef } from '../../pipeline/PipelineDefinition.js';
+import { getPipelineDef, getAllPipelineDefs, createLifecycleManager } from '../../pipeline/PipelineMetadata.js';
+import type { PipelineDef } from '../../pipeline/PipelineMetadata.js';
 import { ActionLifecycleManager } from '../../lifecycle/ActionLifecycleManager.js';
 import { eventBus, EventPayload } from '../../events/EventBus.js';
 import { GateActionError } from '../../orchestration/index.js';
@@ -32,7 +32,7 @@ import { t } from '../../i18n/index.js';
 import type { IssuePoller } from '../../poller/IssuePoller.js';
 import type { DistillScheduler } from '../../distill/DistillScheduler.js';
 import type { DiaryCollector } from '../../distill/DiaryCollector.js';
-import type { PreviewReaper } from '../../deploy/PreviewReaper.js';
+import type { PreviewReaper } from '../../preview/PreviewReaper.js';
 import type { WorktreeReaper } from '../../workspace/WorktreeReaper.js';
 
 const logger = rootLogger.child('ApiRoutes');
@@ -69,7 +69,7 @@ export interface ApiRouterDeps {
   tracker: IssueTracker;
   config: Config;
   agentLogStore: AgentLogStore;
-  orchestrator: PipelineOrchestrator;
+  orchestrator: IssueService;
   github: GitHubClient;
   supplementStore: SupplementStore;
   mainGit?: GitOperations;
@@ -81,7 +81,7 @@ export interface ApiRouterDeps {
   worktreeReaper?: WorktreeReaper;
 }
 
-function buildPreviewInfo(number: number, orch: PipelineOrchestrator) {
+function buildPreviewInfo(number: number, orch: IssueService) {
   const ports = orch.getPortAllocator().getPortsForIssue(number);
   if (!ports) return null;
   const dsm = orch.getDevServerManager();

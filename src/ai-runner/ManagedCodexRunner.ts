@@ -28,7 +28,7 @@ export class ManagedCodexRunner implements AIRunner {
   }
   protected workerEntrypoint(): { file: string; source: boolean } {
     const source = import.meta.url.endsWith('.ts');
-    return { source, file: fileURLToPath(new URL(source ? './sdk-worker.ts' : './sdk-worker.js', import.meta.url)) };
+    return { source, file: fileURLToPath(new URL(source ? './sdk-worker.js' : './sdk-worker.js', import.meta.url)) };
   }
   async run(options: RunOptions): Promise<RunResult> {
     if (isShuttingDown()) throw new Error('服务正在停止，不能启动新的 SDK 调用');

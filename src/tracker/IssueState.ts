@@ -1,6 +1,6 @@
 import type { DemandSpec } from '../demand/DemandSpec.js';
 import type { IssueRun } from '../dag/contracts.js';
-import type { GateReason, PhaseError } from '../orchestration/Intent.js';
+import type { GateReason, PhaseError } from '../orchestration/PhaseResult.js';
 import type { OrchestrationState, PhaseHistoryEntry } from '../orchestration/OrchestrationState.js';
 
 export enum IssueState {

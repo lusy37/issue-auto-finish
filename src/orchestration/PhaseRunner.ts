@@ -1,17 +1,9 @@
-import type { PhaseIntent } from './Intent.js';
-import type { PhaseSpec } from './Pipeline.js';
+import type { PhaseResult } from './PhaseResult.js';
+import type { PhaseSpec } from './Phases.js';
 
-/**
- * PhaseRunner — 单阶段执行器接口（src/orchestration/* 不依赖 git/tracker/eventBus）。
- *
- * 职责：
- * - 接收 PhaseSpec + 阶段上下文，调用对应阶段的 run() 方法获得 PhaseIntent。
- * - **不**承担副作用（commit / sync / event）—— 这些由 Orchestrator 根据 Reducer 返回的 sideEffects 执行。
- *
- * 具体实现见 src/orchestrator/StandardPhaseRunner.ts（依赖 GitOperations / PlanPersistence / EventBus）。
- */
+/** 单阶段业务执行接口；图负责顺序、重试和人工介入，执行器负责 SDK、Git 与验收凭证。 */
 export interface PhaseRunner {
-  run(spec: PhaseSpec, ctx: PhaseRunnerContext): Promise<PhaseIntent>;
+  run(spec: PhaseSpec, ctx: PhaseRunnerContext): Promise<PhaseResult>;
 }
 
 /** PhaseRunner 执行单阶段时的上下文 */

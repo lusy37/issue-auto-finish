@@ -13,7 +13,7 @@ import type {
 import { applyIntent, applyGateAction, type ReducerSideEffect } from './Reducer.js';
 import type { PhaseIntent } from './Intent.js';
 import type { PhaseRunner, PhaseRunnerContext } from './PhaseRunner.js';
-import { logger as rootLogger } from '../logger.js';
+import { logger as rootLogger } from '../../../src/logger.js';
 
 
 export class Orchestrator {

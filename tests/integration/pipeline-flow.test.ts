@@ -1,7 +1,7 @@
 vi.mock('../../src/orchestrator/DagPhaseRunner.js', () => ({ DagPhaseRunner: isolatedPhaseRunner((...args) => mockPhaseRun(...args)) }));
 import { isolatedPhaseRunner } from '../helpers/isolated-phase-runner.js';
 // 本组验证核心调度；真实 Git、UAT 及交付门禁由 mini-workflow 集成测试覆盖。
-vi.mock('../../src/orchestrator/steps/CompletionStep.js', () => ({ executeCompletion: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.updateState(ctx.issue.number, 'completed', {prUrl:pr.html_url,deliveryPending:false,completedAt:new Date().toISOString()}); } }));
+vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.updateState(ctx.issue.number, 'completed', {prUrl:pr.html_url,deliveryPending:false,completedAt:new Date().toISOString()}); } }));
 /**
  * 集成测试：流水线正常流程（happy path）
  *
@@ -99,7 +99,7 @@ vi.mock('node:util', async (importOriginal) => {
   };
 });
 
-const { PipelineOrchestrator } = await import('../../src/orchestrator/PipelineOrchestrator.js');
+const { IssueService } = await import('../../src/orchestrator/IssueService.js');
 
 describe('集成测试：流水线正常流程', () => {
   let harness: IntegrationHarness;
@@ -121,7 +121,7 @@ describe('集成测试：流水线正常流程', () => {
       labels: ['auto-finish', 'skip-review'],
     });
 
-    const orchestrator = new PipelineOrchestrator(
+    const orchestrator = new IssueService(
       harness.config,
       harness.github as any,
       harness.git as any,
@@ -150,7 +150,7 @@ describe('集成测试：流水线正常流程', () => {
     expect(lastLabelCall[1]).toContain('auto-finish:done');
 
     // 4. 验证 AI 阶段执行了 3 次（plan + build + verify，review 被 auto-approve）
-    expect(mockPhaseRun).toHaveBeenCalledTimes(3);
+    expect(mockPhaseRun).toHaveBeenCalledTimes(4);
   });
 
   it('无 auto-approve 时在 review gate 暂停', async () => {
@@ -158,7 +158,7 @@ describe('集成测试：流水线正常流程', () => {
 
     const issue = createIntegrationTestIssue();
 
-    const orchestrator = new PipelineOrchestrator(
+    const orchestrator = new IssueService(
       harness.config,
       harness.github as any,
       harness.git as any,
@@ -200,7 +200,7 @@ describe('集成测试：流水线正常流程', () => {
       },
     });
 
-    const orchestrator = new PipelineOrchestrator(
+    const orchestrator = new IssueService(
       harness.config,
       harness.github as any,
       harness.git as any,
@@ -209,6 +209,9 @@ describe('集成测试：流水线正常流程', () => {
     );
 
     await orchestrator.processIssue(issue);
+    await orchestrator.applyGateAction(issue.number, { action: 'approve' }, harness.tracker.get(issue.number)!.run!.planRevision);
+    vi.clearAllMocks();
+    await orchestrator.processIssue(issue);
 
     // 验证完成
     const record = harness.tracker.get(issue.number);
@@ -216,7 +219,7 @@ describe('集成测试：流水线正常流程', () => {
     expect(record!.state).toBe(IssueState.Completed);
 
     // 应该执行了 build + verify = 2 个 AI 阶段
-    expect(mockPhaseRun).toHaveBeenCalledTimes(2);
+    expect(mockPhaseRun).toHaveBeenCalledTimes(3);
   });
 
   it('tracker 持久化到文件并可恢复', async () => {
@@ -224,7 +227,7 @@ describe('集成测试：流水线正常流程', () => {
 
     const issue = createIntegrationTestIssue();
 
-    const orchestrator = new PipelineOrchestrator(
+    const orchestrator = new IssueService(
       harness.config,
       harness.github as any,
       harness.git as any,
@@ -243,7 +246,7 @@ describe('集成测试：流水线正常流程', () => {
     const {
       PLAN_MODE_PIPELINE: planPipeline,
       createLifecycleManager: createLM,
-    } = await import('../../src/pipeline/PipelineDefinition.js');
+    } = await import('../../src/pipeline/PipelineMetadata.js');
 
     const lifecycleManagers = new Map();
     lifecycleManagers.set('plan-mode', createLM(planPipeline));

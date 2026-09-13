@@ -9,16 +9,16 @@
 | 单草稿、创建意图、平台标记核对 | `src/demand/DraftService.ts` |
 | 格式、计划校验、执行身份与凭证 | `src/dag/contracts.ts` |
 | 不可变计划、聚合状态事务 | `src/dag/IssueRunStore.ts` |
-| 父状态与历史的统一转换 | `src/orchestrator/TrackerStateStore.ts` |
+| 原生图、审核中断与阶段结果事务 | `src/orchestrator/IssueWorkflow.ts` |
 | 任务派发、依赖、变基、串行合并 | `src/dag/TaskGraphExecutor.ts` |
 | 两个 build 入口、候选提交及验收凭证 | `src/orchestrator/DagPhaseRunner.ts` |
 | SDK 额度、受管理 worker | `src/ai-runner/ManagedCodexRunner.ts`、`sdk-worker.ts` |
 | 调用登记与过期结果隔离 | `src/dag/ScopedRunner.ts` |
-| 停止、重试、恢复、目录清理 | `src/orchestrator/PipelineOrchestrator.ts` |
+| 停止、重试、恢复、目录清理 | `src/orchestrator/IssueService.ts` |
 | 已验收提交的推送、唯一 PR、Issue 回写 | `src/dag/DeliveryService.ts` |
 | 任务与尝试展示 | `src/web/frontend/src/components/TaskGraphPanel.vue` |
 
-`orchestration` 保留纯状态转换，`orchestrator` 负责调用与副作用。`IssueTracker` 是聚合状态的访问及展示适配层，不再另外保存一份 tracker 权威文件。
+`orchestration` 保留阶段结果与纯数据契约，`orchestrator` 通过 LangGraph 图管理流转、调用与副作用。`IssueTracker` 是聚合状态的访问及展示适配层，不再另外保存一份 tracker 权威文件。
 
 每个 Issue 的 `DATA_DIR/issues/<编号>/run.json` 是唯一运行状态。`plans/<revision>.json` 保存不可变计划，包含父需求、补充资料、验收标准、任务定义和内容摘要。历史、父阶段、进度、任务、停止意图、预算、验收、交付身份在同一次同步事务中计算并原子替换；替换成功后才更新缓存并发事件。读接口返回副本，写入失败阻断该 Issue 的新调度和合并。
 
@@ -88,11 +88,11 @@ PR 身份跨完整重做保留。开放 PR 继续使用；关闭 PR 要求先重
 
 ## 数据格式和重新初始化
 
-新格式分别为 `iaf-mini/issue-run/v2`、`iaf-mini/task-plan/v2`、`iaf-mini/draft/v2`。不兼容或迁移旧任务、旧草稿；启动错误会指出具体文件和重新初始化方法，保留原文件。运行数据从不读取或写回仓库原 `data/`。
+新格式分别为 `iaf-mini/issue-run/v3-langgraph`、`iaf-mini/task-plan/v2`、`iaf-mini/draft/v2`。不兼容或迁移旧任务、旧草稿；启动错误会指出具体文件和重新初始化方法，保留原文件。运行数据从不读取或写回仓库原 `data/`。
 
 需要重新初始化时，先停止原服务并确认任务进程退出，再选择新的 `DATA_DIR` 和工作目录，或归档旧运行目录后初始化。旧状态仍需恢复时保留原目录及原版本程序，不能在活动目录上直接删除数据。
 
-演示使用新的 `.iaf-mini/demo-dag-v2`，原演示目录保留。演示的 AI 和 GitHub 为模拟，真实执行 Git、落盘和浏览器，生产执行器没有模拟模式开关。
+演示使用新的 `.iaf-mini/demo-langgraph-v3`，原演示目录保留。演示的 AI 和 GitHub 为模拟，真实执行 Git、落盘和浏览器，生产执行器没有模拟模式开关。
 
 ## 分阶段结果与验证
 
@@ -140,3 +140,5 @@ PR 身份跨完整重做保留。开放 PR 继续使用；关闭 PR 要求先重
 | 实现提交合计 | 129 | +3062 | −3869 | -807 |
 
 以上按实现提交的 `git show --numstat` 统计，包含新增文件，不以最初 DAG 功能估算限制本次完整范围。README 和本文的说明提交另计。测试代码净减少主要来自旧批量创建、worktree 备份回退及重复审核测试的契约重写；新增恢复、进程和交付验收保留在测试集中。
+
+以上历史验收记录来自 DAG 基线；本分支的迁移范围及重新验收结果见 [LangGraph 迁移](langgraph-native.md)。

@@ -6,7 +6,8 @@ export function createApp(frontendDir = path.resolve('src/web/frontend/dist'), r
   app.use(express.json({ limit: '1mb' }));
   for (const router of routers) app.use(router);
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
-  app.get('/detail', (_req, res) => res.sendFile(path.resolve(frontendDir,'index.html')));
+  // 静态根目录可能位于隐藏 Worktree 中；只在明确的公开目录内解析页面。
+  app.get('/detail', (_req, res) => res.sendFile('index.html', { root: path.resolve(frontendDir) }));
   app.use(express.static(frontendDir));
   app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => res.status(400).json({ error: error.message }));
   return app;

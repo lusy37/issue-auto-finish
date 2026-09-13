@@ -1,9 +1,9 @@
-import { IssueState, type IssueRecord } from '../tracker/IssueState.js';
+import { IssueState, type IssueRecord } from '../../../src/tracker/IssueState.js';
 import type { OrchestrationState } from '../orchestration/index.js';
 
 export {
   deriveOrchestrationState as recordToOrchestrationState,
-} from '../tracker/IssueState.js';
+} from '../../../src/tracker/IssueState.js';
 
 
 export function orchestrationStateToTrackerUpdate(

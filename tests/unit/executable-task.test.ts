@@ -6,7 +6,7 @@ import {
   type UnifiedTaskStatus,
 } from '../../src/tracker/ExecutableTask.js';
 import { IssueState, type IssueRecord } from '../../src/tracker/IssueState.js';
-import { PLAN_MODE_PIPELINE, createLifecycleManager } from '../../src/pipeline/PipelineDefinition.js';
+import { PLAN_MODE_PIPELINE, createLifecycleManager } from '../../src/pipeline/PipelineMetadata.js';
 
 const planModeLM = createLifecycleManager(PLAN_MODE_PIPELINE);
 

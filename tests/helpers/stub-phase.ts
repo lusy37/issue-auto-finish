@@ -4,23 +4,23 @@
  * 不继承 BasePhase（避免拉入 AIRunner/Git/Plan 等依赖），
  * 仅实现编排器需要的 duck-type 接口。
  *
- * PR 2 注：返回类型已从 PhaseOutcome 迁移到 PhaseIntent。
+ * PR 2 注：返回类型已从 PhaseOutcome 迁移到 PhaseResult。
  */
 import type { PhaseContext } from '../../src/phases/BasePhase.js';
 import type { PhaseCallbacks } from '../../src/phases/PhaseCallbacks.js';
-import type { PhaseIntent } from '../../src/orchestration/Intent.js';
+import type { PhaseResult } from '../../src/orchestration/PhaseResult.js';
 import type { GitOperations } from '../../src/git/GitOperations.js';
 
 export interface PhaseCallBehavior {
-  /** 正常返回的 PhaseIntent（部分字段即可，会与默认值合并） */
-  result?: Partial<PhaseIntent> | PhaseIntent;
+  /** 正常返回的 PhaseResult（部分字段即可，会与默认值合并） */
+  result?: Partial<PhaseResult> | PhaseResult;
   /** 模拟阶段抛异常 */
   throws?: Error;
   /** run 被调用时的回调（用于断言 phaseCtx 内容如 fixContext） */
   onExecute?: (ctx: PhaseContext) => void;
 }
 
-const DEFAULT_SUCCESS: PhaseIntent = {
+const DEFAULT_SUCCESS: PhaseResult = {
   kind: 'completed',
   output: 'stub ok',
   sessionId: 'stub-session',
@@ -49,7 +49,7 @@ export class StubPhase {
     return [];
   }
 
-  async run(ctx: PhaseContext, _callbacks?: PhaseCallbacks): Promise<PhaseIntent> {
+  async run(ctx: PhaseContext, _callbacks?: PhaseCallbacks): Promise<PhaseResult> {
     this.calls.push(JSON.parse(JSON.stringify(ctx)));
 
     const idx = Math.min(this.callIdx, this.behaviors.length - 1);
@@ -66,9 +66,9 @@ export class StubPhase {
 
     if (!behavior.result) return DEFAULT_SUCCESS;
 
-    if ('kind' in behavior.result) return behavior.result as PhaseIntent;
+    if ('kind' in behavior.result) return behavior.result as PhaseResult;
 
-    return { ...DEFAULT_SUCCESS, ...(behavior.result as Partial<PhaseIntent>) } as PhaseIntent;
+    return { ...DEFAULT_SUCCESS, ...(behavior.result as Partial<PhaseResult>) } as PhaseResult;
   }
 }
 

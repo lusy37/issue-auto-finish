@@ -4,7 +4,7 @@ import {
   PLAN_MODE_TRANSITIONS,
   type Pipeline,
   type PhaseSpec,
-} from '../../../src/orchestration/index.js';
+} from '../../../orchestration/index.js';
 
 /**
  * Pipeline 配置矩阵快照（MAT-1~6 + INV-5/6）

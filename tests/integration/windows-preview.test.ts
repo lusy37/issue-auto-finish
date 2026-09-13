@@ -2,8 +2,8 @@ import { it, expect, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import net from "node:net";
-import { DevServerManager } from "../../src/deploy/DevServerManager.js";
-import { PortAllocator } from "../../src/deploy/PortAllocator.js";
+import { DevServerManager } from "../../src/preview/DevServerManager.js";
+import { PortAllocator } from "../../src/preview/PortAllocator.js";
 
 const isOpen = (port: number) =>
   new Promise<boolean>((resolve) => {
