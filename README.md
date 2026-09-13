@@ -2,11 +2,11 @@
 
 单用户、单实例、单仓库的 AI Issue 开发工作台。以 issue-auto-finish-mini 为功能参考，从可启动骨架分批接入成熟模块、测试和界面，形成可回溯的 main 线性提交历史。
 
-六个入口：任务工作台、需求拆分、知识与经验、蒸馏、任务统计、设置。固定流程为 plan → review → build → verify → uat，通过后推送业务分支、创建或复用 PR、回写 Issue 并采集经验。
+六个入口：任务工作台、需求草稿、知识与经验、蒸馏、任务统计、设置。固定流程为 plan → review → build → verify → uat。一个草稿创建一个 Issue；计划包含 1～20 个内部任务，统一审核后在 build 中按依赖并行执行，汇总后绑定同一提交完成验证和浏览器验收，最后更新该 Issue 唯一的 PR、回写 Issue 并采集经验。
 
 ## 快速演示
 
-需要 Node.js ≥22.12、Git 和可用浏览器。本次验收使用 Windows、Chrome；依赖版本由 package-lock.json 锁定。
+需要 Node.js ≥22.12、Git 和可用浏览器。本轮 DAG 验收使用 Windows、Edge；依赖版本由 package-lock.json 锁定。
 
 ~~~powershell
 cd E:\Edge_Load\issue-auto-finish
@@ -17,7 +17,7 @@ npm run web:build
 npm run demo
 ~~~
 
-打开 http://127.0.0.1:3000，在任务工作台手动启动演示 Issue，打开详情查看计划并审核通过。演示使用模拟 GitHub 与 AI，Git、状态持久化和浏览器验收真实执行；数据写入 .iaf-mini/demo-github。使用本机 Chrome 时先设置 $env:IAF_TEST_BROWSER_CHANNEL='chrome'。
+打开 http://127.0.0.1:3000，在任务工作台手动启动演示 Issue，打开详情查看计划并审核通过。演示使用模拟 GitHub 与 AI，Git、状态持久化和浏览器验收真实执行；数据写入 .iaf-mini/demo-dag-v2。同时保留其他演示实例时，分别设置 `IAF_DEMO_PORT` 和 `IAF_DEMO_PLATFORM_PORT` 为未占用端口；端口冲突会报错停止。使用本机 Edge 时先设置 $env:IAF_TEST_BROWSER_CHANNEL='msedge'。
 
 ## 连接真实仓库
 
@@ -38,11 +38,14 @@ Web 工作台固定开启，无关闭开关。设置页提供以下选项，保�
 
 | 设置 | 默认 | 关闭或修改后的行为 |
 | --- | --- | --- |
+| 父 Issue 并发 | 1 | 正整数，限制同时处理的父需求数量 |
+| 全局 AI 并发额度 | 4 | 范围 1～32，限制全部官方 SDK 调用；排队中的调用可取消 |
+| 普通自动重试次数 | 3 | 首次执行之外的次数，0 不自动重试；暂停、重启、普通重试不返还额度 |
 | 启用计划审核 | 开启 | 新进入审核节点的完整计划保存后按配置自动通过；已有待审任务仍等待明确操作 |
 | 任务引用知识与经验 | 开启 | 停止给新 AI 请求附加项目知识、经验规则；资料管理、安装及构建测试命令仍可用 |
 | 启用经验蒸馏 | 开启 | 禁止新的手动蒸馏，保留原有日记、知识和历史；日记采集继续 |
-| 验证失败后自动修复 | 开启 | 验证失败后停止，保留报告，等待人工处理 |
-| 最大自动修复轮数 | 3 | 范围 1～10，表示首次验证失败后追加的修复轮数；重启继续累计已有次数 |
+| 验证失败后自动修复 | 开启 | verify 或有效 UAT 断言失败后停止，保留报告，等待人工处理 |
+| 最大自动修复轮数 | 3 | 范围 1～10，表示verify 与有效 UAT 断言失败共用的集成修复轮数；重启继续累计已有次数 |
 
 知识引用与蒸馏互相独立。旧 `WEB_ENABLED=true` 会提示清理；`false` 会明确报错，请删除该配置。演示模式重启会保留上述流程设置，平台、仓库和 AI 仍固定使用本地演示配置。
 
@@ -63,11 +66,15 @@ npm run test:windows
 npm run test:codex
 ~~~
 
-浏览器检查默认使用已安装的 Chromium，也支持 IAF_TEST_BROWSER_CHANNEL=chrome。Windows CI 已配置在 .github/workflows/ci.yml；远程 CI 尚未触发，本次结果来自本机执行。
+浏览器检查默认使用已安装的 Chromium，也支持 IAF_TEST_BROWSER_CHANNEL=chrome 或 msedge。Windows CI 已配置在 .github/workflows/ci.yml；远程 CI 尚未触发，本次结果来自本机执行。
 
 ## 数据与 Git
 
 默认配置、任务、日志和 worktree 均位于当前项目 .iaf-mini/github 下。IAF_MINI_HOME 可统一替换根目录，也支持 DATA_DIR、LOGS_DIR、WORKTREE_BASE_DIR 分别显式配置。运行数据和凭据已忽略，不导入 mini 项目的任务数据。
+
+DAG 版本的聚合运行状态、不可变计划与草稿采用独立 v2 格式，不迁移旧任务或草稿。启动遇到旧格式、损坏文件、缺失计划引用会报告具体路径并停止调度，原文件保留。使用新的 `DATA_DIR`（并为旧任务保留独立 `WORKTREE_BASE_DIR`），或归档旧运行目录后重新初始化。不要删除仍有进程使用的工作目录。
+
+暂停／取消先保存停止意图并等待进程退出；不确定的孤儿进程保持目录隔离。普通重试复用已确认任务，完整重做使用新构建轮次但保留原 PR。开放 PR 继续更新，关闭 PR 需先重开，已合并 PR 对应的 Issue 不再重做。详细状态和恢复规则见 [DAG 实施记录](docs/dag-implementation.md)。
 
 工程开发在 main 上按功能提交，2026-09-05 至 2026-09-11 对应七个开发阶段，日期按指定学习日程回排，不使用 Git 阶段标签。业务任务使用独立 worktree 和分支，通过 PR 交付；完成后不自动合并。此工程的 Git 历史保存在本地，专用测试仓库的 Issue/PR 是独立验收产物。
 
@@ -82,3 +89,5 @@ npm run test:codex
 精简后已再次执行真实 GitHub、Codex 和 Windows Chrome 全流程：[Issue #5](https://github.com/lusy37/issue-auto-finish-sandbox/issues/5) → [PR #6](https://github.com/lusy37/issue-auto-finish-sandbox/pull/6)，正式 UAT 7 项通过，重启核对通过。旧 mini 实例重复领取造成的标签干扰及恢复处置见 [本次真实复验记录](docs/live-uat-20260912.md)。
 
 配置、知识读写和文件保存修复后，Windows 本机回归 **958 项通过**，类型检查、前后端构建、变更文件 lint 和 Chrome 工作台端到端通过。本轮 AI/GitHub 使用模拟，未重新调用真实服务。行为说明、统计及验证边界见 [修复实施记录](docs/config-knowledge-storage-repair-plan.md#七实施与验收结果)。
+
+单 Issue 内部 DAG 修订完成后，本机完整回归 **1005 项通过**，工作台 Edge 端到端、类型检查、变更文件 lint 和前后端构建均通过。真实 Codex 生成代码与中止验证单独通过；本轮 GitHub 使用模拟平台，独立演示使用真实 Git 与 Edge 完成唯一 PR 交付。新状态格式、恢复边界、配置和实际增删见 [DAG 实施记录](docs/dag-implementation.md)。
