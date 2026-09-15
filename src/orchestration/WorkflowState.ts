@@ -58,12 +58,38 @@ export function newWorkflowStorage(): WorkflowStorage {
   return { generation: 0, entry: 'plan', checkpoints: [], writes: [], results: {}, effects: [] };
 }
 
-const serializedValue = z.object({ type: z.string(), data: z.string() });
+const serializedValue = z.object({
+  type: z.string(),
+  data: z.string(),
+});
+
 export const workflowStorageSchema = z.object({
   generation: z.number().int().nonnegative(),
   entry: z.enum([...PHASE_IDS, 'deliver']),
-  checkpoints: z.array(z.object({ threadId: z.string(), namespace: z.string(), id: z.string(), parentId: z.string().optional(), checkpoint: serializedValue, metadata: serializedValue })),
-  writes: z.array(z.object({ threadId: z.string(), namespace: z.string(), checkpointId: z.string(), taskId: z.string(), index: z.number().int(), channel: z.string(), value: serializedValue })),
-  results: z.record(z.string(), z.object({ phase: z.enum([...PHASE_IDS, 'deliver']), outcome: z.enum(['completed', 'retried-from', 'gate-approved', 'gate-rejected']), next: z.enum([...PHASE_IDS, 'deliver', '__end__']), sessionId: z.string().optional(), report: z.string().optional(), failures: z.array(z.string()).optional() })),
+  checkpoints: z.array(z.object({
+    threadId: z.string(),
+    namespace: z.string(),
+    id: z.string(),
+    parentId: z.string().optional(),
+    checkpoint: serializedValue,
+    metadata: serializedValue,
+  })),
+  writes: z.array(z.object({
+    threadId: z.string(),
+    namespace: z.string(),
+    checkpointId: z.string(),
+    taskId: z.string(),
+    index: z.number().int(),
+    channel: z.string(),
+    value: serializedValue,
+  })),
+  results: z.record(z.string(), z.object({
+    phase: z.enum([...PHASE_IDS, 'deliver']),
+    outcome: z.enum(['completed', 'retried-from', 'gate-approved', 'gate-rejected']),
+    next: z.enum([...PHASE_IDS, 'deliver', '__end__']),
+    sessionId: z.string().optional(),
+    report: z.string().optional(),
+    failures: z.array(z.string()).optional(),
+  })),
   effects: z.array(z.string()),
 });

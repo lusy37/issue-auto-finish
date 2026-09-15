@@ -67,44 +67,6 @@ export interface ConflictResolvingState {
 }
 
 // ---------------------------------------------------------------------------
-// 状态分类谓词
-// ---------------------------------------------------------------------------
-
-/** 终态：流水线已结束（成功 / 失败 / 暂停） */
-export function isTerminal(state: OrchestrationState): boolean {
-  return state.kind === 'pipeline-completed' || state.kind === 'pipeline-failed';
-}
-
-/** 是否处于阶段执行中 */
-export function isRunning(state: OrchestrationState): boolean {
-  return state.kind === 'running';
-}
-
-/** 是否处于 gate 等待 */
-export function isGateWaiting(state: OrchestrationState): boolean {
-  return state.kind === 'gate-waiting';
-}
-
-/** 是否可被 Drive 循环驱动（继续执行下一阶段） */
-export function isDrivable(state: OrchestrationState): boolean {
-  switch (state.kind) {
-    case 'queued':
-      return true;
-    case 'gate-approved':
-      return true;
-    case 'pipeline-failed':
-      // pipeline-failed 状态的 retryable 字段决定是否自动驱动
-      return state.retryable === 'auto';
-    case 'running':
-    case 'gate-waiting':
-    case 'paused':
-    case 'pipeline-completed':
-    case 'conflict-resolving':
-      return false;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // 阶段历史记录（持久化在 IssueRecord.phaseHistory）
 // ---------------------------------------------------------------------------
 

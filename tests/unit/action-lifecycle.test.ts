@@ -154,28 +154,6 @@ describe('ActionLifecycleManager', () => {
       });
     });
 
-    describe('getPhasePreState', () => {
-      it('plan → BranchCreated', () => {
-        expect(lm.getPhasePreState('plan')).toBe(IssueState.BranchCreated);
-      });
-
-      it('review → PhaseDone (prev=plan)', () => {
-        expect(lm.getPhasePreState('review')).toBe(IssueState.PhaseDone);
-      });
-
-      it('build → PhaseApproved (prev=review gate)', () => {
-        expect(lm.getPhasePreState('build')).toBe(IssueState.PhaseApproved);
-      });
-
-      it('verify → PhaseDone (prev=build)', () => {
-        expect(lm.getPhasePreState('verify')).toBe(IssueState.PhaseDone);
-      });
-
-      it('returns undefined for unknown phase', () => {
-        expect(lm.getPhasePreState('nonexistent')).toBeUndefined();
-      });
-    });
-
     describe('getPhaseStates', () => {
       it('returns correct states for review gate', () => {
         expect(lm.getPhaseStates('review')).toEqual({

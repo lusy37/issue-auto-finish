@@ -8,7 +8,6 @@ import { type ExecutableTask, issueToExecutableTask } from './ExecutableTask.js'
 import { getIssueNumber } from './IssueRecordHelper.js';
 import { logger as rootLogger } from '../logger.js';
 import { eventBus } from '../events/EventBus.js';
-import type { OrchestrationState, PhaseHistoryEntry } from '../orchestration/index.js';
 import { PHASE_IDS, type PhaseId } from '../orchestration/WorkflowState.js';
 
 const logger = rootLogger.child('IssueTracker');
@@ -43,25 +42,24 @@ export class IssueTracker {
   private getAllRecords(): IssueRecord[] { return this.store.all(); }
 
   private lifecycleFor(record: IssueRecord): ActionLifecycleManager {
-    if (record.pipelineMode) {
-      const lm = this.lifecycleManagers.get(record.pipelineMode);
-      if (lm) return lm;
-    }
-    // Fallback: 'plan-mode' or first registered manager
-    return this.lifecycleManagers.get('plan-mode') ?? this.lifecycleManagers.values().next().value!;
+    // 尚未初始化的任务使用当前默认流程；显式指定的模式必须已注册。
+    const mode = record.pipelineMode ?? 'plan-mode';
+    const manager = this.lifecycleManagers.get(mode);
+    if (!manager) throw new Error(`任务流水线未注册：${mode}`);
+    return manager;
   }
 
   get(issueIid: number): IssueRecord | undefined { return this.store.get(issueIid); }
 
-  create(record: Omit<IssueRecord, 'createdAt' | 'updatedAt' | 'attempts'>): IssueRecord {
+  create(record: Omit<IssueRecord, 'createdAt' | 'updatedAt' | 'attempts' | 'orchestrationState'>): IssueRecord {
     const now = new Date().toISOString();
     const full: IssueRecord = {
       ...record,
+      orchestrationState: deriveOrchestrationState(record),
       attempts: 0,
       createdAt: now,
       updatedAt: now,
     };
-    full.orchestrationState = deriveOrchestrationState(full);
     full.phaseHistory ??= [];
     full.run ??= newIssueRun();
     this.store.insert(getIssueNumber(full), full);
@@ -89,47 +87,6 @@ export class IssueTracker {
     this.store.replace(record);
     logger.info('Issue state updated', { issueIid, state });
     eventBus.emitTyped('issue:stateChanged', { issueIid, state, record });
-  }
-
-  /**
-   * 把编排核心的 OrchestrationState 持久化到 record.orchestrationState。
-   *
-   * 同时同步 IssueRecord 的状态字段（state/currentPhase/...），供工作台展示与轮询使用。
-   * `extra` 用于附加领域字段（prUrl、attempts 等）。
-   */
-  setOrchestrationState(
-    issueIid: number,
-    nextOrchestrationState: OrchestrationState,
-    trackerState: IssueState,
-    extra?: Partial<IssueRecord>,
-  ): void {
-    const record = this.get(issueIid);
-    if (!record) {
-      throw new IssueNotFoundError(issueIid);
-    }
-    if (record.state === IssueState.Cancelled) return;
-    record.orchestrationState = nextOrchestrationState;
-    record.state = trackerState;
-    record.updatedAt = new Date().toISOString();
-    if (trackerState === IssueState.Completed) {
-      record.lastError = undefined;
-      record.failedAtState = undefined;
-    }
-    if (extra) {
-      Object.assign(record, extra);
-    }
-    this.store.replace(record);
-    eventBus.emitTyped('issue:stateChanged', { issueIid, state: trackerState, record });
-  }
-
-  /** 追加一条 phaseHistory 条目（编排核心调用） */
-  appendPhaseHistory(issueIid: number, entry: PhaseHistoryEntry): void {
-    const record = this.get(issueIid);
-    if (!record) return;
-    if (!record.phaseHistory) record.phaseHistory = [];
-    record.phaseHistory.push(entry);
-    record.updatedAt = new Date().toISOString();
-    this.store.replace(record);
   }
 
   /** 清空 phaseHistory（用于 reset / restart） */
@@ -211,33 +168,22 @@ export class IssueTracker {
     eventBus.emitTyped('issue:paused', { issueIid, pausedAtPhase: currentPhase, record });
   }
 
-  resumeFromPause(issueIid: number, def: PipelineDef, clearSession: boolean): boolean {
+  resumeFromPause(issueIid: number): boolean {
     const record = this.get(issueIid);
     if (!record || record.state !== IssueState.Paused || !record.pausedAtPhase) return false;
 
-    const lm = new ActionLifecycleManager(def);
-    const preState = lm.getPhasePreState(record.pausedAtPhase);
-    if (!preState) return false;
-
     const phase = record.pausedAtPhase;
-    record.state = preState;
-    // 设置 currentPhase 为前驱阶段名（与 resetToPhase 逻辑一致）
-    if (preState === IssueState.PhaseDone || preState === IssueState.PhaseApproved) {
-      const phases = def.phases;
-      const idx = phases.findIndex(p => p.name === phase);
-      if (idx > 0) {
-        record.currentPhase = phases[idx - 1].name;
-      }
-    }
+    // 只恢复调度资格，执行位置和会话继续使用原图检查点。
+    record.state = IssueState.BranchCreated;
+    record.currentPhase = phase;
     record.pausedAtPhase = undefined;
     record.run!.stopIntent = undefined;
     record.updatedAt = new Date().toISOString();
     record.orchestrationState = deriveOrchestrationState(record);
     this.store.replace(record);
 
-    const eventType = clearSession ? 'issue:redone' : 'issue:continued';
-    logger.info('Issue resumed from pause', { issueIid, phase, clearSession, state: preState });
-    eventBus.emitTyped(eventType, { issueIid, phase, record });
+    logger.info('Issue resumed from pause', { issueIid, phase });
+    eventBus.emitTyped('issue:continued', { issueIid, phase, record });
     return true;
   }
 
@@ -345,7 +291,10 @@ export class IssueTracker {
     return this.getAllRecords().filter((record) => {
       if (record.run!.stopIntent || this.store.isBlocked(getIssueNumber(record))) return false;
       const lm = this.lifecycleFor(record);
-      const drivable = record.run!.recoveryRequired || lm.isDrivable(record.state, record.run!.retryUsed[record.currentPhase ?? 'setup'] ?? 0, maxRetries, record.lastErrorRetryable)
+      const retryUsed = record.run!.retryUsed[record.currentPhase ?? 'setup'] ?? 0;
+      // 已预留的最后一次重试仍必须可调度；否则 retryUsed 达到上限后会永久滞留在 Failed。
+      const reservedRetry = record.state === IssueState.Failed && record.lastErrorRetryable !== false && retryUsed > record.attempts;
+      const drivable = record.run!.recoveryRequired || reservedRetry || lm.isDrivable(record.state, retryUsed, maxRetries, record.lastErrorRetryable)
         || this.isStalled(getIssueNumber(record), stalledThresholdMs);
       if (!drivable) return false;
 
@@ -413,52 +362,34 @@ export class IssueTracker {
     const record = this.get(issueIid);
     if (!record) return false;
     if (!PHASE_IDS.includes(phase as PhaseId) || phase === 'review') return false;
-    // Always create a fresh lifecycle manager from the provided def.
-    // The cached lifecycleManagers may be stale (e.g., missing dynamically added phases like 'uat').
-    const lm = new ActionLifecycleManager(def);
-    const targetState = lm.getPhasePreState(phase);
-    if (!targetState) return false;
+    const phaseIdx = def.phases.findIndex(p => p.name === phase);
+    if (phaseIdx < 0) return false;
     // 显式回退开始新图执行轮次；暂停继续和失败重试则保留原检查点。
     record.run!.workflow.generation++;
     record.run!.workflow.entry = phase as PhaseId;
-    record.state = targetState;
+    record.state = IssueState.BranchCreated;
+    record.currentPhase = phase;
     record.run!.stopIntent = undefined;
     record.deliveryPending=undefined;record.uatRunId=undefined;record.completedAt=undefined;
-    // When resetting to a generic phase state, also set currentPhase
-    if (targetState === IssueState.PhaseRunning || targetState === IssueState.PhaseDone
-        || targetState === IssueState.PhaseWaiting || targetState === IssueState.PhaseApproved) {
-      // The phase we're resetting to is the one *before* the given phase (its preState).
-      // But since preState is BranchCreated for idx 0 or prev phase's doneState,
-      // we need to find the actual phase name that this preState corresponds to.
-      // For PhaseDone preState, the currentPhase should be the prev phase name.
-      const phases = def.phases;
-      const idx = phases.findIndex(p => p.name === phase);
-      if (idx > 0) {
-        record.currentPhase = phases[idx - 1].name;
-      }
-    }
     record.failedAtState = undefined;
     record.lastError = undefined;
     record.processingLock = undefined;
     // 重置目标阶段及后续阶段的 phaseProgress
     if (record.phaseProgress) {
-      const phaseIdx = def.phases.findIndex(p => p.name === phase);
-      if (phaseIdx >= 0) {
-        for (let i = phaseIdx; i < def.phases.length; i++) {
-          const pp = record.phaseProgress[def.phases[i].name];
-          if (pp) {
-            pp.status = 'pending';
-            pp.startedAt = undefined;
-            pp.completedAt = undefined;
-            pp.error = undefined;
-          }
+      for (const spec of def.phases.slice(phaseIdx)) {
+        const pp = record.phaseProgress[spec.name];
+        if (pp) {
+          pp.status = 'pending';
+          pp.startedAt = undefined;
+          pp.completedAt = undefined;
+          pp.error = undefined;
         }
       }
     }
     record.updatedAt = new Date().toISOString();
     record.orchestrationState = deriveOrchestrationState(record);
     this.store.replace(record);
-    logger.info('Issue reset to phase', { issueIid, phase, state: targetState });
+    logger.info('Issue reset to phase', { issueIid, phase });
     eventBus.emitTyped('issue:retryFromPhase', { issueIid, phase, record });
     return true;
   }
@@ -467,7 +398,7 @@ export class IssueTracker {
     const record = this.get(issueIid);
     if (!record || record.state !== IssueState.Failed) return false;
 
-    const restoreState = record.deliveryPending ? IssueState.Delivering : (record.failedAtState ?? IssueState.Pending);
+    const restoreState = record.deliveryPending ? IssueState.Delivering : IssueState.BranchCreated;
     if(record.deliveryPending) record.retryCount = (record.retryCount ?? 0) + 1;
     record.state = restoreState;
     record.run!.stopIntent = undefined;
@@ -501,7 +432,8 @@ export class IssueTracker {
   recoverInterruptedIssues(): number {
     let count = 0;
     for (const record of this.getAllRecords()) {
-      if (!this.lifecycleFor(record).isInProgress(record.state) && record.state !== IssueState.Delivering && !record.run!.stopIntent) continue;
+      // 等待审核也在启动后核对一次图，覆盖旧进程在等待投影与中断落盘之间退出的窗口。
+      if (!this.lifecycleFor(record).isInProgress(record.state) && record.state !== IssueState.Delivering && record.state !== IssueState.PhaseWaiting && !record.run!.stopIntent) continue;
       this.transaction(getIssueNumber(record), current => {
         current.run!.recoveryRequired = true;
         current.processingLock = undefined;

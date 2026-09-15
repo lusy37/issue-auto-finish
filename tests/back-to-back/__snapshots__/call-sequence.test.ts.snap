@@ -23,7 +23,7 @@ exports[`Back-to-Back: tracker state update sequences > failure and retry state 
   "phase_running",
   "failed",
   "failedAt:phase_running",
-  "phase_running",
+  "branch_created",
   "attempts:1",
 ]
 `;

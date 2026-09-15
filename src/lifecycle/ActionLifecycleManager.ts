@@ -188,21 +188,6 @@ export class ActionLifecycleManager {
     }
   }
 
-  // ─── 阶段前驱查询 ───
-
-  /**
-   * 获取某个 phase 的前驱状态（即重置到该 phase 需要设置的状态）。
-   * 第一个 phase 的前驱是 BranchCreated；后续 phase 的前驱是上一个 phase 的 approvedState 或 doneState。
-   */
-  getPhasePreState(phaseName: string): IssueState | undefined {
-    const phases = this.def.phases;
-    const idx = phases.findIndex(p => p.name === phaseName);
-    if (idx < 0) return undefined;
-    if (idx === 0) return IssueState.BranchCreated;
-    const prev = phases[idx - 1];
-    return prev.approvedState ?? prev.doneState;
-  }
-
   /**
    * 获取某个 phase 的状态三元组。
    */

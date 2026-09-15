@@ -442,8 +442,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     }
 
     this.confirmStoppedCalls(issueIid);
-    const issueDef = this.getIssueSpecificPipelineDef(issueIid);
-    this.tracker.resumeFromPause(issueIid, issueDef, false);
+    this.tracker.resumeFromPause(issueIid);
     logger.info('Issue continued from pause', { issueIid });
   }
 
@@ -462,41 +461,8 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     await Promise.allSettled(this.executions.values());
   }
 
-  /**
-   * 处理中止/重做的共享逻辑：
-   * - abort: 暂停 Issue（保留 session）
-   * - redo: 重置阶段（清除 session）
-   *
-   * 由 catch 块的两条路径（PhaseAbortedError / pendingActions）共用。
-   */
-  private applyPendingAction(
-    action: 'abort' | 'redo',
-    issueIid: number,
-    wtCtx: WorktreeContext,
-    pipelineDef: PipelineDef,
-  ): void {
-    const rec = this.tracker.get(issueIid);
-    // 若 onPhaseFailed 已递增 attempts（state === Failed 时），需回滚
-    if (rec?.state === IssueState.Failed && rec.attempts > 0) {
-      rec.attempts -= 1;
-    }
 
-    if (action === 'abort') {
-      this.tracker.pauseIssue(issueIid, rec?.currentPhase ?? '');
-    } else {
-      const phase = rec?.currentPhase;
-      if (phase) {
-        const wtPlan = new PlanPersistence(wtCtx.workDir, issueIid);
-        wtPlan.updatePhaseProgress(phase, 'pending');
-        // resetToPhase 内部已重置 tracker 的 phaseProgress
-        this.tracker.resetToPhase(issueIid, phase, pipelineDef);
-      }
-      this.eventBus.emitTyped('issue:redone', { issueIid: issueIid });
-    }
-  }
-
-
-  private getIssueSpecificPipelineDef(_issueIid: number): PipelineDef {
+  private getIssueSpecificPipelineDef(issueIid: number): PipelineDef {
     return buildPlanModePipeline({
       e2eEnabled: true,
     });
@@ -553,11 +519,6 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       buildPreviewUrl: (number) => this.buildPreviewUrl(number),
       getPortsForIssue: (number) => this.portAllocator.getPortsForIssue(number),
       isPreviewRunning: (number) => this.devServerManager.getStatus(number).running,
-      consumePendingAction: (number) => {
-        const action = this.pendingActions.get(number);
-        if (action) this.pendingActions.delete(number);
-        return action;
-      },
     };
   }
 
@@ -638,23 +599,6 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       await runWorkflow(ctx, deps, wtGit, wtPlan);
     } catch (err) {
       if (this.tracker.get(issue.number)?.run?.stopIntent) return;
-      // 拦截用户发起的中止和重做。
-
-      // Path A: PhaseAbortedError — 来自 RunWorkflowStep 阶段间检查（无 AI 运行时）
-      if (err instanceof PhaseAbortedError) {
-        if (err.action === 'restart') return; // restartIssue 已自行处理所有清理
-        this.applyPendingAction(err.action, issue.number, wtCtx, issuePipelineDef);
-        return;
-      }
-
-      // Path B: pendingActions — AI 进程被 kill 后由 catch 拾取
-      const pendingAction = this.pendingActions.get(issue.number);
-      if (pendingAction) {
-        this.pendingActions.delete(issue.number);
-        if (pendingAction === 'restart') return; // restartIssue 已自行处理所有清理
-        this.applyPendingAction(pendingAction, issue.number, wtCtx, issuePipelineDef);
-        return;
-      }
 
       if (isShuttingDown()) return;
       if (this.tracker.store.isBlocked(issue.number)) throw err;
@@ -906,14 +850,22 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     await this.mainGitMutex.runExclusive(() => this.mainGit.fetch());
     this.tracker.transaction(issueIid, current => {
       const run = current.run!;
+      if (this.executions.has(issueIid) || run.stopIntent || run.workflow.generation !== record.run!.workflow.generation || run.buildGeneration !== record.run!.buildGeneration) throw new Error('任务执行状态已改变，请重新确认冲突修复');
+      if (run.repairRounds >= this.config.verifyFixLoop.maxIterations) throw new Error('集成自动修复额度已用完');
       run.repairRounds++;
       run.buildEntry = 'repair-integration';
       run.repairs.push({ round: run.repairRounds, source: 'pr-conflict', report: `将 origin/${this.config.project.baseBranch} 合并到当前分支并解决冲突，保留父需求和基线双方修改。随后重新完整验证。` });
       run.verify = undefined; run.uat = undefined;
+      run.workflow.generation++;
+      run.workflow.entry = 'build';
       current.deliveryPending = false;
-      current.state = IssueState.PhaseApproved;
-      current.currentPhase = 'review';
-      current.orchestrationState = { kind: 'running', phaseId: 'build' };
+      current.completedAt = undefined;
+      current.uatRunId = undefined;
+      current.lastError = undefined;
+      current.failedAtState = undefined;
+      current.state = IssueState.BranchCreated;
+      current.currentPhase = 'build';
+      current.orchestrationState = { kind: 'queued' };
     });
   }
 

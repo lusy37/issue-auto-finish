@@ -265,16 +265,16 @@ describe('IssueTracker', () => {
       expect(tracker.get(1)!.state).toBe(IssueState.BranchCreated);
     });
 
-    it('resets to PhaseApproved for build phase (plan-mode)', () => {
+    it('重做 build 时直接指定图入口，不伪造审核已批准状态', () => {
       createRecord(1, IssueState.PhaseRunning);
       expect(tracker.resetToPhase(1, 'build', PLAN_MODE_PIPELINE)).toBe(true);
-      expect(tracker.get(1)!.state).toBe(IssueState.PhaseApproved);
+      expect(tracker.get(1)).toMatchObject({ state: IssueState.BranchCreated, currentPhase: 'build', run: { workflow: { generation: 1, entry: 'build' } } });
     });
 
-    it('resets to PhaseDone for verify phase (plan-mode)', () => {
+    it('重做 verify 时直接指定图入口，不伪造 build 完成状态', () => {
       createRecord(1, IssueState.Completed);
       expect(tracker.resetToPhase(1, 'verify', PLAN_MODE_PIPELINE)).toBe(true);
-      expect(tracker.get(1)!.state).toBe(IssueState.PhaseDone);
+      expect(tracker.get(1)).toMatchObject({ state: IssueState.BranchCreated, currentPhase: 'verify', run: { workflow: { generation: 1, entry: 'verify' } } });
     });
 
     it('returns false for unknown phase name', () => {

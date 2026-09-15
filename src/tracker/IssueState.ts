@@ -117,8 +117,7 @@ export interface IssuePhaseProgress {
 
 export interface IssueOrchestration {
   run?: IssueRun;
-
-  orchestrationState?: OrchestrationState;
+  orchestrationState: OrchestrationState;
   /** 阶段执行历史流水账，用于 Reducer 决策与前端展示 */
   phaseHistory?: PhaseHistoryEntry[];
 }
@@ -158,7 +157,10 @@ export interface ProgressData {
 }
 
 
-export function deriveOrchestrationState(record: IssueRecord): OrchestrationState {
+type StateSource = Pick<IssueRecord, 'state' | 'currentPhase' | 'pausedAtPhase' | 'lastError' | 'lastErrorRetryable'>;
+
+/** 当前业务状态写入时同步编排投影 */
+export function deriveOrchestrationState(record: StateSource): OrchestrationState {
   const phaseId = record.currentPhase ?? '';
 
   switch (record.state) {
@@ -207,7 +209,7 @@ function deriveGateReason(phaseId: string): GateReason {
   }
 }
 
-function deriveFailedState(record: IssueRecord): OrchestrationState {
+function deriveFailedState(record: StateSource): OrchestrationState {
   const failedAt = record.currentPhase ?? '';
   const retryable: 'auto' | 'manual' = record.lastErrorRetryable === false ? 'manual' : 'auto';
   const error: PhaseError | undefined = record.lastError

@@ -1,12 +1,11 @@
 import { BaseCheckpointSaver, type Checkpoint, type CheckpointMetadata, type CheckpointTuple } from '@langchain/langgraph';
 import type { RunnableConfig } from '@langchain/core/runnables';
+import { WRITES_IDX_MAP } from '@langchain/langgraph-checkpoint';
 import type { IssueRunStore } from '../dag/IssueRunStore.js';
 import type { SerializedValue, StoredCheckpoint, StoredWrite } from '../orchestration/WorkflowState.js';
 
 type ListOptions = Parameters<BaseCheckpointSaver['list']>[1];
 type PendingWrites = Parameters<BaseCheckpointSaver['putWrites']>[1];
-// 框架保留的通道索引；普通节点写入按任务与顺序去重，错误及恢复命令允许覆盖。
-const SPECIAL_WRITES: Record<string, number> = { __error__: -1, __scheduled__: -2, __interrupt__: -3, __resume__: -4 };
 
 /** 实现框架检查点协议，所有检查点与待提交写入均进入已有的每 Issue 聚合事务。 */
 export class IssueCheckpointer extends BaseCheckpointSaver {
@@ -79,7 +78,7 @@ export class IssueCheckpointer extends BaseCheckpointSaver {
     if (!checkpointId) throw new Error('节点写入缺少检查点 ID');
     const encoded = await Promise.all(writes.map(async ([channel, value], index): Promise<StoredWrite> => ({
       threadId: this.threadId, namespace: config.configurable?.checkpoint_ns ?? '', checkpointId,
-      taskId, index: SPECIAL_WRITES[channel] ?? index, channel, value: await this.encode(value),
+      taskId, index: WRITES_IDX_MAP[channel] ?? index, channel, value: await this.encode(value),
     })));
     this.assertThread(config);
     this.store.transaction(this.number, record => {

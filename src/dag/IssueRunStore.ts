@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getIssueNumber } from '../tracker/IssueRecordHelper.js';
 import { IssueState, type IssueRecord } from '../tracker/IssueState.js';
+import { orchestrationStateSchema } from '../tracker/OrchestrationStateSchema.js';
 import { writeJsonAtomicSync } from '../utils/atomicFile.js';
 import { PLAN_FORMAT, RUN_FORMAT, newIssueRun, planDigest, validatePlan, validateRun, type PlanContent, type TaskPlan } from './contracts.js';
 
@@ -42,6 +43,7 @@ export class IssueRunStore {
       const value = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (value.format !== RUN_FORMAT || !value.record?.run || value.record.demandSpec?.sourceRef?.source !== 'github-issue' || getIssueNumber(value.record) !== number) this.invalid(file, '聚合状态格式无效');
       if (!Object.values(IssueState).includes(value.record.state)) this.invalid(file, '父 Issue 状态无效');
+      if (!orchestrationStateSchema.safeParse(value.record.orchestrationState).success) this.invalid(file, '编排状态快照缺失或无效');
       validateRun(value.record.run, number);
       return value.record as IssueRecord;
     } catch (error) { return this.invalid(file, `无法读取聚合状态：${(error as Error).message}`); }

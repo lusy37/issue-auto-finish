@@ -148,20 +148,6 @@ describe('PipelineDefinition', () => {
     });
   });
 
-  describe('getPhasePreState', () => {
-    it('returns BranchCreated for the first plan-mode phase', () => {
-      expect(createLifecycleManager(PLAN_MODE_PIPELINE).getPhasePreState('plan')).toBe(IssueState.BranchCreated);
-    });
-
-    it('returns approvedState when previous phase is a gate', () => {
-      expect(createLifecycleManager(PLAN_MODE_PIPELINE).getPhasePreState('build')).toBe(IssueState.PhaseApproved);
-    });
-
-    it('returns undefined for unknown phase name', () => {
-      expect(createLifecycleManager(PLAN_MODE_PIPELINE).getPhasePreState('nonexistent')).toBeUndefined();
-    });
-  });
-
   describe('collectStateLabels', () => {
     it('includes Pending and Failed for plan-mode pipeline', () => {
       const labels = createLifecycleManager(PLAN_MODE_PIPELINE).collectStateLabels();
