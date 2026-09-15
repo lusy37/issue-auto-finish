@@ -17,6 +17,7 @@ import { EventBus } from '../../src/events/EventBus.js';
 export function createMockGitOperations() {
   return {
     fetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    resetOwned: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     fetchAndPull: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     createBranch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     checkout: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
@@ -133,8 +134,6 @@ export function createMockIssueTracker() {
       updatedAt: new Date().toISOString(),
     })),
     updateState: vi.fn(),
-    setOrchestrationState: vi.fn(),
-    appendPhaseHistory: vi.fn(),
     clearPhaseHistory: vi.fn(),
     initPhaseProgress: vi.fn(),
     updatePhaseProgress: vi.fn(),

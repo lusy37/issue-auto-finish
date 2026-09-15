@@ -48,7 +48,7 @@ afterEach(() => {
 });
 
 describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
-  it("驳回重做 → 修复 → Chromium 验收 → 交付失败仅重试交付 → 日记与统计", async () => {
+  it.each(['verify', 'uat'] as const)("驳回重做 → %s 失败修复 → Chromium 验收 → 交付恢复", async failurePhase => {
     const origin = path.join(dir, "origin.git"),
       repo = path.join(dir, "repo");
     fs.mkdirSync(repo);
@@ -60,7 +60,8 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
     fs.writeFileSync(path.join(repo, "README.md"), "# 演示项目\n");
     fs.writeFileSync(
       path.join(repo, "server.mjs"),
-      "import http from 'node:http';import fs from 'node:fs';http.createServer((q,s)=>{s.setHeader('content-type','text/html;charset=utf-8');s.end(fs.readFileSync('index.html'));}).listen(Number(process.argv[2]),'127.0.0.1');",
+      // 启动时读取页面，模拟不会自动加载新代码的服务；修复后必须重启才能通过第二轮 UAT。
+      "import http from 'node:http';import fs from 'node:fs';const page=fs.readFileSync('index.html');http.createServer((q,s)=>{s.setHeader('content-type','text/html;charset=utf-8');s.end(page);}).listen(Number(process.argv[2]),'127.0.0.1');",
     );
     fs.writeFileSync(
       path.join(repo, ".gitignore"),
@@ -169,7 +170,7 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
         }
         if (options.phaseName === "verify") {
           verifies++;
-          return { success: true, output: verifies === 1
+          return { success: true, output: failurePhase === 'verify' && verifies === 1
               ? "# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: 失败\n\n## 失败原因\n标题不符合验收标准，需要修复页面。\n"
               : "# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: 通过\n\n## 总结\n所有检查通过，页面标题符合要求。\n", exitCode: 0 };
         }
@@ -218,6 +219,10 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
       );
       expect(tracker.get(1)?.phaseProgress?.uat?.status).toBe("completed");
       expect(builds).toBe(2);
+      expect(tracker.get(1)?.run?.repairs).toMatchObject([{ source: failurePhase }]);
+      const accepted = tracker.get(1)!.run!;
+      expect(accepted.uat?.commit).toBe(accepted.candidateCommit);
+      expect(accepted.verify?.commit).toBe(accepted.candidateCommit);
       expect(tracker.get(1)?.deliveryPending).toBe(true);
       const callsBeforeRetry = calls.length;
       tracker.resetForRetry(1);

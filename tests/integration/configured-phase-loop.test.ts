@@ -48,18 +48,20 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function fixture(options: { review?: boolean; label?: boolean; max?: number; loop?: boolean; failVerify?: boolean } = {}) {
+function fixture(options: { e2e?: boolean; review?: boolean; label?: boolean; max?: number; loop?: boolean; failVerify?: boolean } = {}) {
   const repository = graphFixture();
   const config = createTestConfig();
   Object.assign(config.project, { gitRootDir: repository.repo, workDir: repository.integration, worktreeBaseDir: repository.worktrees, projectSubDir: '' });
+  if (options.e2e !== false) {
   fs.writeFileSync(path.join(repository.integration, 'playwright.config.ts'), 'export default {};');
   realGit(repository.integration, 'add', '.'); realGit(repository.integration, 'commit', '-m', '验收配置');
+  }
   config.review.enabled = options.review ?? false;
   config.preview.enabled = false;
-  config.e2e.enabled = true;
+  config.e2e.enabled = options.e2e ?? true;
   config.verifyFixLoop.enabled = options.loop ?? true;
   config.verifyFixLoop.maxIterations = options.max ?? 3;
-  const pipelineDef = buildPlanModePipeline({ e2eEnabled: true });
+  const pipelineDef = buildPlanModePipeline({ e2eEnabled: config.e2e.enabled });
   const managers = new Map([[pipelineDef.mode, createLifecycleManager(pipelineDef)]]);
   const tracker = new IssueTracker(dir, managers);
   const demand = {
@@ -94,6 +96,27 @@ function fixture(options: { review?: boolean; label?: boolean; max?: number; loo
 }
 
 describe('配置进入实际阶段循环', { timeout: 300_000 }, () => {
+  it('预览重新启动失败时不接受 UAT 或进入交付', async () => {
+    const f = fixture();
+    f.config.preview.enabled = true;
+    f.deps.startPreviewServers = vi.fn().mockResolvedValue(null);
+    expect(await f.drive()).toMatchObject({ paused: true });
+    expect(f.deps.tracker.get(1)!.run!.uat).toBeUndefined();
+    expect(f.deps.tracker.get(1)!.state).toBe(IssueState.Failed);
+  });
+
+  it('等待旧预览退出期间被中止，不再启动替代进程或执行 UAT', async () => {
+    const f = fixture();
+    const controller = new AbortController();
+    f.config.preview.enabled = true;
+    f.deps.signal = controller.signal;
+    f.deps.stopPreviewServers = vi.fn(async () => { controller.abort(); });
+    await expect(f.drive()).rejects.toThrow();
+    expect(f.deps.startPreviewServers).not.toHaveBeenCalled();
+    expect(f.deps.tracker.get(1)!.run!.uat).toBeUndefined();
+  });
+
+
   it.each([
     { review: false, label: true, source: 'configuration' },
     { review: true, label: true, source: 'label' },
@@ -148,10 +171,17 @@ describe('配置进入实际阶段循环', { timeout: 300_000 }, () => {
 
   it('服务重启后从落盘历史继续计算修复次数', async () => {
     const f = fixture({ max: 3, failVerify: true });
-    f.deps.consumePendingAction = () => f.deps.tracker.get(1)?.phaseHistory?.some(h => h.outcome === 'retried-from') ? 'abort' : undefined;
+    const controller = new AbortController();
+    f.deps.signal = controller.signal;
+    const transaction = f.deps.tracker.transaction.bind(f.deps.tracker);
+    vi.spyOn(f.deps.tracker, 'transaction').mockImplementation((number, update) => {
+      const record = transaction(number, update);
+      if (record.run!.repairRounds === 1) controller.abort();
+      return record;
+    });
     await expect(f.drive()).rejects.toThrow();
     expect(f.calls.filter(c => c.phaseName === 'verify')).toHaveLength(1);
-    f.deps.consumePendingAction = undefined;
+    f.deps.signal = undefined;
     f.deps.tracker = new IssueTracker(dir, f.managers);
     expect(await f.drive()).toMatchObject({ paused: true });
     expect(f.calls.filter(c => c.phaseName === 'build')).toHaveLength(4);
@@ -171,3 +201,22 @@ it('有效 UAT 断言失败实际进入集成修复且受共享轮次上限约�
   expect(Object.values(state.run!.tasks).every(task => task.status === 'merged')).toBe(true);
   expect(state.orchestrationState?.kind).toBe('pipeline-failed');
 }, 300_000);
+
+it('关闭 E2E 后无需 Playwright 配置，仍完成真实计划、任务图和 verify', async () => {
+  const f = fixture({ e2e: false });
+  expect(await f.drive()).toMatchObject({ paused: false });
+  const record = f.deps.tracker.get(1)!;
+  expect(Object.hasOwn(record.phaseProgress!, 'uat')).toBe(false);
+  expect(record.run!.verify?.passed).toBe(true);
+  expect(record.run!.uat).toBeUndefined();
+  expect(record.phaseHistory?.some(entry => entry.phaseId === 'uat')).toBe(false);
+  expect(f.calls.map(call => call.phaseName)).toEqual(['plan', 'build', 'verify']);
+  expect(fs.existsSync(path.join(f.ctx.wtCtx.workDir, 'playwright.config.ts'))).toBe(false);
+});
+
+it('关闭 E2E 后 verify 失败仍阻止交付', async () => {
+  const f = fixture({ e2e: false, failVerify: true, loop: false });
+  expect(await f.drive()).toMatchObject({ paused: true });
+  expect(f.deps.tracker.get(1)?.state).toBe(IssueState.Failed);
+  expect(f.deps.tracker.get(1)?.run?.verify).toBeUndefined();
+});

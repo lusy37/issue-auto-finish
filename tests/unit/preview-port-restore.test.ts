@@ -92,7 +92,7 @@ describe('Preview port restore on retry', () => {
     mockTracker.get.mockImplementation(() => ctx.record as any);
   }
 
-  it('restores ports from portAllocator when resuming past deploysPreview phase', async () => {
+  it('恢复 UAT 时先停止旧服务，再使用新启动返回的端口', async () => {
     const pipelineDef = buildPlanModePipeline({ e2eEnabled: true });
     const issue = createTestIssue();
     const wtCtx = createMockWtCtx();
@@ -113,7 +113,7 @@ describe('Preview port restore on retry', () => {
       record: {
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.Failed,
+        state: IssueState.PhaseRunning,
         failedAtState: IssueState.PhaseRunning,
         currentPhase: 'uat',
         pipelineMode: 'plan-mode',
@@ -127,10 +127,12 @@ describe('Preview port restore on retry', () => {
     bindTrackerToRecord(ctx);
     await runWorkflow(ctx, deps, createMockGitOperations() as any, createMockWtPlan());
 
-    expect(deps.getPortsForIssue).toHaveBeenCalledWith(42);
+    expect(deps.getPortsForIssue).not.toHaveBeenCalled();
     expect(phaseCtx.ports).toEqual(MOCK_PORTS);
     expect(wtCtx.ports).toEqual(MOCK_PORTS);
-    expect(deps.startPreviewServers).not.toHaveBeenCalled();
+    expect(deps.stopPreviewServers).toHaveBeenCalledWith(42);
+    expect(deps.startPreviewServers).toHaveBeenCalledWith(wtCtx, issue);
+    expect(vi.mocked(deps.stopPreviewServers).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(deps.startPreviewServers).mock.invocationCallOrder[0]);
   });
 
   it('auto-starts preview when resuming past deploysPreview with no existing allocation', async () => {
@@ -153,7 +155,7 @@ describe('Preview port restore on retry', () => {
       record: {
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.Failed,
+        state: IssueState.PhaseRunning,
         failedAtState: IssueState.PhaseRunning,
         currentPhase: 'uat',
         pipelineMode: 'plan-mode',
@@ -167,7 +169,7 @@ describe('Preview port restore on retry', () => {
     bindTrackerToRecord(ctx);
     await runWorkflow(ctx, deps, createMockGitOperations() as any, createMockWtPlan());
 
-    expect(deps.getPortsForIssue).toHaveBeenCalledWith(42);
+    expect(deps.getPortsForIssue).not.toHaveBeenCalled();
     expect(deps.startPreviewServers).toHaveBeenCalledWith(wtCtx, issue);
     expect(phaseCtx.ports).toEqual(MOCK_PORTS);
   });
@@ -193,7 +195,7 @@ describe('Preview port restore on retry', () => {
       record: {
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.Failed,
+        state: IssueState.PhaseRunning,
         failedAtState: IssueState.PhaseRunning,
         currentPhase: 'uat',
         pipelineMode: 'plan-mode',
@@ -207,7 +209,7 @@ describe('Preview port restore on retry', () => {
     bindTrackerToRecord(ctx);
     await runWorkflow(ctx, deps, createMockGitOperations() as any, createMockWtPlan());
 
-    expect(deps.getPortsForIssue).toHaveBeenCalledWith(42);
+    expect(deps.getPortsForIssue).not.toHaveBeenCalled();
     expect(deps.isPreviewRunning).toHaveBeenCalledWith(42);
     expect(deps.startPreviewServers).toHaveBeenCalledWith(wtCtx, issue);
     expect(phaseCtx.ports).toEqual(MOCK_PORTS);
@@ -248,7 +250,7 @@ describe('Preview port restore on retry', () => {
     expect(phaseCtx.ports).toBeUndefined();
   });
 
-  it('已有端口且预览仍在运行时复用端口', async () => {
+  it('已有端口和运行进程也不能跳过 UAT 前的重新启动', async () => {
     const pipelineDef = buildPlanModePipeline({ e2eEnabled: true });
     const issue = createTestIssue();
     const wtCtx = createMockWtCtx();
@@ -271,7 +273,7 @@ describe('Preview port restore on retry', () => {
       record: {
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.Failed,
+        state: IssueState.PhaseRunning,
         failedAtState: IssueState.PhaseRunning,
         currentPhase: 'uat',
         pipelineMode: 'plan-mode',
@@ -286,7 +288,9 @@ describe('Preview port restore on retry', () => {
     await runWorkflow(ctx, deps, createMockGitOperations() as any, createMockWtPlan());
 
     expect(deps.getPortsForIssue).not.toHaveBeenCalled();
-    expect(phaseCtx.ports).toEqual(preExistingPorts);
+    expect(phaseCtx.ports).toEqual(MOCK_PORTS);
+    expect(deps.stopPreviewServers).toHaveBeenCalledWith(42);
+    expect(deps.startPreviewServers).toHaveBeenCalledTimes(1);
   });
 });
 

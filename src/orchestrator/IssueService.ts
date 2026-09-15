@@ -7,14 +7,13 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import { runProcess, splitCommand } from '../utils/process.js';
 import { Config } from '../config.js';
-import { IssueNotFoundError, InvalidPhaseError, InvalidStateError, PhaseAbortedError } from '../errors/index.js';
+import { IssueNotFoundError, InvalidPhaseError, InvalidStateError } from '../errors/index.js';
 import { GitHubClient, GitHubIssue } from '../clients/GitHubClient.js';
 import { GitOperations } from '../git/GitOperations.js';
 import type { AIRunner } from '../ai-runner/index.js';
 import { IssueTracker } from '../tracker/IssueTracker.js';
 import { IssueState, type IssueRecord } from '../tracker/IssueState.js';
 import { isNoteSyncEnabledForIssue } from '../notesync/NoteSyncSettings.js';
-import { PlanPersistence } from '../persistence/PlanPersistence.js';
 import type { WorktreeContext } from '../git/WorktreeContext.js';
 import { getLocalIP } from '../utils/network.js';
 import type { PhaseContext } from '../phases/BasePhase.js';
@@ -70,7 +69,6 @@ export class IssueService {
   private eventBus: EventBus;
   private workspaceManager: WorkspaceManager;
   private readonly effectiveWorktreeBaseDir: string;
-  private pendingActions = new Map<number, 'abort' | 'redo' | 'restart'>();
 
 
   cancelUat(issueIid?: number): void { cancelUat(issueIid); }
@@ -368,7 +366,9 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     assertOwnedDirectory(this.config.project.worktreeBaseDir, wtCtx.gitRootDir);
     await this.mainGitMutex.runExclusive(async () => {
       await this.mainGit.fetch();
-      if (fsSync.existsSync(wtCtx.gitRootDir)) await new GitOperations(wtCtx.gitRootDir).resetOwned(`origin/${this.config.project.baseBranch}`);
+      // 已回收目录也必须先重建，再统一重置；保留分支和 PR 身份不代表沿用旧交付代码。
+      if (!fsSync.existsSync(path.join(wtCtx.gitRootDir, '.git'))) await this.ensureWorktree(wtCtx);
+      await new GitOperations(wtCtx.gitRootDir).resetOwned(`origin/${this.config.project.baseBranch}`);
     });
     this.tracker.resetFull(issueIid);
   }

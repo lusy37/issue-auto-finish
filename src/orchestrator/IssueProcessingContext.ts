@@ -85,7 +85,6 @@ export interface PreviewDeps {
 export interface PolicyDeps {
   shouldAutoApprove(issueLabels: string[]): boolean;
   installDependencies(workDir: string, signal?: AbortSignal, force?: boolean): Promise<void>;
-  consumePendingAction?: (number: number) => 'abort' | 'redo' | 'restart' | undefined;
   supplementStore?: SupplementStore;
 }
 
