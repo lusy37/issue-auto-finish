@@ -115,6 +115,7 @@ describe('集成测试：流水线正常流程', () => {
   it('auto-approve 模式下完整走完 plan-mode 流水线', async () => {
     harness = createHarness({
       review: { enabled: true, autoApproveLabels: ['skip-review'] },
+      e2e: { enabled: true },
     });
 
     const issue = createIntegrationTestIssue({
@@ -154,7 +155,7 @@ describe('集成测试：流水线正常流程', () => {
   });
 
   it('无 auto-approve 时在 review gate 暂停', async () => {
-    harness = createHarness();
+    harness = createHarness({ e2e: { enabled: true } });
 
     const issue = createIntegrationTestIssue();
 
@@ -181,6 +182,7 @@ describe('集成测试：流水线正常流程', () => {
   it('从 PhaseApproved 恢复执行到完成', async () => {
     harness = createHarness({
       review: { enabled: true, autoApproveLabels: [] },
+      e2e: { enabled: true },
     });
 
     const issue = createIntegrationTestIssue();
@@ -223,7 +225,7 @@ describe('集成测试：流水线正常流程', () => {
   });
 
   it('tracker 持久化到文件并可恢复', async () => {
-    harness = createHarness();
+    harness = createHarness({ e2e: { enabled: true } });
 
     const issue = createIntegrationTestIssue();
 

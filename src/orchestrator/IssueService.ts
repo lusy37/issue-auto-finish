@@ -559,11 +559,6 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       try { await this.recoverExecution(issue.number); }
       catch (error) { this.tracker.markFailed(issue.number, (error as Error).message, record.state, false); return; }
     }
-    if (isRetry && record.lastErrorRetryable !== false) {
-      const phase = record.currentPhase ?? 'setup';
-      if ((record.run!.retryUsed[phase] ?? 0) >= this.config.poll.maxRetries) { this.tracker.markFailed(issue.number, '自动重试额度已用完', record.failedAtState ?? IssueState.Pending, false); return; }
-      this.tracker.transaction(issue.number, current => { current.run!.retryUsed[phase] = (current.run!.retryUsed[phase] ?? 0) + 1; });
-    }
     this.tracker.transaction(issue.number, current => {
       if (current.run!.stopIntent) throw new Error('任务已停止');
       current.run!.dispatchId = randomUUID();

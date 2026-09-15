@@ -113,7 +113,7 @@ describe('集成测试：Gate 审核流程', () => {
   });
 
   it('processIssue 在 review gate 暂停 → 批准后恢复到完成', async () => {
-    harness = createHarness();
+    harness = createHarness({ e2e: { enabled: true } });
 
     const issue = createIntegrationTestIssue();
 
@@ -150,7 +150,7 @@ describe('集成测试：Gate 审核流程', () => {
   });
 
   it('驳回后从头重新规划', async () => {
-    harness = createHarness();
+    harness = createHarness({ e2e: { enabled: true } });
 
     const issue = createIntegrationTestIssue();
 
@@ -188,6 +188,7 @@ describe('集成测试：Gate 审核流程', () => {
   it('auto-approve 标签跳过 review gate', async () => {
     harness = createHarness({
       review: { enabled: true, autoApproveLabels: ['fast-track'] },
+      e2e: { enabled: true },
     });
 
     const issue = createIntegrationTestIssue({
@@ -214,6 +215,7 @@ describe('集成测试：Gate 审核流程', () => {
   it('auto-approve 标签不匹配时仍暂停', async () => {
     harness = createHarness({
       review: { enabled: true, autoApproveLabels: ['fast-track'] },
+      e2e: { enabled: true },
     });
 
     const issue = createIntegrationTestIssue({

@@ -7,6 +7,8 @@ import { IssueState } from '../../src/tracker/IssueState.js';
 import { newTracker } from '../helpers/dag-repository.js';
 import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { buildPlanModePipeline } from '../../src/pipeline/PipelineMetadata.js';
+import { IssueService } from '../../src/orchestrator/IssueService.js';
+import { AsyncMutex } from '../../src/utils/AsyncMutex.js';
 
 let directory: string;
 beforeEach(() => { directory = fs.mkdtempSync(path.join(os.tmpdir(), 'langgraph-native-')); });
@@ -16,6 +18,7 @@ function fixture() {
   let tracker = newTracker(directory);
   const demand = { demandId: 'gh-1', sourceRef: { source: 'github-issue' as const, externalId: '1', displayId: '1' }, title: '需求', description: '实施需求', createdAt: new Date().toISOString() };
   tracker.create({ state: IssueState.Pending, demandSpec: demand, branchName: 'iaf-1' });
+  tracker.initPhaseProgress(1, buildPlanModePipeline({ e2eEnabled: true }));
   const calls: string[] = [];
   const runner: WorkflowOptions['runner'] = { run: async spec => {
     calls.push(spec.id);
@@ -28,6 +31,22 @@ function fixture() {
   return { calls, runner, options, workflow: () => new IssueWorkflow(options()), tracker: () => tracker,
     restart: () => { tracker = newTracker(directory); return new IssueWorkflow(options()); },
   };
+}
+
+async function projectBuildRetryWindow(f: ReturnType<typeof fixture>, retryUsed: number, attempts: number): Promise<void> {
+  await f.workflow().drive();
+  await f.workflow().resumeReview({ action: 'approve', planRevision: 1 });
+  f.tracker().transaction(1, record => {
+    record.state = IssueState.Failed;
+    record.currentPhase = 'build';
+    record.failedAtState = IssueState.PhaseRunning;
+    record.lastError = '模拟已落盘失败';
+    record.lastErrorRetryable = true;
+    record.attempts = attempts;
+    record.run!.retryUsed.build = retryUsed;
+    record.orchestrationState = { kind: 'pipeline-failed', failedAt: 'build', retryable: 'auto', error: { message: record.lastError, retryable: 'hard' } };
+    record.phaseProgress!.build = { status: 'failed', error: record.lastError };
+  });
 }
 
 describe('LangGraph 原生持久化和人工介入', () => {
@@ -83,6 +102,26 @@ describe('LangGraph 原生持久化和人工介入', () => {
     await f.workflow().drive();
     expect(run).toHaveBeenCalledTimes(3);
     expect(f.tracker().get(1)?.run?.retryUsed.plan).toBe(1);
+  });
+
+  it('失败已落盘但 retryPolicy 尚未预留时，重启补做且只扣一次预算', async () => {
+    const f = fixture();
+    await projectBuildRetryWindow(f, 0, 0);
+    expect(f.tracker().getDrivableIssues(1)).toHaveLength(1);
+    await f.restart().drive();
+    expect(f.calls).toEqual(['plan', 'build', 'verify', 'uat', 'deliver']);
+    expect(f.tracker().get(1)?.run?.retryUsed.build).toBe(1);
+    expect(f.tracker().get(1)?.state).toBe(IssueState.Completed);
+  });
+
+  it('retryPolicy 已预留最后一次预算但尚未执行时，重启可驱动且不重复扣减', async () => {
+    const f = fixture();
+    await projectBuildRetryWindow(f, 1, 0);
+    expect(f.tracker().getDrivableIssues(1)).toHaveLength(1);
+    await f.restart().drive();
+    expect(f.calls).toEqual(['plan', 'build', 'verify', 'uat', 'deliver']);
+    expect(f.tracker().get(1)?.run?.retryUsed.build).toBe(1);
+    expect(f.tracker().get(1)?.state).toBe(IssueState.Completed);
   });
 
   it('阶段成功后检查点写入失败，重启复用已提交结果，不重复调用 AI', async () => {
@@ -148,7 +187,9 @@ describe('LangGraph 原生持久化和人工介入', () => {
     expect(f.tracker().get(1)?.state).toBe(IssueState.Paused);
     run.mockImplementation(original);
     f.restart();
-    f.tracker().resumeFromPause(1, buildPlanModePipeline({ e2eEnabled: true }), false);
+    f.tracker().resumeFromPause(1);
+    expect(f.tracker().get(1)?.currentPhase).toBe('build');
+    expect(f.tracker().getDrivableIssues(1)).toHaveLength(1);
     await f.workflow().drive();
     expect(f.calls).toEqual(['plan', 'build', 'build', 'verify', 'uat', 'deliver']);
     expect(f.tracker().get(1)?.run?.workflow.generation).toBe(0);
@@ -183,4 +224,100 @@ describe('LangGraph 原生持久化和人工介入', () => {
     expect(f.calls).toEqual(['plan', 'build', 'verify', 'uat', 'deliver']);
     expect(f.tracker().get(1)?.phaseHistory?.filter(entry => entry.outcome === 'gate-approved')).toHaveLength(1);
   });
+
+  it.each([false, true])('审核中断保存前退出，启动可恢复；旧等待投影=%s', async oldProjection => {
+    const f = fixture();
+    const workflow = f.workflow();
+    const original = workflow.checkpointer.putWrites.bind(workflow.checkpointer);
+    vi.spyOn(workflow.checkpointer, 'putWrites').mockImplementation(async (...args) => {
+      if (args[1].some(([channel]) => channel === '__interrupt__')) throw new Error('模拟中断保存前退出');
+      return original(...args);
+    });
+    await expect(workflow.drive()).rejects.toThrow('中断保存前退出');
+    expect(f.tracker().get(1)?.state).toBe(IssueState.PhaseRunning);
+    if (oldProjection) f.tracker().updateState(1, IssueState.PhaseWaiting);
+    const resumed = f.restart();
+    expect(f.tracker().recoverInterruptedIssues()).toBe(1);
+    expect(f.tracker().getDrivableIssues(1)).toHaveLength(1);
+    expect((await resumed.getState()).tasks.flatMap(task => task.interrupts ?? [])).toHaveLength(0);
+    await resumed.drive();
+    expect(f.tracker().get(1)?.state).toBe(IssueState.PhaseWaiting);
+    expect(f.calls).toEqual(['plan']);
+    await resumed.resumeReview({ action: 'approve', planRevision: 1 });
+    await resumed.drive();
+    expect(f.calls).toEqual(['plan', 'build', 'verify', 'uat', 'deliver']);
+  });
+
+  it('中断已保存但等待投影写入失败，重启仍可继续审核', async () => {
+    const f = fixture();
+    const transaction = f.tracker().transaction.bind(f.tracker());
+    vi.spyOn(f.tracker(), 'transaction').mockImplementation((number, update) => transaction(number, record => {
+      const before = record.state;
+      update(record);
+      if (before !== IssueState.PhaseWaiting && record.state === IssueState.PhaseWaiting) throw new Error('模拟等待投影写入失败');
+    }));
+    await expect(f.workflow().drive()).rejects.toThrow('等待投影写入失败');
+    f.restart();
+    const resumed = new IssueWorkflow({ ...f.options(), autoReview: () => 'configuration' });
+    expect(f.tracker().recoverInterruptedIssues()).toBe(1);
+    expect((await resumed.getState()).tasks.flatMap(task => task.interrupts ?? [])).toHaveLength(1);
+    await resumed.drive();
+    expect(f.tracker().get(1)?.state).toBe(IssueState.PhaseWaiting);
+    expect(f.calls).toEqual(['plan']);
+    await resumed.resumeReview({ action: 'approve', planRevision: 1 });
+    await resumed.drive();
+    expect(f.calls).toEqual(['plan', 'build', 'verify', 'uat', 'deliver']);
+  });
+
+  it('显式失败重试立即可调度，并由原检查点定位失败阶段', async () => {
+    const f = fixture();
+    await f.workflow().drive();
+    await f.workflow().resumeReview({ action: 'approve', planRevision: 1 });
+    const original = f.runner.run.bind(f.runner);
+    const run = vi.spyOn(f.runner, 'run').mockResolvedValue({ kind: 'failed', error: { message: '模拟失败', retryable: 'hard-no-auto' } });
+    await f.workflow().drive();
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(f.tracker().get(1)).toMatchObject({ state: IssueState.Failed, lastErrorRetryable: false });
+    expect(f.tracker().get(1)?.run?.retryUsed.build).toBeUndefined();
+    f.tracker().resetForRetry(1);
+    expect(f.tracker().getDrivableIssues(1)).toHaveLength(1);
+    expect(f.tracker().get(1)?.currentPhase).toBe('build');
+    run.mockImplementation(original);
+    await f.restart().drive();
+    expect(f.calls).toEqual(['plan', 'build', 'verify', 'uat', 'deliver']);
+    expect(f.tracker().get(1)?.run?.workflow.generation).toBe(0);
+  });
+
+  it('已完成图的 PR 冲突修复明确重入 build，并保留原 PR 身份', async () => {
+    const f = fixture();
+    await f.workflow().drive();
+    await f.workflow().resumeReview({ action: 'approve', planRevision: 1 });
+    await f.workflow().drive();
+    f.tracker().transaction(1, record => {
+      record.run!.delivery = { repository: 'test/repo', issueNumber: 1, sourceBranch: 'iaf-1', targetBranch: 'main', marker: '原交付', creation: 'confirmed', prNumber: 8 };
+    });
+    const service = {
+      executions: new Map(), tracker: f.tracker(), mainGitMutex: new AsyncMutex(), mainGit: { fetch: vi.fn().mockResolvedValue(undefined) },
+      github: { getPullRequestDetail: vi.fn().mockResolvedValue({ state: 'open' }) },
+      config: { project: { baseBranch: 'main' }, verifyFixLoop: { maxIterations: 2 } },
+    } as unknown as IssueService;
+    await IssueService.prototype.resolveConflict.call(service, 1);
+    expect(f.tracker().getDrivableIssues(1)).toHaveLength(1);
+    expect(f.tracker().get(1)?.run).toMatchObject({ workflow: { generation: 1, entry: 'build' }, repairRounds: 1, buildEntry: 'repair-integration', delivery: { prNumber: 8 } });
+    await f.restart().drive();
+    expect(f.calls).toEqual(['plan', 'build', 'verify', 'uat', 'deliver', 'build', 'verify', 'uat', 'deliver']);
+  });
+});
+
+it('关闭 E2E 的审核检查点跨实例恢复后，verify 直接交付且完成状态不重跑', async () => {
+  const f = fixture();
+  f.tracker().initPhaseProgress(1, buildPlanModePipeline({ e2eEnabled: false }));
+  await f.workflow().drive();
+  await f.restart().resumeReview({ action: 'approve', planRevision: 1 });
+  await f.restart().drive();
+  expect(f.calls).toEqual(['plan', 'build', 'verify', 'deliver']);
+  expect(f.tracker().get(1)?.phaseProgress?.uat).toBeUndefined();
+  expect(Object.values(f.tracker().get(1)!.run!.workflow.results)).toContainEqual(expect.objectContaining({ phase: 'verify', next: 'deliver' }));
+  await f.restart().drive();
+  expect(f.calls).toEqual(['plan', 'build', 'verify', 'deliver']);
 });

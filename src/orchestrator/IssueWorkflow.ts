@@ -37,7 +37,7 @@ export interface WorkflowOptions {
 
 export class ReviewConflictError extends Error {}
 class PhaseExecutionError extends Error {
-  constructor(readonly phase: PhaseId, readonly detail: PhaseError) { super(detail.message); }
+  constructor(readonly phase: Exclude<PhaseId, 'review'>, readonly detail: PhaseError) { super(detail.message); }
 }
 
 /** 图是流程位置的唯一依据；聚合记录中的阶段状态用于业务凭证、展示和调度资格检查。 */
@@ -104,9 +104,36 @@ export class IssueWorkflow {
       const record = this.record();
       if ([IssueState.Completed, IssueState.Cancelled, IssueState.Paused].includes(record.state)) return;
       if (record.state === IssueState.Failed && record.lastErrorRetryable === false) return;
+      if (record.state === IssueState.Failed) {
+        const phase = record.currentPhase;
+        if (!phase || phase === 'review' || !PHASE_IDS.includes(phase as PhaseId)
+          || !this.reserveRetry(phase as Exclude<PhaseId, 'review'>, true)) {
+          this.update(current => {
+            current.lastErrorRetryable = false;
+            current.orchestrationState = {
+              kind: 'pipeline-failed',
+              failedAt: current.currentPhase ?? '',
+              retryable: 'manual',
+              error: current.lastError ? { message: current.lastError, retryable: 'hard-no-auto' } : undefined,
+            };
+          });
+          return;
+        }
+      }
       const saved = await this.checkpointer.getTuple(this.config);
       try {
         await this.graph.invoke(saved ? null : { entry: record.run!.workflow.entry }, { ...this.config, signal: this.options.signal });
+        const snapshot = await this.graph.getState(this.config);
+        const waiting = snapshot.tasks.flatMap(task => task.interrupts ?? []).some(item =>
+          (item.value as { kind?: string; planRevision?: number })?.kind === 'review'
+          && (item.value as { planRevision?: number }).planRevision === this.record().run!.planRevision);
+        // 等待状态只在框架已保存审核中断后发布；此前崩溃仍按在途执行恢复。
+        if (waiting) this.update(current => {
+          current.state = IssueState.PhaseWaiting;
+          current.currentPhase = 'review';
+          current.orchestrationState = { kind: 'gate-waiting', phaseId: 'review', reason: 'human-review', payload: { planRevision: current.run!.planRevision } };
+          current.phaseProgress!.review.status = 'gate_waiting';
+        });
       } catch (error) {
         if (error instanceof PhaseExecutionError && !this.options.tracker.store.isBlocked(this.options.number)) {
           this.options.tracker.emitFailure(this.options.number);
@@ -136,11 +163,25 @@ export class IssueWorkflow {
   getStateHistory() { return this.graph.getStateHistory(this.config); }
 
   private retry(error: unknown): boolean {
-    if (!(error instanceof PhaseExecutionError) || error.detail.retryable === 'hard-no-auto') return false;
+    return error instanceof PhaseExecutionError
+      && this.reserveRetry(error.phase, error.detail.retryable !== 'hard-no-auto');
+  }
+
+  /**
+   * retryUsed 大于 attempts 表示预算已为下一次执行预留。retryPolicy 与崩溃恢复共用本函数，
+   * 因而在“失败已保存”和“预算已预留”两个窗口退出都不会漏重试或重复扣减。
+   */
+  private reserveRetry(phase: Exclude<PhaseId, 'review'>, retryable: boolean): boolean {
+    if (!retryable) return false;
     this.check();
-    const { phase } = error;
-    if ((this.record().run!.retryUsed[phase] ?? 0) >= this.options.maxRetries) return false;
-    this.update(record => { record.run!.retryUsed[phase] = (record.run!.retryUsed[phase] ?? 0) + 1; });
+    const record = this.record();
+    const used = record.run!.retryUsed[phase] ?? 0;
+    if (used > record.attempts) return true;
+    if (used >= this.options.maxRetries) return false;
+    this.update(current => {
+      const currentUsed = current.run!.retryUsed[phase] ?? 0;
+      if (currentUsed <= current.attempts) current.run!.retryUsed[phase] = currentUsed + 1;
+    });
     return true;
   }
 
@@ -155,6 +196,8 @@ export class IssueWorkflow {
       record.currentPhase = phase;
       record.orchestrationState = { kind: 'running', phaseId: phase };
       record.lastError = undefined;
+      record.lastErrorRetryable = undefined;
+      record.failedAtState = undefined;
       record.phaseProgress ??= {};
       record.phaseProgress[phase] = { ...record.phaseProgress[phase], status: 'in_progress', startedAt, error: undefined, completedAt: undefined, sessionId: record.phaseProgress[phase]?.status === 'completed' ? undefined : record.phaseProgress[phase]?.sessionId };
       const executions = record.run!.phaseExecutions[phase] ?? 0;
@@ -177,13 +220,14 @@ export class IssueWorkflow {
     }
     if (intent.kind === 'failed') {
       this.update(record => {
+        const retryUsed = record.run!.retryUsed[phase] ?? 0;
+        const canAutoRetry = intent.error.retryable !== 'hard-no-auto' && retryUsed < this.options.maxRetries;
         record.state = IssueState.Failed;
         record.failedAtState = IssueState.PhaseRunning;
         record.lastError = intent.error.message;
-        // 自动重试只由节点 retryPolicy 执行，耗尽后必须显式继续。
-        record.lastErrorRetryable = false;
-        record.attempts = record.run!.retryUsed[phase] ?? 0;
-        record.orchestrationState = { kind: 'pipeline-failed', failedAt: phase, retryable: 'manual', error: intent.error };
+        record.lastErrorRetryable = canAutoRetry;
+        record.attempts = retryUsed;
+        record.orchestrationState = { kind: 'pipeline-failed', failedAt: phase, retryable: canAutoRetry ? 'auto' : 'manual', error: intent.error };
         record.phaseProgress![phase] = { ...record.phaseProgress![phase], status: 'failed', error: intent.error.message };
         this.history(record, { phaseId: phase, attemptId, startedAt, endedAt: new Date().toISOString(), outcome: 'failed', sessionId: intent.sessionId, errorMessage: intent.error.message });
       });
@@ -207,6 +251,8 @@ export class IssueWorkflow {
       record.orchestrationState = result.next === 'deliver' ? { kind: 'pipeline-completed' } : { kind: 'running', phaseId: result.next };
       if (record.state === IssueState.Delivering) record.deliveryPending = true;
       record.attempts = record.run!.retryUsed[phase] ?? 0;
+      record.lastErrorRetryable = undefined;
+      record.failedAtState = undefined;
       record.phaseProgress![phase] = { ...record.phaseProgress![phase], status: result.outcome === 'completed' ? 'completed' : 'pending', completedAt: result.outcome === 'completed' ? new Date().toISOString() : undefined, sessionId: result.sessionId };
       this.history(record, { phaseId: phase, attemptId, startedAt, endedAt: new Date().toISOString(), outcome: result.outcome, sessionId: result.sessionId, ...(result.outcome === 'retried-from' ? { fixIteration: record.run!.repairRounds, errorMessage: result.report, retryFromContext: { verifyFailures: result.failures ?? [], rawReport: result.report ?? '' } } : {}) });
     });
@@ -238,14 +284,16 @@ export class IssueWorkflow {
     if (!revision || record.run!.review?.decision !== 'waiting') throw new ReviewConflictError('没有可审核的完整计划');
     const plan = this.options.tracker.store.readPlan(this.options.number, revision, record.run!.planDigest);
     const wasWaiting = record.state === IssueState.PhaseWaiting;
+    const enteredReview = record.currentPhase === 'review' && !!record.phaseProgress?.review?.startedAt;
     if (!wasWaiting || record.currentPhase !== 'review' || !record.phaseProgress?.review) this.update(current => {
-      current.state = IssueState.PhaseWaiting;
+      current.state = IssueState.PhaseRunning;
       current.currentPhase = 'review';
-      current.orchestrationState = { kind: 'gate-waiting', phaseId: 'review', reason: 'human-review', payload: { planRevision: revision } };
+      current.orchestrationState = { kind: 'running', phaseId: 'review' };
       current.phaseProgress ??= {};
-      current.phaseProgress.review = { status: 'gate_waiting', startedAt: new Date().toISOString() };
+      current.phaseProgress.review = { status: 'in_progress', startedAt: current.phaseProgress.review?.startedAt ?? new Date().toISOString() };
     });
-    const source = wasWaiting ? undefined : this.options.autoReview?.();
+    // 已进入审核后恢复时必须使用中断决定，不能因配置变化绕过人工审核。
+    const source = wasWaiting || enteredReview ? undefined : this.options.autoReview?.();
     const decision = reviewDecisionSchema.parse(source ? { action: 'approve', source, planRevision: revision } : interrupt({ kind: 'review', issueNumber: this.options.number, planRevision: revision, planDigest: plan.digest }));
     const result: PhaseResultSummary = { phase: 'review', outcome: decision.action === 'approve' ? 'gate-approved' : 'gate-rejected', next: decision.action === 'approve' ? 'build' : 'plan' };
     this.update(current => {

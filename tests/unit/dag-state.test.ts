@@ -15,7 +15,7 @@ import { eventBus } from '../../src/events/EventBus.js';
 let directory: string;
 beforeEach(() => { directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dag-state-')); });
 afterEach(() => { fs.rmSync(directory, { recursive: true, force: true }); vi.restoreAllMocks(); });
-const record = (number: number): IssueRecord => ({ state: IssueState.Pending, branchName: `iaf-${number}`, attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), demandSpec: { demandId: `gh-${number}`, sourceRef: { source: 'github-issue', externalId: String(number), displayId: String(number) }, title: '需求', description: '实现并验收', createdAt: new Date().toISOString() }, run: newIssueRun() });
+const record = (number: number): IssueRecord => ({ state: IssueState.Pending, orchestrationState: { kind: 'queued' }, branchName: `iaf-${number}`, attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), demandSpec: { demandId: `gh-${number}`, sourceRef: { source: 'github-issue', externalId: String(number), displayId: String(number) }, title: '需求', description: '实现并验收', createdAt: new Date().toISOString() }, run: newIssueRun() });
 const content = (): PlanContent => ({ title: '计划', description: '共同完成父需求', acceptanceCriteria: ['验证通过'], tasks: [{ id: 'a', title: '接口', instructions: '实现接口', acceptanceCriteria: ['接口测试通过'], dependsOn: [] }, { id: 'b', title: '页面', instructions: '实现页面', acceptanceCriteria: ['页面可用'], dependsOn: ['a'] }] });
 const tracker = () => new IssueTracker(directory, new Map([['plan-mode', createLifecycleManager(PLAN_MODE_PIPELINE)]]));
 
