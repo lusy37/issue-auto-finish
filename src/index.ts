@@ -35,11 +35,13 @@ import { acquireInstanceLock } from "./utils/InstanceLock.js";
 
 /** 单进程装配：一套任务状态、平台客户端和执行器。 */
 export async function main(): Promise<void> {
+  // 启动基础环境：配置、语言、数据目录和单实例锁。
   const config = loadConfig();
   setLocale(config.locale);
   const dataDir = ensureDir(resolveDataDir());
   const releaseLock = acquireInstanceLock(dataDir);
   try {
+    // 注册 Issue 阶段流水线，并创建状态跟踪器。
     loadKnowledge(config.knowledge.path);
     const pipeline = buildPlanModePipeline({ e2eEnabled: config.e2e.enabled });
     registerPipeline(pipeline);
@@ -48,6 +50,8 @@ export async function main(): Promise<void> {
       new Map([[pipeline.mode, createLifecycleManager(pipeline)]]),
     );
     validateDraftStorage(path.join(dataDir, "drafts"));
+
+    // 创建外部平台、Git、AI 和 Issue 编排服务。
     const github = new GitHubClient(config.github);
     const aiRunner = createAIRunner(config.ai);
     const mainGit = new GitOperations(config.project.gitRootDir);
@@ -62,6 +66,8 @@ export async function main(): Promise<void> {
       new AsyncMutex(),
     );
     const poller = new IssuePoller(config, github, tracker, orchestrator);
+
+    // 创建日志、知识蒸馏和后台清理服务。
     const agentLogStore = new AgentLogStore(dataDir);
     agentLogStore.startListening();
     const knowledgeStore = new KnowledgeStore(
@@ -137,6 +143,8 @@ export async function main(): Promise<void> {
       previewReaper,
       worktreeReaper,
     });
+
+    // 注册进程信号处理，并按依赖关系协调关闭所有组件。
     let stopping = false;
     const shutdown = async () => {
       if (stopping) return;
@@ -163,6 +171,8 @@ export async function main(): Promise<void> {
     process.once("SIGTERM", () => {
       void shutdown().then(() => process.exit(0));
     });
+
+    // 恢复中断任务后启动 Web、Issue 轮询和后台清理器。
     try {
       tracker.recoverInterruptedIssues();
       await web.start();

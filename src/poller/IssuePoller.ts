@@ -25,8 +25,11 @@ export class IssuePoller {
   private driveTimer: ReturnType<typeof setInterval> | null = null;
   private activeIssues = new Set<number>();
   private lastAutoApproveCheckMs = 0;
+  /** 是否暂停从 GitHub 发现新的 Issue；不影响已有 Issue 的执行。 */
   private discoveryPaused = false;
+  /** 是否尚未完成首次成功发现，用于跳过启动前已存在的 Issue。 */
   private isFirstDiscovery = true;
+  /** 是否已有一轮 discovery 正在执行，避免发现任务重入。 */
   private discovering = false;
 
   constructor(
@@ -45,9 +48,9 @@ export class IssuePoller {
     const { discoveryIntervalMs, driveIntervalMs } = this.config.poll;
     logger.info('Issue poller starting', { discoveryIntervalMs, driveIntervalMs });
 
-    // Discovery first (immediate), drive delayed to avoid API stampede at startup.
-    // 发现任务需要调用平台 API；
-    // driving issues immediately would trigger GitHub 429 rate limiting.
+    // 先立即执行一次发现，尽快识别 GitHub 中符合条件的 Issue；驱动执行延迟 5 秒启动。
+    // 发现和驱动都会访问 GitHub API，错开启动可以避免初始化阶段集中发起请求。
+    // 这样可降低触发 GitHub 速率限制（HTTP 429）的风险，并让首次发现先完成。
     this.safeDiscover();
 
     const driveStartDelayMs = 5000;
@@ -116,6 +119,11 @@ export class IssuePoller {
     logger.info('Discovery resumed');
   }
 
+  /**
+   * 执行一次新 Issue 发现：从 GitHub 查询带有自动处理标签的开放 Issue，
+   * 过滤已登记或已完成的 Issue，并将新 Issue 转换后写入本地 Tracker。
+   * 首次成功发现时，启动前已存在的 Issue 会标记为跳过；后续发现的 Issue 才会进入待处理状态。
+   */
   private async discover(): Promise<void> {
     if (isShuttingDown()) return;
     if (this.discoveryPaused) return;
@@ -144,6 +152,7 @@ export class IssuePoller {
 
       logger.info('Discovered new issues', { count: newIssues.length, initialState });
       for (const issue of newIssues) {
+        /** 创建新的 issue 记录 */
         this.tracker.create({
           state: initialState,
           branchName: `${this.config.project.branchPrefix}-${issue.number}`,
@@ -157,6 +166,10 @@ export class IssuePoller {
     }
   }
 
+  /**
+   * 驱动一轮可执行 Issue：检查关闭状态和并发容量，筛选可恢复或待处理的任务，
+   * 获取对应的持久化处理锁后，在后台交给 IssueService 执行；本函数只负责调度，不负责具体阶段逻辑。
+   */
   private drive(): void {
     if (isShuttingDown()) return;
 
@@ -302,7 +315,8 @@ export class IssuePoller {
       return null;
     }
   }
-private async filterNewIssues(issues: GitHubIssue[]): Promise<GitHubIssue[]> { return issues.filter(issue => this.passesBasicFilter(issue)); }
+
+  private async filterNewIssues(issues: GitHubIssue[]): Promise<GitHubIssue[]> { return issues.filter(issue => this.passesBasicFilter(issue)); }
 
   private passesBasicFilter(issue: GitHubIssue): boolean {
     if (!issue.labels.includes(AUTO_FINISH_LABEL)) return false;

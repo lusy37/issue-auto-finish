@@ -3,8 +3,9 @@ import { logger as rootLogger } from './logger.js';
 
 const logger = rootLogger.child('Process');
 
-// 顶层守护：定时器/事件回调里的同步异常或未处理的 Promise 抛出，
-// 都会触发这两个钩子。EDQUOT/ENOSPC 等瞬态 IO 错误不应该让 守护进程 反复重启进程。
+// 进程级异常兜底：记录当前进程中未捕获的同步异常和未处理的 Promise rejection。
+// 当前策略是不立即退出进程，以避免单个异常导致守护进程重启；
+// 但异常可能使进程状态不再可靠。
 process.on('uncaughtException', (err: Error) => {
   const e = err as NodeJS.ErrnoException;
   logger.error('uncaughtException — keeping process alive', {

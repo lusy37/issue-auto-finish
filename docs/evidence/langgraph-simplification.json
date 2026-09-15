@@ -1,0 +1,83 @@
+{
+  "date": "2026-09-14",
+  "branch": "codex/langgraph-native",
+  "baseline": "d51c261",
+  "status": "完整运行后定向复验通过",
+  "productionSourceDelta": {
+    "added": 54,
+    "removed": 241,
+    "netRemoved": 187
+  },
+  "checks": [
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run web:build",
+      "exitCode": 0
+    }
+  ],
+  "initialRun": {
+    "command": "IAF_TEST_BROWSER_CHANNEL=chrome npm run test:all -- --maxWorkers=1 --testTimeout=180000 --hookTimeout=60000",
+    "files": 109,
+    "passedTests": 1005,
+    "failedTests": 9,
+    "unhandledErrors": 1,
+    "report": ".iaf-mini/native-audit/simplification-tests.json",
+    "findings": [
+      "重试状态快照需要从 phase_running 更新为 branch_created",
+      "沙箱账户 os.userInfo 失败导致四项原子写入测试无法加载 tsx",
+      "沙箱内 Windows 子进程清理测试超时、遗留进程及目录占用",
+      "一次测试钩子超时和一次 Vitest worker RPC 超时"
+    ]
+  },
+  "rerun": {
+    "files": 5,
+    "passedTests": 63,
+    "failedTests": 0,
+    "exitCode": 0,
+    "environment": "正常 Windows 账户；测试代码、断言和超时预算未放宽",
+    "report": ".iaf-mini/native-audit/failed-tests-rerun.json",
+    "suites": [
+      "back-to-back/call-sequence.test.ts",
+      "integration/process-lifecycle.test.ts",
+      "integration/windows-preview.test.ts",
+      "unit/atomic-file.test.ts",
+      "unit/issue-tracker.test.ts"
+    ]
+  },
+  "combinedCoverage": {
+    "files": 109,
+    "passedTests": 1014,
+    "productionTestFiles": 101,
+    "productionTests": 936,
+    "referenceTestFiles": 8,
+    "referenceTests": 78,
+    "nativeRecoveryTests": 15
+  },
+  "execution": {
+    "realGit": true,
+    "realBrowser": "Chrome",
+    "realCodex": false,
+    "realGithubWrites": false,
+    "runtimeFormatMigration": false
+  },
+  "sourceSha256": {
+    "src/errors/index.ts": "fd0e425a1b6fad9c21ebd6bd0c1a44157bb942b0fb0ef08bbe66b4a9dd49ed98",
+    "src/lifecycle/ActionLifecycleManager.ts": "3ea0a1b58e58315596cca98204759fd806ffe4b82e9503f72d81f0c64120d4b8",
+    "src/orchestration/OrchestrationState.ts": "e06fd6d93910d91542b47e6fc1f85e8fe294fffcbcc72beab3589310c97e3d2b",
+    "src/orchestrator/IssueCheckpointer.ts": "a78312f1c7675bbd78f4c9063077888c992381ae2990ccae5fb9460e8b61da30",
+    "src/orchestrator/IssueProcessingContext.ts": "b4b894b0f08942578a03fe90990c412f47515682b1df47ce354ec2ca3996ea83",
+    "src/orchestrator/IssueService.ts": "42fcb3ed521780a20182ebe8dffdbfc390d051c786fbdab66611009a2f0bb573",
+    "src/orchestrator/IssueWorkflow.ts": "c9f6097163cbe8b0602da551099e2806c4257e99075185406ad4176035ad07eb",
+    "src/orchestrator/steps/RunWorkflowStep.ts": "414dd53904af850b381a15c74b3b574f2d4b04e69656730af145154ef188a41c",
+    "src/tracker/IssueTracker.ts": "3b9db2fe93d73f4f0fe68998d7471a21988fb54245000434e164f38fcd6941b1",
+    "tests/integration/langgraph-native.test.ts": "7eef35a35b42897d275051920137c06220dc00a75ff7ee0e22b49a8ffdffcd58",
+    "tests/back-to-back/__snapshots__/call-sequence.test.ts.snap": "78a98c02a02018d64e4c34b80d8c90eef78971c18b8f997369fc6a6cde58b2de"
+  }
+}

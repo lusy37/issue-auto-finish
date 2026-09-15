@@ -1,0 +1,573 @@
+{
+  "date": "2026-09-14",
+  "checkedAt": "2026-09-14T06:20:52.170Z",
+  "branch": "codex/langgraph-native",
+  "conclusion": "真实故障注入闭环通过：首次正式 UAT 断言失败，LangGraph 自动集成修复，同一浏览器测试再次通过并交付 PR；审核后没有人工重试或状态修改",
+  "controlledFaultInjection": true,
+  "baselineNativeCommit": "d51c26145e2377eb0f94ec133695092f18243764",
+  "includesPriorUncommittedChanges": true,
+  "sourceFilesUnchangedDuringRun": 179,
+  "sourceSha256": {
+    "src/ai-runner/AIRunner.ts": "729aa4d3ebb3d9a5b04ce702aa25c4c47e1ec62f4e00c891edd61aa01438830d",
+    "src/ai-runner/AIRunnerRegistry.ts": "e6d75a918fd33a20851670fff1c672064de92e404cc3f8a5a58fae91fbb39afa",
+    "src/ai-runner/CodexRunner.ts": "51b4783551acc0e79640a87c5ed52990f6f96c18758f3e12897cb4edc5d7e6f2",
+    "src/ai-runner/ConcurrencyLimiter.ts": "89582f620861f6410a823f5eff94c2726b289acdbb4a892a71cb2b9217377f36",
+    "src/ai-runner/index.ts": "26a9139e1c1d1a51add1fbcdfcdd7e941325776cac2430b1d217208f377a6a4e",
+    "src/ai-runner/ManagedCodexRunner.ts": "c3089d0ad55d3b539a523df0bdf05da9baef1488051b919356b74c0488a09766",
+    "src/ai-runner/sdk-worker.ts": "97494b5cd695ad372baf0fc5f7f5ab53fd26023548e66d337d451c8239e3e9fa",
+    "src/analytics/TaskAnalytics.ts": "f77c51132133ba9ce7429486ac06cedf0cb98f154319fe0b201a36e02fb1278c",
+    "src/cli/index.ts": "a234ac2449d727a74421d6821528f1048cda396c6f37ecc270822d1f9624dd29",
+    "src/clients/GitHubClient.ts": "85821019b587aff7e1c5549a251dd63cafcc325b4e0e837a45d4955bd417588f",
+    "src/config-schema.ts": "92f8e2488fc8ab4061c03a6a5021904c2d544b82697f376ad48e076e1e277d56",
+    "src/config.ts": "defe8aac9893e4c826ba510d1fc718170429f5ef5e8ccc19a327975a02296ee1",
+    "src/context/IssueContext.ts": "e2ba44867db174ff7dfb4d19301c286112d54b936cfbdf18705d0548b5c2d229",
+    "src/dag/contracts.ts": "a4495af40c872cb6d7ffad6155fea483bde92b15ba9e6f76d662164d67ced80c",
+    "src/dag/DeliveryService.ts": "014ab15ac37a6cc7f4101351d66694a7844a67919c3143e49bcae22eec0abce6",
+    "src/dag/IssueRunStore.ts": "bc8ac24a792d1ae47d40fadd11e7bb1e2fed43b82c2b3ee3872fcc9bbb452896",
+    "src/dag/RecoveryError.ts": "02ac9ae4fccc84307387f65212e69aff0dd1db1b4023643f307c2a1c87168d29",
+    "src/dag/ScopedRunner.ts": "54017df031f4b4f4baafa471369deb3f7be924e8d10d7200c28e480908e566af",
+    "src/dag/TaskGraphExecutor.ts": "d597b9410b658a5bef409dfa840cd155370927713b110fae76c7aebcc6ab7f7d",
+    "src/demand/adapters/GitHubAdapter.ts": "45071c81a4a5765307e88e12d8f89cc8fe3ffc24829ee1c203adfe3e51b59af6",
+    "src/demand/DemandSpec.ts": "e7e18b184d29134db9c2d6a1a250ff70d345901c0f8039faafa894b6165ca710",
+    "src/demand/DraftService.ts": "44ca3f44e25e5e784b8b66b5d3a01d79cff384e3a19e814c1a7e53e5433a5958",
+    "src/distill/ActionSchema.ts": "f4e8be0e472025b9c966013c7f0592170f212e5150d40710369e20850c022a80",
+    "src/distill/AgentRuleDistiller.ts": "61616dc4834d3ef30de85c267c4bddc7ddd88e49a2d7b992808b277104acc418",
+    "src/distill/DiaryCollector.ts": "03bfd6eceee2e2826759a7add1276e23dd93d39f93ca595a1e2b8dc1197362e1",
+    "src/distill/DiaryStore.ts": "60f8544d28a970bbef6e46dd38ebd06ab07a480ef628b2127630cd80481804eb",
+    "src/distill/DistillScheduler.ts": "776509eecb81442ed1f84abee8faf7b64b02ffff043299095033bdd632aed66a",
+    "src/distill/MemoryDistiller.ts": "5bec2e86e9815ba17187ef35c74b9cb0a7bfe26b864dcb197f777bbbe283e9ca",
+    "src/distill/prompts/memory-distill.ts": "20d3c21189e16a3e5b0a635b5604d1a2fbcc8cca3d713797358e16ad871b7018",
+    "src/distill/prompts/rule-distill.ts": "4ba2afac0e993ba16bfa8d120e0b415c55efdfd9a704023dbf0e3913b4d7923b",
+    "src/distill/types.ts": "2a2cf0f65c8fa548b2c3e5be04bddb8082093c3b1b9cee8990f48c91ee29531b",
+    "src/distill/VersionStore.ts": "4ba66ce222de6b72218bbff11d7e270e5c40154d3b18e3d388fbc6efd6eedfe1",
+    "src/e2e/E2eSettings.ts": "20aec9d9b62c90c15ccdb5d7d72524badd0e23c258784af40e93fa98aaa8809b",
+    "src/e2e/index.ts": "243d32e250a723c900533cfe93dfab6c8fbb7f97f9b135d25bf7eceae185f4ff",
+    "src/e2e/PlaywrightRunner.ts": "d3e6a73527196987a0709e089cb64170b7cf7893a9160b0e245717dd7bc131f6",
+    "src/errors/AIExecutionError.ts": "e82861af480728d133a2708f53c4bf64afca94f6ac8b1949e435a7bd1c3d9d25",
+    "src/errors/ApiError.ts": "c21a56169c622559c5fb732d73e649d8c764b488c81ecfb774485389ded88e4f",
+    "src/errors/BaseError.ts": "9d7078b9795a631108e17c227e48a5f91d929f6871f8878afefc0680c1c020f3",
+    "src/errors/index.ts": "fd0e425a1b6fad9c21ebd6bd0c1a44157bb942b0fb0ef08bbe66b4a9dd49ed98",
+    "src/errors/InvalidOperationError.ts": "62b6da56fd00ccb3affcf3cc2a1d83ca246513d778dabb5505b25098483d60b1",
+    "src/errors/NotFoundError.ts": "e3dd7704d9aad485a54972d38bfe9d780867360b4b54daa369bc56fcfa6e7632",
+    "src/errors/ParseError.ts": "08b925b293a5e2377a328ea6a28f00c223acb9edf929444f60e500db0de3fdc3",
+    "src/errors/RegistryError.ts": "0e75e8d05b7df220cc5733455251d70126faafad77981016bb642c247bf6ffbb",
+    "src/errors/ShutdownError.ts": "25782adbf6544890c944d9f74113c4e9c8961b6b94411b99248bb6667529cf1d",
+    "src/events/EventBus.ts": "9ff70c7711f5a179771e21c7736ff71fa8e1b79fa6245146e3ff2ba075c1178d",
+    "src/git/ConflictResolver.ts": "1d008cc3bf5813b917f218f4d2c57e0d70f240ec612aa9381ef198eca31d8075",
+    "src/git/GitOperations.ts": "1bc9f3d3a05d6a7cbfa33c90f03abed12e867a39a5064a59ef36c2fc1277c428",
+    "src/git/WorktreeContext.ts": "3def569d8d07d1865cf4337424c71af4408f91939aeb6b0cd0642a3aa7fb612e",
+    "src/i18n/index.ts": "1fca78a210454d5334c04b3bad29d8627d69d63ffa7fb9726fbe6540ccdf0f99",
+    "src/i18n/locales/en.ts": "4c0dc68d45aa63340f50a9b5c4a6a6b2db380ebce9cfec02fd83683d10a027be",
+    "src/i18n/locales/zh-CN.ts": "fcc93cc5562707c0ab8e3167b1af406eec9628d47984158da1e1f57f8ecf4ef8",
+    "src/index.ts": "ef67ef35344d41505938b077fccbe31d7cec00dbd77f0bc632cf251530a23a07",
+    "src/knowledge/index.ts": "3bd6db067ce703777b58dd2fac512138ea7f525079abdc0b7682c5d66476891a",
+    "src/knowledge/KnowledgeDefaults.ts": "3f5e549bd72b410f088454e6c6be57ba5be367b72c888ad20738a5a3516b2815",
+    "src/knowledge/KnowledgeEntry.ts": "9d4de4a17648e6ad9071786d37208399b8e322c7cb2b28b8c7085ab24540f803",
+    "src/knowledge/KnowledgeLoader.ts": "f09de8f9a96c65ba0ad6ab20fbe1ebff9b22209cc63299b406b2dbd9ba7d031e",
+    "src/knowledge/KnowledgeStore.ts": "e78135f2b9ede0235c2c0d28a8b91ed503b7bd3d869f5287ebca6d3aeaa7c885",
+    "src/knowledge/ProjectKnowledge.ts": "80e3a6d1ed494b65268b0005e3a443827efd5cdac801136664aac6c7d34b6a66",
+    "src/knowledge/ProjectProfile.ts": "cca48b123d184b665d157cbaabcf3d87ff91a4858abbe20a9cd4a3cd51860b63",
+    "src/knowledge/PromptRules.ts": "801bcc68428b67e5c6a3c76262318c020006097834d44328fc0cd49f2059f577",
+    "src/lib.ts": "c45a6087462c8e6f8622853cd51b5152cdc701d667cc12544766c18d2033d696",
+    "src/lifecycle/ActionLifecycle.ts": "d2ab953bd6fb4bbede210afc98472ae29637d75db557321086a30bac8e6f6ecf",
+    "src/lifecycle/ActionLifecycleManager.ts": "3ea0a1b58e58315596cca98204759fd806ffe4b82e9503f72d81f0c64120d4b8",
+    "src/logger.ts": "7ac8900cc48c24d0cf2b347739a8e4de3fa41c5a3c01a365822fd0efcd46224a",
+    "src/notesync/NoteSyncSettings.ts": "8a32b168e1dad7603e98f24bc076e7ee01dcbde6817e367d5177ad40429d1d89",
+    "src/orchestration/index.ts": "a8556c7ea304ccc6fa3f709b62fb425f90a2ca315f12bedd388e7239e05b7e6b",
+    "src/orchestration/OrchestrationState.ts": "e06fd6d93910d91542b47e6fc1f85e8fe294fffcbcc72beab3589310c97e3d2b",
+    "src/orchestration/PhaseResult.ts": "11d10df87e718607689c5ed670512ddd9ba7282a4a1ca170403af5865cb86e96",
+    "src/orchestration/PhaseRunner.ts": "924e16559001dab6b43f8fe2d30fddf19e3136db405a4fe90d7bf4f6b4cc35fc",
+    "src/orchestration/Phases.ts": "9875852a4bf6bdd506aa1222cd735d29769f5472569e4e4a6092698753d60f19",
+    "src/orchestration/ReviewDecision.ts": "c5e7f86860ac8fa01d07e53b810de9e3f3fcdfc4146b9851dc79ab14a2dbf916",
+    "src/orchestration/WorkflowState.ts": "003559ab3369465c3165921cd881a06d8a1dab4bb95f30a81545c85468cc4e8a",
+    "src/orchestrator/DagPhaseRunner.ts": "0c2607aa4405516ad2232113eb81839b14345526d2520f325453060396e10935",
+    "src/orchestrator/IssueCheckpointer.ts": "a78312f1c7675bbd78f4c9063077888c992381ae2990ccae5fb9460e8b61da30",
+    "src/orchestrator/IssueProcessingContext.ts": "b4b894b0f08942578a03fe90990c412f47515682b1df47ce354ec2ca3996ea83",
+    "src/orchestrator/IssueService.ts": "b7af49396f2e527fbcee56cb97c1e4679ddcc5c189c2c5b5bb42308c508f4c8d",
+    "src/orchestrator/IssueWorkflow.ts": "c9f6097163cbe8b0602da551099e2806c4257e99075185406ad4176035ad07eb",
+    "src/orchestrator/steps/DeliverIssueStep.ts": "8c4ed77559bf82803c1b2f14beb22839910b3e4b2a6125c9d96c9243775e729c",
+    "src/orchestrator/steps/FailureHandler.ts": "298be7c41406fc2ea71af5f7c8d5ec459392db01964e44e2d1b3f19dc6643647",
+    "src/orchestrator/steps/PhaseHelpers.ts": "ad31a4578d34c8477d266d43fd256c3318f9b7e3e4a6191e63e8278e6c4f9ecf",
+    "src/orchestrator/steps/RunWorkflowStep.ts": "47b5136e004dc9b74b0931be5c78ed25abc8ec04b3d28f3264450cfe215d87d6",
+    "src/orchestrator/steps/SetupStep.ts": "db3a927d2969f55d9f21c68a2ad1a16c7be5e403938b6133c76e3007294eb14d",
+    "src/paths.ts": "52ce67cfa2fd54d7b18f1a830a9c5ae0bb926dee3188eac1aa238c6b09341bfc",
+    "src/persistence/PlanPersistence.ts": "034b09757ddaba9a3b5447fa88f869801e0845bd4e30bcf7a0fe00341b926fdb",
+    "src/persistence/TodolistExtractor.ts": "119e8d4191d4fceb0ce9cd7793f20d45e94df829388d8dc73649c7a39705abcd",
+    "src/phases/BasePhase.ts": "a24d9689363aaf058386600cd61f0b1cb98e1bcae271077fcdabdf3574ce1625",
+    "src/phases/BuildPhase.ts": "21c28aa5a0e38a518339504c8113006ba08f2f2043b460f0c1a23e8327df82c9",
+    "src/phases/PhaseCallbacks.ts": "638290b610f06db3fbce046b7548219fd2a1fad29e9ca3334e90073c1ab78ca8",
+    "src/phases/PhaseFactory.ts": "8b5e9864a5eb12c7813d88e57d3f7e75845ca3c716bf26f95d24754dd959411d",
+    "src/phases/PlanPhase.ts": "ee55e9ccb5b330f9a2eefee2c21f5acfb777f312ab860c2dd38624bdfe369867",
+    "src/phases/UatPhase.ts": "f8273b08f7929855824bc3d87e22895b92c0ac7c8a35032be6e51be32cf91382",
+    "src/phases/VerifyPhase.ts": "f60a7878fafd33e4658962f749933ec1c002c26f7d342a9e641be523afabc868",
+    "src/pipeline/PipelineMetadata.ts": "987f4aeda53c295cf5d816db94b9c0ae76d75282c54805a225b90186cbf64ad5",
+    "src/poller/IssuePoller.ts": "a5b658b0ac3e16313d11669f1544c6906e09cb22a639f088ea549faacbda8835",
+    "src/preview/DevServerManager.ts": "6ca808fd582b0164b40c4a454bee0bccaac8e5f3b04f53e1cd28f9b518926ffb",
+    "src/preview/index.ts": "ee30447cf97876979162e5f52f9f4613f042c6fedfb72cdee50fbd3a8bb10979",
+    "src/preview/PortAllocator.ts": "008e8d1e36ae5da892851b3e2359d84ea97fecb5283b1f925cf4a8a2e1a7e307",
+    "src/preview/PreviewReaper.ts": "d130c7634053eb36ef3899835442ba9b1969c97f34437cd947fde313169f46e9",
+    "src/prompts/templates.ts": "6200adc06dd53a8667e314fe04d410def61df8aebef948a6a3a5fa78febd46a4",
+    "src/run.ts": "d2dfd05bd5555bb39e5f304b97546b228d516a66952767b200a8f4b9869b5fab",
+    "src/shared/workbench.ts": "035d05eb1bc5b05a8b2efd731765471f4941a3a26b4552c3292ef5c03d54da32",
+    "src/shutdown/ShutdownSignal.ts": "6f4f7bbb5b50a9efec00ed69ebf2a6b6143440c65bffc3bfd1b513fc9dca7d18",
+    "src/supplement/SupplementStore.ts": "a9306c7cceef83224e17a8dd40c9cd66b27bf49d2d3adcdd4d394a0df778c22a",
+    "src/tracker/BaseTracker.ts": "3bd1a6240de0a852d30ec28b885b55c247c3f62e767f87982a617c24dd1a6b19",
+    "src/tracker/ExecutableTask.ts": "c249a04e475471d1577756966df897228aa38ddff391827f8cebf1d124b8fadb",
+    "src/tracker/IssueRecordHelper.ts": "3a8ade11032db5d40a00614f3df928964c3fec58fe0a4f7e071200b7fdecc614",
+    "src/tracker/IssueState.ts": "7c7123d31202c034536a3a662d05101e3758fb8eef6add28f07d32e5079fc842",
+    "src/tracker/IssueTracker.ts": "3b9db2fe93d73f4f0fe68998d7471a21988fb54245000434e164f38fcd6941b1",
+    "src/utils/AsyncMutex.ts": "74cf981ecc2356abd308b6e7bc068a3b6749cca3f477ca10c345320d648e89ff",
+    "src/utils/atomicFile.ts": "0c3e5ed1332a38642af773ae8fcadb0aaa86ecfefc2b73684a897ad248518cce",
+    "src/utils/InstanceLock.ts": "881ba6d6220b7e2a6d4eb9b68f0f79762642e839ca8292df03b777e80436299f",
+    "src/utils/network.ts": "6f04aa40553c1202b8ed85caa4f1681328d974da8dca9a52a4acf3e8eb17f040",
+    "src/utils/process.ts": "e8c4a019608e2f0ad0f9105d951bf26b1d0acff260eacb003ebeb4887e6fa6ad",
+    "src/utils/PullRequestHelper.ts": "5dff9301054c6ec0d3fab1804d6dd8368f5f783b670bdd24a33eca9fddd22b98",
+    "src/utils/RetryPolicy.ts": "b62cc4db64834190d7448efee13bd81287f25178e1a2ef30b27086aec88d610e",
+    "src/utils/Semaphore.ts": "d80cb65cd03fe2fc28cc8b54b7faecab8c166b4415c669168624aada73f8ecad",
+    "src/verify/index.ts": "9808e1a273ef9bf571ccb9858a192b0455e7016e6d0ec2c5ff8aaacaec8920fc",
+    "src/verify/VerifyReportParser.ts": "5697bb8477510b0ac25104ae305510f64ef79dc9f3ffd1a7d0b9d15e24284bb0",
+    "src/web/AgentLogStore.ts": "f8dea158b1398458813ec24b03e9b6bfb6e0b68df531fdb2875a0b18fcc951b7",
+    "src/web/createApp.ts": "a8a093023d6750854d76145a20fa7e6d124239c7fdab38ef47c40c24658d9db7",
+    "src/web/frontend/env.d.ts": "2513385940a0ba730592437ff2d43ae787b018009aad2b5d47768ac158682478",
+    "src/web/frontend/index.html": "055fac595a9251e36db238d326674c9b84bf27b7a20550ea2990d470395cb535",
+    "src/web/frontend/public/favicon.png": "c72c66b2721d1578879e4599658509972c6d2a50373ed08ed56a84aa6c9e66f9",
+    "src/web/frontend/public/logo.png": "4458817ddee457f6611c14902e4a42d95eabf3006bbcd612329c2bd4a6c7df30",
+    "src/web/frontend/src/api/client.ts": "5fbcc7c4617b91e27826dd1d0bce23b485d4c8e9b00f29f596c7096fa2f1496b",
+    "src/web/frontend/src/api/http.ts": "738f72b7d27e21313bc93b5ec0499373d240fc751b893a8844fbf1717a6f607b",
+    "src/web/frontend/src/api/mini.ts": "3ea99f4fad3066717ac3b81d33fefa3bcdec43a6f7e4b1161a625f7112b3ae8d",
+    "src/web/frontend/src/App.vue": "5fe2db3fe416f0634567313003e1113919cc66aefe8149b6ff07015a91af8823",
+    "src/web/frontend/src/components/AgentLogViewer.vue": "e4faab3a04bf83e406fd98c46e94888644db284f6447714e091be840e78b6232",
+    "src/web/frontend/src/components/AnalyticsPanel.vue": "c831c74fec389c63f22eb99cc9de05c61eb383d5ff60a516bd9379030c5b0856",
+    "src/web/frontend/src/components/BrowsePanel.vue": "510f57b118e0e99765c8c59438c475ec1412a18c7c0ea658d8de3adb6f368dde",
+    "src/web/frontend/src/components/DetailModal.vue": "38ab4a9064d325ff40b85bc17b023de9c5560b302af586786346b6960fa288f0",
+    "src/web/frontend/src/components/DistillPanel.vue": "3f28fafae4583a97a9ca9014bd1cd314ecf02464ed708bfe74c14dadc702b4eb",
+    "src/web/frontend/src/components/DraftsPanel.vue": "430739c8c3cc9b4900aafbc8453747e5fddd7e623fa1f075173b7bcbc5d3eff5",
+    "src/web/frontend/src/components/E2eArtifactsViewer.vue": "358f0ec615651a0d5688d5aeb7a2b9000fb190305c12670ea2ed1063bab5afda",
+    "src/web/frontend/src/components/HeaderBar.vue": "efa4eec97554ff7f3bd3b92d4140f61a541f8da10905d33ab75592036cbf980d",
+    "src/web/frontend/src/components/IssueDetailPage.vue": "62579d6ad3be6d84e6abbfdfde62faf34e28f86f7ccea9770be321a929283369",
+    "src/web/frontend/src/components/IssueTable.vue": "2879faa6fa8dcf2df73bc2b16be65f79697046b9a235d0fa196ae5c5fe96d4b2",
+    "src/web/frontend/src/components/KnowledgePanel.vue": "09607b853e84fe5c848ffc2d1e1aaea303ba54b1b57befba3fd0ca9a3dce9e2a",
+    "src/web/frontend/src/components/PipelineProgress.vue": "9692618b752f837608191007834a06cc37194345f80c8aa2df7c5c160e58242a",
+    "src/web/frontend/src/components/PlanDocViewer.vue": "c88bb28ba8f203e9822d2836edf502289e837fd6aeb0eb8f98dd21492ee34886",
+    "src/web/frontend/src/components/ReviewGatePanel.vue": "b1f4d355acf9a1a6d9608828ad8e36a662cd2f973082960c1d2c2ba6a4caa5c1",
+    "src/web/frontend/src/components/SettingsPanel.vue": "3d078a066753d23467058887b435fbc4b748b67f6b092931ad00ea0e47fe426f",
+    "src/web/frontend/src/components/StartDialog.vue": "fe344a4aeeb5067ae54f983ba9ce1401cf6201c076cf402fe70a65a434098d72",
+    "src/web/frontend/src/components/StatsCards.vue": "27ba1283da79aa5d4577ed4aca84b5744696259960252cdaa658e8e9079d753f",
+    "src/web/frontend/src/components/SupplementEditor.vue": "c1c88380b67473c358f3d2b8389cf4d7d050b18676cdadf214229810b2d5ff29",
+    "src/web/frontend/src/components/TaskGraphPanel.vue": "1a8662f909aa2230b873db81e443b656fbfd457ab83b395492b22dd4137d1fb3",
+    "src/web/frontend/src/components/WorkbenchPage.vue": "3e71bcb1602e4ebdfe97cfd7c1ae3f28c50982579dba32617567f1dbd41369d6",
+    "src/web/frontend/src/composables/useAction.ts": "2a19801688aaf38b9c2059108f8bd7b2d9ea28f3582db3c946590887f0897fac",
+    "src/web/frontend/src/composables/useAgentLogs.ts": "b7294672a693e44e56ad46561c37fd3491031f300ba67be6974c8412b21c2898",
+    "src/web/frontend/src/composables/useBrowse.ts": "ce7c6ed18450245130939bf73980861fa20a56574dc1b912f65253d67feb863e",
+    "src/web/frontend/src/composables/useIssueDetail.ts": "76a463e22602488d3c3e8ea5d8a4070d804544149d530f1c24f82e893547d49e",
+    "src/web/frontend/src/composables/usePipeline.ts": "047f2e216ccd29145824e6154b62c6fd4795f76b0dbb34be8f1dc0897e2bc97b",
+    "src/web/frontend/src/composables/useSSE.ts": "7e31c0955809d492fae70298537ef26a1888b30416184df566405f0f2547040b",
+    "src/web/frontend/src/composables/useTasks.ts": "a457fc0d9e48f73f297832a2e7a93fa292c41acc037a50a052f3cf6de38e068a",
+    "src/web/frontend/src/composables/useUrlSync.ts": "7316ecc4ed43c4b79518ec1aaa758aa2e829cd57dad8853dda23f873b4759619",
+    "src/web/frontend/src/i18n/index.ts": "779943af1418ca20a4c71935101d751534e4fbe9c1b32e90f1a5269d75ee4ada",
+    "src/web/frontend/src/i18n/locales/en.ts": "82f98de0ea5bfb58d9c26caa6d4a1a80ce43d8748076f171a6f9bb9d06785790",
+    "src/web/frontend/src/i18n/locales/zh-CN.ts": "0dae5fc39bc02f3b9fa88ede404cc69b1cc4671dfe7e72ec004d0543f1d09b57",
+    "src/web/frontend/src/main.ts": "c531586eace17e600502e7f8ce80337e1458389af377f9598efb65e488d694d4",
+    "src/web/frontend/src/style.css": "bf9f1370ca4f8a59b13b378278c59a910ac665fd9389e675bc63c6ff26116f83",
+    "src/web/frontend/src/types/index.ts": "2f9b24f7e8aa7af7fcfa6efcbb5f674ba8fa9b0ee2eb4e88b10b84f8f95d1f33",
+    "src/web/frontend/src/utils/formatters.ts": "a336ac50fe439bfa84e80a25ca34f962cd83541008d3a3240a8009c933a42f9e",
+    "src/web/frontend/src/utils/reviewGateStatus.ts": "2f403111729af9ff4953c45035eead160cc9e831759bff31ba1402171df469a9",
+    "src/web/frontend/src/vue-augment.d.ts": "f79fa875a25d1e351117444da65ee989f75714770ec82a4b10ea4ddf1a9ed30a",
+    "src/web/frontend/tsconfig.json": "2baffd58823689377101838a438bfb4f3a5525d597eaf797fc2cf8075623903a",
+    "src/web/frontend/vite.config.ts": "e361e2e31e63bb36478b429255acb21871c6a42a51e999e0515708b71430e424",
+    "src/web/routes/analytics.ts": "d3afbcae5ba57ee707be39982373aeeb2dca1395b674fde373bada9e5060e332",
+    "src/web/routes/api.ts": "b7f7357a32efe8f43443a09d297a7158b67b6ae25e150c7d2550e9be048768e1",
+    "src/web/routes/distill.ts": "0d951a6db799a7396136fc3715cba0160ba6a3d2788da731dd0a121fb7f81b0b",
+    "src/web/routes/drafts.ts": "811902a358b371de4bc5031d28a4778ef6ddbc85505ef7d7579c9fcb3f0ed677",
+    "src/web/routes/knowledge.ts": "b2770a74fae18eb181c33a63afa5a29364c78777e4cb5c24c53820dda181c86c",
+    "src/web/routes/setup.ts": "cd4a18c187b6a5d14d6e7c28fd83dd64d60d1425cdbb18eb374a830c200181fc",
+    "src/web/routes/uat.ts": "076d00a152ee1e4c970d77a29bbdc6db9c1fd7fde89f9f7c64dae4f30807d9ec",
+    "src/web/WebServer.ts": "f0faf3a477d3fbc4b22c9ed111d41081e1a7f1c73d0629a1d2d4b202fec0ca76",
+    "src/workspace/index.ts": "b8193c3bb0288607acbc8017d9cab8fb66f697a001991de00e5ce68c33386338",
+    "src/workspace/WorkspaceConfig.ts": "8281680c037d0f43582ff5f5f84dde71e42521674b557d0d433b974e07dfdb4a",
+    "src/workspace/WorkspaceManager.ts": "ea9ef3a3bcb7b8adae41bfde89a3d4d7abd3b12391fbaf1ca1a15d5d34169c71",
+    "src/workspace/WorkspaceTypes.ts": "c1aba242bd517c64d6604ddf8be140df1ef1b43870e378d395f9b72e7c040809",
+    "src/workspace/WorktreeReaper.ts": "71803345b596abb3b6901a588decb18d21228fa4b655f953cb919fdd9fd53650"
+  },
+  "sourceProof": {
+    "checkedAt": "2026-09-14T06:09:34.054Z",
+    "totalFiles": 180,
+    "byteIdenticalFiles": 179,
+    "commentOnlyChanges": [
+      {
+        "file": "src/run.ts",
+        "beforeSha256": "d2dfd05bd5555bb39e5f304b97546b228d516a66952767b200a8f4b9869b5fab",
+        "afterSha256": "a6933500bf5a8a076892e71da30e1f4757a5dcb129bd66be63fdc4114e932f4d",
+        "executableCodeUnchanged": true,
+        "emittedJavaScriptSha256": "41dab61c8aad419a6d22caf3033d5185a939b3846c61c2554b94513a0ddbc419"
+      }
+    ],
+    "executableCodeUnchanged": true
+  },
+  "postAcceptanceSourceCheck": {
+    "checkedAt": "2026-09-14T06:19:39.866Z",
+    "byteIdenticalFiles": 178,
+    "commentOnlyChanges": [
+      {
+        "file": "src/index.ts",
+        "beforeSha256": "ef67ef35344d41505938b077fccbe31d7cec00dbd77f0bc632cf251530a23a07",
+        "afterSha256": "8fb2c8b7917fa9b076277ffed9ac387f0c25fac20fa65f8dba2b9f5ad1a53453",
+        "executableCodeUnchanged": true,
+        "emittedJavaScriptSha256": "2e581a787759da91bd1939fd7b3b561c05d35d5faa094129ef7decaa4508d84d",
+        "modifiedAt": "2026-09-14T06:17:54.610Z"
+      },
+      {
+        "file": "src/run.ts",
+        "beforeSha256": "d2dfd05bd5555bb39e5f304b97546b228d516a66952767b200a8f4b9869b5fab",
+        "afterSha256": "a6933500bf5a8a076892e71da30e1f4757a5dcb129bd66be63fdc4114e932f4d",
+        "executableCodeUnchanged": true,
+        "emittedJavaScriptSha256": "41dab61c8aad419a6d22caf3033d5185a939b3846c61c2554b94513a0ddbc419",
+        "modifiedAt": "2026-09-14T06:06:50.012Z"
+      }
+    ],
+    "executableCodeUnchanged": true,
+    "runtimeArtifacts": [
+      {
+        "file": "dist/run.js",
+        "modifiedAt": "2026-09-14T03:05:50.364Z",
+        "sha256": "673d68fe99207d6eafa1c1a9273f931976da84c853148e219d891a4e40c4f153"
+      },
+      {
+        "file": "dist/index.js",
+        "modifiedAt": "2026-09-14T03:05:50.364Z",
+        "sha256": "7074a844477f8c7de5665dbe0abf666e3c3a1aaa1490b991a61f38840b979471"
+      }
+    ]
+  },
+  "runDirectory": "E:\\Edge_Load\\issue-auto-finish\\.iaf-mini\\worktrees\\langgraph-native\\.iaf-mini\\native-repair-20260914-0525",
+  "sandbox": "E:/Edge_Load/issue-auto-finish-sandbox",
+  "repository": "lusy37/issue-auto-finish-sandbox",
+  "baseBranch": "codex/native-uat-repair-base-20260914",
+  "baseCommit": "622dd06d0bfc0d1f7f4022262f63392a894a3002",
+  "mainCommit": "616696f56e6be3019d13b9ea7db6a8ce2b460d7b",
+  "originalSandboxAndRemoteMainUnchanged": true,
+  "issue": {
+    "number": 9,
+    "url": "https://github.com/lusy37/issue-auto-finish-sandbox/issues/9",
+    "labels": [
+      "auto-finish:done"
+    ]
+  },
+  "pullRequest": {
+    "number": 10,
+    "url": "https://github.com/lusy37/issue-auto-finish-sandbox/pull/10",
+    "state": "open",
+    "merged": false,
+    "head": "50281844f09207f9c682fae159899c8e8ea9c412",
+    "target": "codex/native-uat-repair-base-20260914"
+  },
+  "deliveryComment": {
+    "id": 5659732707,
+    "url": "https://github.com/lusy37/issue-auto-finish-sandbox/issues/9#issuecomment-5659732707",
+    "createdAt": "2026-09-14T06:06:49Z"
+  },
+  "candidateCommit": "50281844f09207f9c682fae159899c8e8ea9c412",
+  "realExecution": {
+    "github": true,
+    "codexSdk": true,
+    "managedWorkers": true,
+    "git": true,
+    "chrome": true,
+    "aiMocks": false,
+    "platformMocks": false,
+    "sdkCallCount": 5
+  },
+  "approval": {
+    "at": "2026-09-14T05:54:43.202Z",
+    "reviewer": "执行本次验收的 Codex 代理",
+    "method": "真实 Chrome 工作台点击通过计划并接受确认框",
+    "planRevision": 1,
+    "rationale": "已核对单任务只登记说明、首次保留故障，由正式 UAT 报告触发集成修复，冻结浏览器测试和配置",
+    "errors": [],
+    "dialogs": [
+      {
+        "type": "confirm",
+        "message": "确定要通过 Issue #9 的实施计划吗？"
+      }
+    ]
+  },
+  "taskCount": 1,
+  "tasks": [
+    {
+      "id": "task1",
+      "status": "merged",
+      "attempts": 1,
+      "startCommit": "622dd06d0bfc0d1f7f4022262f63392a894a3002",
+      "success": {
+        "identity": {
+          "issueNumber": 9,
+          "planRevision": 1,
+          "buildGeneration": 0,
+          "dispatchId": "95c92cfb-9e70-406d-9a5c-b3b8aa9f979e",
+          "taskId": "task1",
+          "attemptNo": 1,
+          "callId": "8e4a796d-5802-4a95-8ef9-71e5d9d4e9a8"
+        },
+        "resultCommit": "950be0d5d0328ee0f1759f0e7f4ead78f85bf6a7",
+        "noChange": false,
+        "completedAt": "2026-09-14T05:58:33.610Z",
+        "sessionId": "codex:01a09e7b-d600-72c1-a7bd-096fb910638c"
+      },
+      "merge": {
+        "operationId": "cfe4f8e4-90c9-4388-a4bc-e0351141dc5f",
+        "stage": "merged",
+        "preRebaseCommit": "950be0d5d0328ee0f1759f0e7f4ead78f85bf6a7",
+        "integrationBefore": "622dd06d0bfc0d1f7f4022262f63392a894a3002",
+        "postRebaseCommit": "950be0d5d0328ee0f1759f0e7f4ead78f85bf6a7",
+        "integrationAfter": "950be0d5d0328ee0f1759f0e7f4ead78f85bf6a7"
+      }
+    }
+  ],
+  "phaseProgress": {
+    "plan": {
+      "status": "completed",
+      "startedAt": "2026-09-14T05:47:25.327Z",
+      "sessionId": "codex:01a09e74-c093-7563-8581-127ab7ad35c6",
+      "completedAt": "2026-09-14T05:50:41.769Z"
+    },
+    "review": {
+      "status": "completed",
+      "startedAt": "2026-09-14T05:50:44.183Z",
+      "completedAt": "2026-09-14T05:54:43.122Z"
+    },
+    "build": {
+      "status": "completed",
+      "startedAt": "2026-09-14T06:00:27.356Z",
+      "completedAt": "2026-09-14T06:05:03.180Z"
+    },
+    "verify": {
+      "status": "completed",
+      "startedAt": "2026-09-14T06:05:04.887Z",
+      "sessionId": "codex:01a09e84-e9e4-7793-b514-50ab45261f79",
+      "completedAt": "2026-09-14T06:06:05.470Z"
+    },
+    "uat": {
+      "status": "completed",
+      "startedAt": "2026-09-14T06:06:07.766Z",
+      "completedAt": "2026-09-14T06:06:32.193Z"
+    }
+  },
+  "phaseExecutions": {
+    "build": 2,
+    "verify": 2,
+    "uat": 2
+  },
+  "repairProof": {
+    "checkedAt": "2026-09-14T06:09:33.564Z",
+    "passed": true,
+    "controlledFault": "negateCount 返回 Math.abs(current)，正数取反错误",
+    "fixtureBranch": "codex/native-uat-repair-base-20260914",
+    "fixtureCommit": "622dd06d0bfc0d1f7f4022262f63392a894a3002",
+    "failedUat": {
+      "runId": "41903f15-a636-4841-ba19-e90d29c68356",
+      "issueIid": 9,
+      "startedAt": "2026-09-14T05:59:59.132Z",
+      "finishedAt": "2026-09-14T06:00:26.902Z",
+      "passed": false,
+      "passedTests": 5,
+      "failedTests": 3,
+      "skippedTests": 0,
+      "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('count')\nExpected: \u001b[32m\"\u001b[7m-\u001b[27m2\"\u001b[39m\nReceived: \u001b[31m\"2\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('count') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('count')\u001b[22m\n\u001b[2m    14 × locator resolved to <output aria-label=\"当前计数\" aria-live=\"polite\" data-testid=\"count\">2</output>\u001b[22m\n\u001b[2m       - unexpected value \"2\"\u001b[22m\n\nError: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('count')\nExpected: \u001b[32m\"\u001b[7m-\u001b[27m2\"\u001b[39m\nReceived: \u001b[31m\"2\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('count') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('count')\u001b[22m\n\u001b[2m    14 × locator resolved to <output aria-label=\"当前计数\" aria-live=\"polite\" data-testid=\"count\">2</output>\u001b[22m\n\u001b[2m       - unexpected value \"2\"\u001b[22m\n\n\n  47 |   await expect(count).toHaveText('2');\n  48 |   await negate.click();\n> 49 |   await expect(count).toHaveText('-2');\n     |                       ^\n  50 | });\n  51 |\n  52 | test('连续减少得到负数后可取反为正数', async ({ page }) => {\n    at E:\\Edge_Load\\issue-auto-finish\\.iaf-mini\\worktrees\\langgraph-native\\.iaf-mini\\native-repair-20260914-0525\\worktrees\\issue-9\\tests\\e2e\\counter.spec.ts:49:23\nError: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('count')\nExpected: \u001b[32m\"\u001b[7m-\u001b[27m2\"\u001b[39m\nReceived: \u001b[31m\"2\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('count') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('count')\u001b[22m\n\u001b[2m    14 × locator resolved to <output aria-label=\"当前计数\" aria-live=\"polite\" data-testid=\"count\">2</output>\u001b[22m\n\u001b[2m       - unexpected value \"2\"\u001b[22m\n\n\n  81 |   await expect(count).toHaveText('2');\n  82 |   await negate.click();\n> 83 |   await expect(count).toHave",
+      "failureKind": "assertion",
+      "screenshots": [
+        "artifacts/counter-初始零值取反后仍显示零/test-finished-1.png",
+        "artifacts/counter-取反后继续增加和减少可跨越零值并回到负数/test-failed-1.png",
+        "artifacts/counter-用户可以连续增加和减少计数/test-finished-1.png",
+        "artifacts/counter-连续减少得到负数后可取反为正数/test-finished-1.png",
+        "artifacts/counter-连续增加得到正数后可取反为负数/test-failed-1.png",
+        "artifacts/counter-非零计数连续两次取反后恢复原值/test-failed-1.png",
+        "artifacts/counter-首页和后端连接正常/test-finished-1.png",
+        "report/data/43fe60ce561ede7c4ced56639a36709b175be4cd.png",
+        "report/data/5dc840ec06365b410d89df838307b627a9372969.png",
+        "report/data/9646ba319ef709cc0cc94e4e6a43ceca7d2f9515.png"
+      ],
+      "reportAvailable": true
+    },
+    "passedUat": {
+      "runId": "d3c92afd-3a6c-416b-b0a3-b321265ce2ee",
+      "issueIid": 9,
+      "startedAt": "2026-09-14T06:06:21.998Z",
+      "finishedAt": "2026-09-14T06:06:31.816Z",
+      "passed": true,
+      "passedTests": 8,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "screenshots": [
+        "artifacts/counter-初始零值取反后仍显示零/test-finished-1.png",
+        "artifacts/counter-取反后继续增加和减少可跨越零值并回到负数/test-finished-1.png",
+        "artifacts/counter-用户可以连续增加和减少计数/test-finished-1.png",
+        "artifacts/counter-连续减少得到负数后可取反为正数/test-finished-1.png",
+        "artifacts/counter-连续增加得到正数后可取反为负数/test-finished-1.png",
+        "artifacts/counter-非零计数连续两次取反后恢复原值/test-finished-1.png",
+        "artifacts/counter-首页和后端连接正常/test-finished-1.png",
+        "report/data/43fe60ce561ede7c4ced56639a36709b175be4cd.png",
+        "report/data/576eda5f8512bcbe2ffa06aff6262c7f7e4594af.png",
+        "report/data/5dc840ec06365b410d89df838307b627a9372969.png",
+        "report/data/9646ba319ef709cc0cc94e4e6a43ceca7d2f9515.png",
+        "report/data/c900d20c2ce40d8be156eec3a0e800f7872c05e4.png"
+      ],
+      "reportAvailable": true
+    },
+    "failedCandidate": "950be0d5d0328ee0f1759f0e7f4ead78f85bf6a7",
+    "repairedCandidate": "50281844f09207f9c682fae159899c8e8ea9c412",
+    "phaseExecutions": {
+      "build": 2,
+      "verify": 2,
+      "uat": 2
+    },
+    "repairRounds": 1,
+    "source": "uat",
+    "taskGraphNotRepeated": true,
+    "frozenFiles": [
+      {
+        "file": "tests/e2e/counter.spec.ts",
+        "sha256": "d06e19eeb0a94dc014130c44f22064dafafcbbe20aa65a539a2400a9c4f4931f",
+        "unchanged": true
+      },
+      {
+        "file": "playwright.config.ts",
+        "sha256": "5ad532f428e253ee3aec2271f3f1000374e8aacde2ebfda7a7c6990c708b43c8",
+        "unchanged": true
+      }
+    ],
+    "codeActuallyChanged": true,
+    "independentSemanticChecks": true,
+    "langgraphRoute": {
+      "phase": "uat",
+      "outcome": "retried-from",
+      "next": "build",
+      "report": "# 浏览器验收报告\n\n运行：41903f15-a636-4841-ba19-e90d29c68356\n结果：失败\n通过 5，失败 3，跳过 0\n\nError: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('count')\nExpected: \u001b[32m\"\u001b[7m-\u001b[27m2\"\u001b[39m\nReceived: \u001b[31m\"2\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('count') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('count')\u001b[22m\n\u001b[2m    14 × locator resolved to <output aria-label=\"当前计数\" aria-live=\"polite\" data-testid=\"count\">2</output>\u001b[22m\n\u001b[2m       - unexpected value \"2\"\u001b[22m\n\nError: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('count')\nExpected: \u001b[32m\"\u001b[7m-\u001b[27m2\"\u001b[39m\nReceived: \u001b[31m\"2\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('count') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('count')\u001b[22m\n\u001b[2m    14 × locator resolved to <output aria-label=\"当前计数\" aria-live=\"polite\" data-testid=\"count\">2</output>\u001b[22m\n\u001b[2m       - unexpected value \"2\"\u001b[22m\n\n\n  47 |   await expect(count).toHaveText('2');\n  48 |   await negate.click();\n> 49 |   await expect(count).toHaveText('-2');\n     |                       ^\n  50 | });\n  51 |\n  52 | test('连续减少得到负数后可取反为正数', async ({ page }) => {\n    at E:\\Edge_Load\\issue-auto-finish\\.iaf-mini\\worktrees\\langgraph-native\\.iaf-mini\\native-repair-20260914-0525\\worktrees\\issue-9\\tests\\e2e\\counter.spec.ts:49:23\nError: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('count')\nExpected: \u001b[32m\"\u001b[7m-\u001b[27m2\"\u001b[39m\nReceived: \u001b[31m\"2\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('count') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('count')\u001b[22m\n\u001b[2m    14 × locator resolved to <output aria-label=\"当前计数\" aria-live=\"polite\" data-testid=\"count\">2</output>\u001b[22m\n\u001b[2m       - unexpected value \"2\"\u001b[22m\n\n\n  81 |   await expect(count).toHaveText('2');\n  82 |   await negate.click();\n> 83 |   await expect(count).toHave\n\n[HTML 报告](/api/uat/runs/41903f15-a636-4841-ba19-e90d29c68356/files/report/index.html)\n",
+      "failures": [
+        "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('count')\nExpected: \u001b[32m\"\u001b[7m-\u001b[27m2\"\u001b[39m\nReceived: \u001b[31m\"2\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('count') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('count')\u001b[22m\n\u001b[2m    14 × locator resolved to <output aria-label=\"当前计数\" aria-live=\"polite\" data-testid=\"count\">2</output>\u001b[22m\n\u001b[2m       - unexpected value \"2\"\u001b[22m\n\nError: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('count')\nExpected: \u001b[32m\"\u001b[7m-\u001b[27m2\"\u001b[39m\nReceived: \u001b[31m\"2\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('count') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('count')\u001b[22m\n\u001b[2m    14 × locator resolved to <output aria-label=\"当前计数\" aria-live=\"polite\" data-testid=\"count\">2</output>\u001b[22m\n\u001b[2m       - unexpected value \"2\"\u001b[22m\n\n\n  47 |   await expect(count).toHaveText('2');\n  48 |   await negate.click();\n> 49 |   await expect(count).toHaveText('-2');\n     |                       ^\n  50 | });\n  51 |\n  52 | test('连续减少得到负数后可取反为正数', async ({ page }) => {\n    at E:\\Edge_Load\\issue-auto-finish\\.iaf-mini\\worktrees\\langgraph-native\\.iaf-mini\\native-repair-20260914-0525\\worktrees\\issue-9\\tests\\e2e\\counter.spec.ts:49:23\nError: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('count')\nExpected: \u001b[32m\"\u001b[7m-\u001b[27m2\"\u001b[39m\nReceived: \u001b[31m\"2\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('count') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('count')\u001b[22m\n\u001b[2m    14 × locator resolved to <output aria-label=\"当前计数\" aria-live=\"polite\" data-testid=\"count\">2</output>\u001b[22m\n\u001b[2m       - unexpected value \"2\"\u001b[22m\n\n\n  81 |   await expect(count).toHaveText('2');\n  82 |   await negate.click();\n> 83 |   await expect(count).toHave"
+      ]
+    }
+  },
+  "repairRounds": 1,
+  "realUatFailureRepairCovered": true,
+  "uat": {
+    "runId": "d3c92afd-3a6c-416b-b0a3-b321265ce2ee",
+    "issueIid": 9,
+    "startedAt": "2026-09-14T06:06:21.998Z",
+    "finishedAt": "2026-09-14T06:06:31.816Z",
+    "passed": true,
+    "passedTests": 8,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "screenshots": [
+      "artifacts/counter-初始零值取反后仍显示零/test-finished-1.png",
+      "artifacts/counter-取反后继续增加和减少可跨越零值并回到负数/test-finished-1.png",
+      "artifacts/counter-用户可以连续增加和减少计数/test-finished-1.png",
+      "artifacts/counter-连续减少得到负数后可取反为正数/test-finished-1.png",
+      "artifacts/counter-连续增加得到正数后可取反为负数/test-finished-1.png",
+      "artifacts/counter-非零计数连续两次取反后恢复原值/test-finished-1.png",
+      "artifacts/counter-首页和后端连接正常/test-finished-1.png",
+      "report/data/43fe60ce561ede7c4ced56639a36709b175be4cd.png",
+      "report/data/576eda5f8512bcbe2ffa06aff6262c7f7e4594af.png",
+      "report/data/5dc840ec06365b410d89df838307b627a9372969.png",
+      "report/data/9646ba319ef709cc0cc94e4e6a43ceca7d2f9515.png",
+      "report/data/c900d20c2ce40d8be156eec3a0e800f7872c05e4.png"
+    ],
+    "reportAvailable": true
+  },
+  "uatStats": {
+    "startTime": "2026-09-14T06:06:23.484Z",
+    "duration": 8168.948,
+    "expected": 8,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "reportPath": "E:\\Edge_Load\\issue-auto-finish\\.iaf-mini\\worktrees\\langgraph-native\\.iaf-mini\\native-repair-20260914-0525\\data\\uat\\d3c92afd-3a6c-416b-b0a3-b321265ce2ee\\report\\index.html",
+  "verification": {
+    "lint": "两轮真实 verify 均通过",
+    "build": "两轮真实 verify 均通过",
+    "firstUnitTests": 3,
+    "finalUnitTests": 10,
+    "source": "真实 Codex 命令执行与持久化 verify 报告"
+  },
+  "managedCallsAllExited": true,
+  "interventions": [],
+  "restart": {
+    "at": "2026-09-14T06:12:39.926Z",
+    "passed": true,
+    "fingerprintUnchanged": true,
+    "noRepeatedAi": true,
+    "uniquePr": true,
+    "uniqueDeliveryComment": true,
+    "state": "completed"
+  },
+  "diary": {
+    "at": "2026-09-14T06:12:37.071Z",
+    "completedDiaryCount": 1,
+    "completedDiaryId": "e964b455-914c-4001-8869-4950f699f622",
+    "sdkCallsBeforeRestart": 5,
+    "sdkCallsAfterRestart": 5
+  },
+  "cleanup": {
+    "at": "2026-09-14T06:13:09.902Z",
+    "servicePid": 45488,
+    "launcherPid": 25464,
+    "serviceAlive": false,
+    "launcherAlive": false,
+    "ports": [
+      {
+        "port": 49672,
+        "free": true
+      },
+      {
+        "port": 22501,
+        "free": true
+      },
+      {
+        "port": 23501,
+        "free": true
+      }
+    ]
+  },
+  "browser": {
+    "review": {
+      "at": "2026-09-14T05:54:42.887Z",
+      "browser": "152.0.7977.84",
+      "issue": 9,
+      "planRevision": 1,
+      "refreshPreservesGate": true,
+      "buildStarted": false,
+      "errors": []
+    },
+    "completed": {
+      "at": "2026-09-14T06:09:29.450Z",
+      "browser": "152.0.7977.84",
+      "state": "completed",
+      "reportUrl": "http://127.0.0.1:49672/api/uat/runs/d3c92afd-3a6c-416b-b0a3-b321265ce2ee/files/report/index.html",
+      "reportText": "All8\nPassed8\nFailed0\nFlaky0\nSkipped0\n2026/9/14 14:06:23\nTotal time: 8.2s\ncounter.spec.ts\n首页和后端连接正常\n715ms\ncounter.spec.ts:3\n用户可以连续增加和减少计数\n515ms\ncounter.spec.ts:9\n后端健康接口可通过前端访问\n57ms\ncounter.spec.ts:17\n初始零值取反后仍显示零\n414ms\ncounter.spec.ts:23\n连续增加得到正数后可取反为负数\n523ms\ncounter.spec.ts:35\n连续减少得到负数后可取反为正数\n722ms\ncounter.spec.ts:52\n非零计数连续两次取反后恢复原值\n1.1s\ncounter.spec.ts:69\n取反后继续增加和减少可跨越零值并回到负数\n1.1s\ncounter.spec.ts:88",
+      "errors": []
+    },
+    "failed": {
+      "at": "2026-09-14T06:09:30.479Z",
+      "browser": "152.0.7977.84",
+      "reportUrl": "http://127.0.0.1:49672/api/uat/runs/41903f15-a636-4841-ba19-e90d29c68356/files/report/index.html",
+      "runId": "41903f15-a636-4841-ba19-e90d29c68356",
+      "reportText": "All8\nPassed5\nFailed3\nFlaky0\nSkipped0\n2026/9/14 14:00:00\nTotal time: 26.3s\ncounter.spec.ts\n连续增加得到正数后可取反为负数\n5.6s\ncounter.spec.ts:35\n非零计数连续两次取反后恢复原值\n5.6s\ncounter.spec.ts:69\n取反后继续增加和减少可跨越零值并回到负数\n5.8s\ncounter.spec.ts:88\n首页和后端连接正常\n681ms\ncounter.spec.ts:3\n用户可以连续增加和减少计数\n486ms\ncounter.spec.ts:9\n后端健康接口可通过前端访问\n54ms\ncounter.spec.ts:17\n初始零值取反后仍显示零\n445ms\ncounter.spec.ts:23\n连续减少得到负数后可取反为正数\n794ms\ncounter.spec.ts:52",
+      "errors": []
+    }
+  },
+  "artifactSha256": {
+    "acceptance.json": "8ae7c6c32501e7de9944a58ea2a863a35163cae720c06702730a6566cbe94480",
+    "final-record.json": "29e0e7c4c633c1cf47b2aa717ab6f6c38fe9d96908f7894fd5815c9d576e78ce",
+    "approval.json": "31c52944d4d40d64f1d4c0085a6b9060881e6282d28c22a04a8c3aec0dd9cc01",
+    "repair-proof.json": "f0e573d237d77395f60b8beb6033a6f868399fe4ff6c486e5eb01c7584b7e4c1",
+    "restart-proof.json": "4872da4649323dd84c3db4797144b7cb61d3d3e2e591d78cdc8d76de4d68eaee",
+    "cleanup.json": "8b808d223a7d15c834a5a0a2421c7c922d6e4f514dbb46453e8b6105f5e3bb98",
+    "formal-uat-report.png": "1a2a036000e4ef57bc8835a77a2fa4195213ebc673eb706ee6829d7802b739f3",
+    "first-uat-failure.png": "1e199ad0986bec43d60c24c5908a52c9b2d771e252cf7bd5717052c2ed263454"
+  },
+  "playwrightResultsSha256": {
+    "41903f15-a636-4841-ba19-e90d29c68356": "182b9987b45ffb347f909a9a745f3a637e1a6163278aa0730fc638644489820c",
+    "d3c92afd-3a6c-416b-b0a3-b321265ce2ee": "e45ec91cec4167573e97711669a3a324dc6ff1f2e6872cb4e657321ccaafef94"
+  }
+}

@@ -1,0 +1,116 @@
+{
+  "date": "2026-09-14",
+  "branch": "codex/langgraph-native",
+  "baseline": "本轮开始时的 native 工作树，包含上轮未提交精简；基于 d51c261",
+  "mainReference": {
+    "root": "E:/Edge_Load/issue-auto-finish",
+    "includesUncommitted": true,
+    "sourceSha256": {
+      "src/orchestrator/PipelineOrchestrator.ts": "9e0c4f712f95dea3e49390669564bb7190925c0e0c73be32e9065a1ce97d7c88",
+      "src/orchestrator/steps/PhaseLoopStep.ts": "73a0a6843f88e53208c7103e2ae68aa0a25ad4b58a470e910342f77c85107866",
+      "src/orchestrator/steps/CompletionStep.ts": "2fe5f7f5fc7b97a8cd890f7c8aa69ab955b065a866bb072ead24a9474adc3530",
+      "tests/integration/dag-delivery.test.ts": "cc2d62cd1b659141ad04281a7f5e024c470616234ea32427697797eb101180c5",
+      "tests/integration/mini-workflow.test.ts": "a65419b731f38bd690c9e822640dd3591dc5ff54e01c1181fab370e20be4bb9d"
+    }
+  },
+  "fixes": [
+    "每次实际 UAT 前等待旧预览退出并从当前代码启动",
+    "交付完成事务复核停止意图和执行身份，包含图轮次",
+    "完整重做先重建已回收工作目录，再重置到最新主分支"
+  ],
+  "productionSourceDelta": {
+    "files": 3,
+    "netRemovedLines": 41
+  },
+  "checks": [
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run web:build",
+      "exitCode": 0
+    }
+  ],
+  "before": {
+    "files": 3,
+    "total": 33,
+    "passed": 22,
+    "failed": 11,
+    "pending": 0,
+    "success": false,
+    "report": ".iaf-mini/native-business-fixes/before-tests.json",
+    "failedCases": [
+      "配置进入实际阶段循环 等待旧预览退出期间被中止，不再启动替代进程或执行 UAT",
+      "验收提交与唯一 PR 交付 父目录已回收=true，完整重做从最新主分支开始并复用开放 PR",
+      "验收提交与唯一 PR 交付 交付标签响应期间发生 pause，旧回调不写完成状态",
+      "验收提交与唯一 PR 交付 交付标签响应期间发生 cancel，旧回调不写完成状态",
+      "验收提交与唯一 PR 交付 交付标签响应期间发生 dispatch，旧回调不写完成状态",
+      "验收提交与唯一 PR 交付 交付标签响应期间发生 generation，旧回调不写完成状态",
+      "验收提交与唯一 PR 交付 交付标签响应期间发生 workflow，旧回调不写完成状态",
+      "Preview port restore on retry 恢复 UAT 时先停止旧服务，再使用新启动返回的端口",
+      "Preview port restore on retry auto-starts preview when resuming past deploysPreview with no existing allocation",
+      "Preview port restore on retry restarts preview when ports allocated but servers not running (e.g. after service restart)",
+      "Preview port restore on retry 已有端口和运行进程也不能跳过 UAT 前的重新启动"
+    ]
+  },
+  "after": {
+    "files": 109,
+    "total": 1025,
+    "passed": 1025,
+    "failed": 0,
+    "pending": 0,
+    "success": true,
+    "command": "IAF_TEST_BROWSER_CHANNEL=chrome npm run test:all -- --maxWorkers=1 --testTimeout=180000 --hookTimeout=60000",
+    "report": ".iaf-mini/native-business-fixes/all-tests.json",
+    "referenceFiles": 8,
+    "referenceTests": 78,
+    "focused": [
+      {
+        "file": "integration/configured-phase-loop.test.ts",
+        "tests": 11,
+        "status": "passed"
+      },
+      {
+        "file": "integration/dag-delivery.test.ts",
+        "tests": 18,
+        "status": "passed"
+      },
+      {
+        "file": "integration/mini-workflow.test.ts",
+        "tests": 2,
+        "status": "passed"
+      },
+      {
+        "file": "unit/preview-port-restore.test.ts",
+        "tests": 6,
+        "status": "passed"
+      }
+    ]
+  },
+  "execution": {
+    "environment": "正常 Windows 账户",
+    "realGit": true,
+    "realBrowser": "Chrome",
+    "realCodex": false,
+    "realGithubWrites": false
+  },
+  "sourceSha256": {
+    "src/orchestrator/IssueService.ts": "b7af49396f2e527fbcee56cb97c1e4679ddcc5c189c2c5b5bb42308c508f4c8d",
+    "src/orchestrator/steps/RunWorkflowStep.ts": "47b5136e004dc9b74b0931be5c78ed25abc8ec04b3d28f3264450cfe215d87d6",
+    "src/orchestrator/steps/DeliverIssueStep.ts": "8c4ed77559bf82803c1b2f14beb22839910b3e4b2a6125c9d96c9243775e729c",
+    "tests/helpers/mock-factories.ts": "e5d850d0426e0b1ddeac733e1452a418c69af4b259f4859ba75d43afd8641365",
+    "tests/integration/dag-delivery.test.ts": "46c492a725b652f344dfa3ababe423655c455f8820e7adb273d6933454363a21",
+    "tests/integration/configured-phase-loop.test.ts": "1005d4c818ee2e95a1d35328205ad730c9681b202f6558c501ed0cf0792d7afe",
+    "tests/unit/preview-port-restore.test.ts": "8d190d0e2f048d780e6b218ee08559f0db6b18743e5a74b8c723adb93d774ffa",
+    "tests/integration/mini-workflow.test.ts": "2d8cf2db9465d51adb208d84c6298ece60b8caef5dd8cfd34b4659f51ff62f60"
+  },
+  "reportsSha256": {
+    "before-tests.json": "7780d04a6e735f251f5eb5da997f9c6ad1aa6ed06a10cea44ec9c82efca7c549",
+    "all-tests.json": "b28e2b8767b054bc749b9ae4b3f1df4b2363716360cb59687c00d096454e6528"
+  }
+}
