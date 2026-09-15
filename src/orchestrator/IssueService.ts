@@ -105,7 +105,7 @@ export class IssueService {
 
     const mode = resolvePipelineMode(config.pipeline?.mode === 'auto' ? undefined : config.pipeline?.mode);
     this.pipelineDef = mode === 'plan-mode'
-      ? buildPlanModePipeline({ e2eEnabled: true })
+      ? buildPlanModePipeline({ e2eEnabled: config.e2e.enabled })
       : getPipelineDef(mode);
     registerPipeline(this.pipelineDef);
     logger.info('Pipeline mode resolved', { mode: this.pipelineDef.mode, aiMode: config.ai.mode });
@@ -464,7 +464,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
 
   private getIssueSpecificPipelineDef(issueIid: number): PipelineDef {
     return buildPlanModePipeline({
-      e2eEnabled: true,
+      e2eEnabled: isE2eEnabledForIssue(issueIid, this.tracker, this.config),
     });
   }
 

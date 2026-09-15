@@ -8,6 +8,7 @@ const values = ref<Record<string, string>>({}),
 const { busy, error, run } = useAction();
 const featureLabels: Record<string, string> = {
   REVIEW_ENABLED: "启用计划审核",
+  E2E_UI_ENABLED: "启用浏览器验收（E2E）",
   KNOWLEDGE_ENABLED: "任务引用知识与经验",
   DISTILL_ENABLED: "启用经验蒸馏",
   VERIFY_FIX_LOOP_ENABLED: "验证失败后自动修复",
@@ -77,6 +78,7 @@ onMounted(() => run(load));
         </label>
         <p class="text-sm text-gray-500">次数为初次验证失败后追加的修复轮数，范围 1～10。以上设置保存后重启生效。</p>
         <p class="text-sm text-gray-500">关闭审核后，新计划保存完成会自动继续实现；已等待审核的任务仍需手动处理。</p>
+        <p class="text-sm text-gray-500">关闭浏览器验收后仍执行代码验证，交付会注明未执行浏览器验收。重启后新任务或完整重做采用新设置，已开始的流程保持原要求；预览服务由预览设置单独控制。</p>
         <p class="text-sm text-gray-500">关闭知识引用或蒸馏不会删除资料。知识引用决定任务是否使用经验，蒸馏决定是否生成新经验。</p>
       </fieldset>
       <label v-for="(label, key) in labels" :key="key" class="block my-3"
@@ -120,7 +122,7 @@ onMounted(() => run(load));
         target="_blank"
         rel="noreferrer"
         >Codex</a
-      >；先运行 <code>npx codex login</code> 登录，再运行
+      >；先运行 <code>npx codex login</code> 登录；启用浏览器验收时运行
       <code>npm run e2e:install</code> 安装 Chromium。
     </p>
   </section>

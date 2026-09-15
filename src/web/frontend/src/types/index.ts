@@ -34,6 +34,8 @@ export interface IssueRecord {
   phaseProgress?: Record<string, PhaseProgress>;
   phaseHistory?: PhaseHistoryEntry[];
   stateCategory?: string;
+  /** 服务端按本轮阶段要求计算出的可查看计划产物。 */
+  planDocs?: PlanFileSpec[];
 }
 
 export const getIssueIid = (r: IssueRecord): number => Number(r.demandSpec.sourceRef.displayId);

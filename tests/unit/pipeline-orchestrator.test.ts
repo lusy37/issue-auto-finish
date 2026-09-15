@@ -145,25 +145,6 @@ describe('IssueService', () => {
       const cur = trackerStore.get(number) ?? { issueIid: number, attempts: 0 };
       trackerStore.set(number, { ...cur, ...extra, state, updatedAt: new Date().toISOString() });
     });
-    mockTracker.setOrchestrationState.mockImplementation(
-      (number: number, orchestrationState: any, trackerState: any, extra?: any) => {
-        const cur = trackerStore.get(number) ?? { issueIid: number, attempts: 0 };
-        trackerStore.set(number, {
-          ...cur,
-          ...extra,
-          orchestrationState,
-          state: trackerState,
-          updatedAt: new Date().toISOString(),
-        });
-      },
-    );
-    mockTracker.appendPhaseHistory.mockImplementation((number: number, entry: any) => {
-      const cur = trackerStore.get(number);
-      if (!cur) return;
-      const history = cur.phaseHistory ?? [];
-      history.push(entry);
-      trackerStore.set(number, { ...cur, phaseHistory: history });
-    });
     mockTracker.markFailed.mockImplementation((number: number, error: any, opts?: any) => {
       const cur = trackerStore.get(number) ?? { issueIid: number, attempts: 0 };
       trackerStore.set(number, {
@@ -174,6 +155,12 @@ describe('IssueService', () => {
         attempts: (cur.attempts ?? 0) + 1,
         updatedAt: new Date().toISOString(),
       });
+    });
+    mockTracker.initPhaseProgress.mockImplementation((number: number, def: any) => {
+      const cur = trackerStore.get(number);
+      if (cur && !cur.phaseProgress) {
+        cur.phaseProgress = Object.fromEntries(def.phases.map((phase: { name: string }) => [phase.name, { status: 'pending' }]));
+      }
     });
     mockTracker.get.mockImplementation((number: number) => { const record = trackerStore.get(number); if (record) record.run ??= newIssueRun(); return record; });
   }
@@ -331,6 +318,7 @@ describe('IssueService', () => {
     it('auto-approves gate when issue has matching autoApproveLabel', async () => {
       const cfg = createTestConfig({
         review: { enabled: true, autoApproveLabels: ['skip-review'] },
+        e2e: { enabled: true },
       });
       const issue = createTestIssue({ labels: ['auto-finish', 'skip-review'] });
       attachStatefulTracker();
@@ -367,6 +355,7 @@ describe('IssueService', () => {
     });
 
     it('resumes after PhaseApproved from build phase', async () => {
+      const cfg = createTestConfig({ e2e: { enabled: true } });
       const issue = createTestIssue();
       attachStatefulTracker({
         issueIid: 42,
@@ -381,7 +370,7 @@ describe('IssueService', () => {
       mockMainGit.branchExists.mockResolvedValue(false);
       mockMainGit.remoteBranchExists.mockResolvedValue(false);
 
-      const orchestrator = createOrchestrator();
+      const orchestrator = createOrchestrator(cfg);
       await orchestrator.processIssue(issue);
       await orchestrator.applyGateAction(issue.number, { action: 'approve' }, mockTracker.get(issue.number)!.run!.planRevision);
       vi.clearAllMocks();

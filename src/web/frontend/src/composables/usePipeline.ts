@@ -63,6 +63,7 @@ export function usePipeline() {
   });
 
   function getPlanDocs(issue?: IssueRecord | null): PlanFileSpec[] {
+    if (issue?.planDocs) return issue.planDocs;
     const mode = issue?.pipelineMode ?? pipelineMode.value;
     if (meta.value) {
       return meta.value.modes[mode].artifacts.map(a => ({
@@ -79,6 +80,7 @@ export function usePipeline() {
   }
 
   function getPhaseNames(issue?: IssueRecord | null): string[] {
+    if (issue?.phaseProgress) return Object.keys(issue.phaseProgress);
     const mode = issue?.pipelineMode ?? pipelineMode.value;
     if (meta.value) {
       return meta.value.modes[mode]?.phases.map(p => p.name) ?? [...FALLBACK_PLAN_MODE_PHASES];

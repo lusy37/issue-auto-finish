@@ -66,7 +66,7 @@ export class IssueWorkflow {
       .addNode('uat', phase('uat'), { retryPolicy, ends: ['publish_uat', 'build'] })
       .addNode('publish_plan', publish('plan'), { ends: ['review'] })
       .addNode('publish_build', publish('build'), { ends: ['verify'] })
-      .addNode('publish_verify', publish('verify'), { ends: ['uat'] })
+      .addNode('publish_verify', publish('verify'), { ends: ['uat', 'deliver'] })
       .addNode('publish_uat', publish('uat'), { ends: ['deliver'] })
       .addNode('deliver', (_state, config) => this.deliver(config))
       .addConditionalEdges(START, state => state.entry, [...PHASE_IDS, 'deliver'])
@@ -189,7 +189,7 @@ export class IssueWorkflow {
       });
       throw new PhaseExecutionError(phase, intent.error);
     }
-    const next: Record<Exclude<PhaseId, 'review'>, WorkflowNode> = { plan: 'review', build: 'verify', verify: 'uat', uat: 'deliver' };
+    const next: Record<Exclude<PhaseId, 'review'>, WorkflowNode> = { plan: 'review', build: 'verify', verify: Object.hasOwn(this.record().phaseProgress!, 'uat') ? 'uat' : 'deliver', uat: 'deliver' };
     let result: PhaseResultSummary;
     if (intent.kind === 'completed') result = { phase, outcome: 'completed', next: next[phase], sessionId: intent.sessionId };
     else if (intent.kind === 'requestRetryFrom' && intent.targetPhaseId === 'build' && (phase === 'verify' || phase === 'uat') && this.record().run!.repairRounds < this.options.maxRepairs) {
@@ -203,7 +203,7 @@ export class IssueWorkflow {
         record.run!.verify = undefined; record.run!.uat = undefined;
       }
       record.run!.workflow.results[operation] = result;
-      record.state = phase === 'uat' && result.outcome === 'completed' ? IssueState.Delivering : IssueState.PhaseDone;
+      record.state = result.next === 'deliver' && result.outcome === 'completed' ? IssueState.Delivering : IssueState.PhaseDone;
       record.orchestrationState = result.next === 'deliver' ? { kind: 'pipeline-completed' } : { kind: 'running', phaseId: result.next };
       if (record.state === IssueState.Delivering) record.deliveryPending = true;
       record.attempts = record.run!.retryUsed[phase] ?? 0;

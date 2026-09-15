@@ -131,10 +131,7 @@ export const envSchema = z.object({
   WEB_BASE_URL: z.string().optional(),
 
   // --- E2E ---
-  E2E_UI_ENABLED: envBoolean("true").refine(
-    (value) => value,
-    "裁剪版必须启用浏览器验收",
-  ),
+  E2E_UI_ENABLED: featureToggle(),
   E2E_BASE_URL: z.string().optional().default("http://127.0.0.1:9000"),
   E2E_BACKEND_PORT_BASE: envPort("4000"),
   E2E_FRONTEND_PORT_BASE: envPort("9000"),

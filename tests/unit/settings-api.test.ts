@@ -56,7 +56,7 @@ it('流程配置：默认值、持久化、重启生效与非法输入保护', a
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values }),
     });
     const defaults = (await (await fetch(url)).json()).values;
-    const switches = ['REVIEW_ENABLED', 'KNOWLEDGE_ENABLED', 'DISTILL_ENABLED', 'VERIFY_FIX_LOOP_ENABLED'];
+    const switches = ['E2E_UI_ENABLED', 'REVIEW_ENABLED', 'KNOWLEDGE_ENABLED', 'DISTILL_ENABLED', 'VERIFY_FIX_LOOP_ENABLED'];
     for (const key of switches) expect(defaults[key]).toBe('true');
     expect(defaults.VERIFY_FIX_MAX_ITERATIONS).toBe('3');
     expect(defaults).not.toHaveProperty('WEB_ENABLED');
@@ -68,7 +68,7 @@ it('流程配置：默认值、持久化、重启生效与非法输入保护', a
     expect(cfg.verifyFixLoop.maxIterations).toBe(3);
     const restored = transformEnvToConfig(envSchema.parse(extractEnvSubset(parse(fs.readFileSync(file)))), dir);
     expect(restored).toMatchObject({
-      review: { enabled: false }, knowledge: { enabled: false }, distill: { enabled: false },
+      e2e: { enabled: false }, review: { enabled: false }, knowledge: { enabled: false }, distill: { enabled: false },
       verifyFixLoop: { enabled: false, maxIterations: 1 },
     });
 

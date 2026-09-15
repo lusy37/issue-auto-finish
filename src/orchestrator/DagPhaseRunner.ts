@@ -1,3 +1,4 @@
+import { isE2eEnabledForIssue } from '../e2e/E2eSettings.js';
 import { RecoveryError } from '../dag/RecoveryError.js';
 import { resolvePromptRules } from '../knowledge/PromptRules.js';
 import { getKnowledgeForPrompt } from '../prompts/templates.js';
@@ -51,7 +52,7 @@ export class DagPhaseRunner {
           }).execute();
         }
         signal.throwIfAborted();
-        if (!fs.existsSync(path.resolve(context.workDir, config.e2e.configFile))) {
+        if (isE2eEnabledForIssue(number, tracker, config) && !fs.existsSync(path.resolve(context.workDir, config.e2e.configFile))) {
           const prepared = await runner.run({ workDir: context.workDir, mode: 'agent', phaseName: 'build', timeoutMs: config.ai.phaseTimeoutMs,
             prompt: `为批准的需求补充 Playwright Chromium 验收测试和配置 ${config.e2e.configFile}。使用 process.env.UAT_BASE_URL 读取预览地址。不要运行验收，不写验收结论，不推送。需求：${JSON.stringify(ctx.demand)}`, ...callbacks });
           if (!prepared.success) return { kind: 'failed', error: { message: prepared.errorMessage || '浏览器测试准备失败', retryable: 'hard' } };

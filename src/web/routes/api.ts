@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { marked } from 'marked';
 import { createPatch } from 'diff';
 import { IssueTracker } from '../../tracker/IssueTracker.js';
-import { IssueState } from '../../tracker/IssueState.js';
+import { IssueState, type IssueRecord } from '../../tracker/IssueState.js';
 import type { DemandSpec } from '../../demand/DemandSpec.js';
 import { getIssueNumber, getTitle } from '../../tracker/IssueRecordHelper.js';
 import { Config } from '../../config.js';
@@ -18,13 +18,13 @@ import { IssueService } from '../../orchestrator/IssueService.js';
 import { GitOperations } from '../../git/GitOperations.js';
 import { GitHubClient } from '../../clients/GitHubClient.js';
 import { SupplementStore } from '../../supplement/SupplementStore.js';
-import { getPipelineDef, getAllPipelineDefs, createLifecycleManager } from '../../pipeline/PipelineMetadata.js';
+import { buildPlanModePipeline, getPipelineDef, getAllPipelineDefs, createLifecycleManager } from '../../pipeline/PipelineMetadata.js';
 import type { PipelineDef } from '../../pipeline/PipelineMetadata.js';
 import { ActionLifecycleManager } from '../../lifecycle/ActionLifecycleManager.js';
 import { eventBus, EventPayload } from '../../events/EventBus.js';
 import { GateActionError } from '../../orchestration/index.js';
 import { getNoteSyncEnabled, setNoteSyncOverride } from '../../notesync/NoteSyncSettings.js';
-import { getE2eEnabled } from '../../e2e/E2eSettings.js';
+import { getE2eEnabled, isE2eEnabledForIssue } from '../../e2e/E2eSettings.js';
 
 import type { WorkspaceConfig } from '../../workspace/WorkspaceConfig.js';
 import { logger as rootLogger } from '../../logger.js';
@@ -151,7 +151,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       } else {
         stateCategory = 'active';
       }
-      return { ...r, stateCategory };
+      return { ...r, stateCategory, planDocs: getIssuePlanDocs(getIssueNumber(r), r) };
     });
     res.json(enriched);
   });
@@ -169,13 +169,19 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       : await readProgress(number, cfg, tracker, git);
     const preview = buildPreviewInfo(number, orch);
     const worktree = orch.getWorktreeStatus(number);
-    res.json({ ...record, progress, preview, worktree });
+    res.json({ ...record, progress, preview, worktree, planDocs: getIssuePlanDocs(number, record) });
   });
 
-  function getIssuePipelineDef(number: number): PipelineDef {
-    const record = tracker.get(number);
+  function getIssuePipelineDef(number: number, record: IssueRecord | undefined = tracker.get(number)): PipelineDef {
     const mode = record?.pipelineMode ?? orch.getPipelineDef().mode;
-    return getPipelineDef(mode);
+    return mode === 'plan-mode'
+      ? buildPlanModePipeline({ e2eEnabled: isE2eEnabledForIssue(number, tracker, cfg) })
+      : getPipelineDef(mode);
+  }
+
+  function getIssuePlanDocs(number: number, record: IssueRecord | undefined = tracker.get(number)) {
+    return createLifecycleManager(getIssuePipelineDef(number, record)).collectArtifacts()
+      .map(artifact => ({ file: artifact.filename, label: artifact.label }));
   }
 
   router.get('/api/issues/:number/plans/:filename', async (req: Request, res: Response) => {

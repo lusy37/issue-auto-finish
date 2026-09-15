@@ -152,6 +152,31 @@ describe('API Routes', () => {
       expect(res.status).toBe(200);
       expect((res.body as Record<string, unknown> & { demandSpec: { sourceRef: { displayId: string } } }).demandSpec.sourceRef.displayId).toBe('42');
     });
+
+    it.each([
+      { globalEnabled: false, issueEnabled: true, containsUat: true },
+      { globalEnabled: true, issueEnabled: false, containsUat: false },
+    ])('按 Issue 阶段列表返回产物：$globalEnabled/$issueEnabled', async ({ globalEnabled, issueEnabled, containsUat }) => {
+      const original = config.e2e.enabled;
+      config.e2e.enabled = globalEnabled;
+      const record = createTestRecord({
+        phaseProgress: {
+          plan: { status: 'pending' },
+          review: { status: 'pending' },
+          build: { status: 'pending' },
+          verify: { status: 'pending' },
+          ...(issueEnabled ? { uat: { status: 'pending' as const } } : {}),
+        },
+      });
+      tracker.get.mockReturnValue(record);
+      try {
+        const res = await req('GET', '/api/issues/42');
+        const files = (res.body as { planDocs: Array<{ file: string }> }).planDocs.map(item => item.file);
+        expect(files.includes('03-uat-report.md')).toBe(containsUat);
+      } finally {
+        config.e2e.enabled = original;
+      }
+    });
   });
 
   describe('POST /api/issues/:number/retry', () => {

@@ -1,3 +1,4 @@
+import { isE2eEnabledForIssue } from '../e2e/E2eSettings.js';
 import type { IssueProcessingContext, OrchestratorDeps } from '../orchestrator/IssueProcessingContext.js';
 import { GitOperations } from '../git/GitOperations.js';
 import { IssueState } from '../tracker/IssueState.js';
@@ -15,10 +16,13 @@ export async function deliverIssue(ctx: IssueProcessingContext, deps: Orchestrat
   const number = ctx.issue.number;
   const git = new GitOperations(ctx.wtCtx.gitRootDir, deps.signal);
   const state = () => deps.tracker.get(number)!.run!;
+  const e2eEnabled = isE2eEnabledForIssue(number, deps.tracker, deps.config);
+  const acceptance = e2eEnabled ? '验证与浏览器验收通过' : '代码验证通过，浏览器验收未启用';
   const check = async () => {
     deps.signal?.throwIfAborted();
     const run = state();
-    if (run.stopIntent || !run.candidateCommit || run.verify?.passed !== true || run.uat?.passed !== true || !run.uat.runId || run.verify.commit !== run.candidateCommit || run.uat.commit !== run.candidateCommit || Object.values(run.tasks).some(task => task.status !== 'merged' || !task.success || task.merge?.stage !== 'merged') || !Object.keys(run.tasks).length) throw new Error('交付缺少当前候选提交的完整验收凭证');
+    if (run.stopIntent || !run.candidateCommit || run.verify?.passed !== true || run.verify.commit !== run.candidateCommit || Object.values(run.tasks).some(task => task.status !== 'merged' || !task.success || task.merge?.stage !== 'merged') || !Object.keys(run.tasks).length) throw new Error('交付缺少当前候选提交的完整验收凭证');
+    if (e2eEnabled && (run.uat?.passed !== true || !run.uat.runId || run.uat.commit !== run.candidateCommit)) throw new Error('交付缺少当前候选提交的浏览器验收凭证');
     if (await git.head() !== run.candidateCommit || await git.hasChanges()) throw new Error('验收后的 HEAD 或工作目录已改变，禁止交付');
   };
   await check();
@@ -54,7 +58,7 @@ export async function deliverIssue(ctx: IssueProcessingContext, deps: Orchestrat
   if (!pr) {
     await check();
     deps.tracker.transaction(number, record => { record.run!.delivery!.creation = 'unknown'; });
-    pr = await deps.github.createPullRequest({ sourceBranch: identity.sourceBranch, targetBranch: identity.targetBranch, title: ctx.demand.title, description: `完成 #${number}\n\n所有内部任务、验证和浏览器验收通过。\n候选提交：${commit}\n\n${identity.marker}` });
+    pr = await deps.github.createPullRequest({ sourceBranch: identity.sourceBranch, targetBranch: identity.targetBranch, title: ctx.demand.title, description: `完成 #${number}\n\n所有内部任务完成；${acceptance}。\n候选提交：${commit}\n\n${identity.marker}` });
     validatePullRequest(pr, identity);
     deps.tracker.transaction(number, record => { Object.assign(record.run!.delivery!, { prNumber: pr!.number, prUrl: pr!.html_url, creation: 'confirmed' }); record.prUrl = pr!.html_url; });
   }
@@ -67,7 +71,7 @@ export async function deliverIssue(ctx: IssueProcessingContext, deps: Orchestrat
     if (!matches.length) {
       if (state().delivery!.issueWriteIntent?.commit === commit) throw new Error('Issue 回写结果仍未知，不能重复发送');
       deps.tracker.transaction(number, record => { record.run!.delivery!.issueWriteIntent = { commit, marker, requestedAt: new Date().toISOString() }; });
-      await deps.github.createIssueNote(number, `任务已完成，验证与浏览器验收通过。PR：${pr.html_url}\n${marker}`);
+      await deps.github.createIssueNote(number, `任务已完成，${acceptance}。PR：${pr.html_url}\n${marker}`);
     }
     deps.tracker.transaction(number, record => { record.run!.delivery!.issueWrittenCommit = commit; record.run!.delivery!.issueWriteIntent = undefined; record.deliveryNoteWritten = true; });
   }

@@ -404,7 +404,7 @@ const configFile = path.join(root, ".env");
 const saved = fs.existsSync(configFile) ? parseEnv(fs.readFileSync(configFile)) : {};
 // 演示重启保留流程开关；平台、仓库和执行器仍使用演示配置。
 const flowSettings = Object.fromEntries(
-  ["REVIEW_ENABLED", "KNOWLEDGE_ENABLED", "DISTILL_ENABLED", "VERIFY_FIX_LOOP_ENABLED", "VERIFY_FIX_MAX_ITERATIONS", "MAX_CONCURRENT_ISSUES", "AI_MAX_CONCURRENCY", "MAX_RETRIES"]
+  ["E2E_UI_ENABLED", "REVIEW_ENABLED", "KNOWLEDGE_ENABLED", "DISTILL_ENABLED", "VERIFY_FIX_LOOP_ENABLED", "VERIFY_FIX_MAX_ITERATIONS", "MAX_CONCURRENT_ISSUES", "AI_MAX_CONCURRENCY", "MAX_RETRIES"]
     .filter(key => saved[key] !== undefined)
     .map(key => [key, saved[key]]),
 );
