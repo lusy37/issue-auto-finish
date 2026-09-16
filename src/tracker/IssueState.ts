@@ -2,6 +2,7 @@ import type { DemandSpec } from '../demand/DemandSpec.js';
 import type { IssueRun } from '../dag/contracts.js';
 import type { GateReason, PhaseError } from '../orchestration/PhaseResult.js';
 import type { OrchestrationState, PhaseHistoryEntry } from '../orchestration/OrchestrationState.js';
+import type { IssueLifecycle as NativeIssueLifecycle } from './IssueLifecycle.js';
 
 export enum IssueState {
   Pending = 'pending',
@@ -34,8 +35,12 @@ export interface PortPairRecord {
   frontendPort: number;
 }
 
-/** 生命周期状态 — 由 IssueTracker 管理 */
-export interface IssueLifecycle {
+/**
+ * v3 REST 兼容投影。
+ *
+ * 这些字段只由 IssueLifecycle 计算，IssueRunStore 写盘时会全部剥离，不能再作为业务事实读取。
+ */
+export interface LegacyIssueProjection {
   state: IssueState;
   /** 当 state 为 PhaseRunning/PhaseDone/PhaseWaiting/PhaseApproved 时，记录具体阶段名 */
   currentPhase?: string;
@@ -46,6 +51,12 @@ export interface IssueLifecycle {
   lastErrorRetryable?: boolean;
   /** 中止时的阶段名（Paused 状态下有值） */
   pausedAtPhase?: string;
+  orchestrationState: OrchestrationState;
+}
+
+/** 唯一持久化的业务生命周期；锁与 reset generation 不属于生命周期。 */
+export interface IssueLifecycleStorage {
+  lifecycle: NativeIssueLifecycle;
   /** 持久化处理锁，防止 poller 并发拾取同一 issue；未设置时表示无锁 */
   processingLock?: {
     correlationId: string;
@@ -117,14 +128,14 @@ export interface IssuePhaseProgress {
 
 export interface IssueOrchestration {
   run?: IssueRun;
-  orchestrationState: OrchestrationState;
   /** 阶段执行历史流水账，用于 Reducer 决策与前端展示 */
   phaseHistory?: PhaseHistoryEntry[];
 }
 
 
 export type IssueRecord =
-  IssueLifecycle &
+  IssueLifecycleStorage &
+  LegacyIssueProjection &
   IssuePipeline &
   IssueBranch &
   IssueFeatureFlags &

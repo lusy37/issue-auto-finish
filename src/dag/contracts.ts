@@ -4,7 +4,7 @@ import type { DemandSpec } from '../demand/DemandSpec.js';
 import { newWorkflowStorage, workflowStorageSchema, type WorkflowStorage } from '../orchestration/WorkflowState.js';
 
 export const PLAN_FORMAT = 'iaf-mini/task-plan/v2' as const;
-export const RUN_FORMAT = 'iaf-mini/issue-run/v3-langgraph' as const;
+export const RUN_FORMAT = 'iaf-mini/issue-run/v4-langgraph' as const;
 export const taskPlanInput = z.object({
   title: z.string().trim().min(1),
   description: z.string().trim().min(1),

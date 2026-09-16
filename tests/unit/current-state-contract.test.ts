@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
 import { IssueState } from '../../src/tracker/IssueState.js';
+import { readIssueLifecycle, writeIssueLifecycle, type IssueLifecycle } from '../../src/tracker/IssueLifecycle.js';
 import { PLAN_MODE_PIPELINE, createLifecycleManager } from '../../src/pipeline/PipelineMetadata.js';
 
 let directory: string;
@@ -15,32 +16,57 @@ const input = (pipelineMode?: string) => ({
 beforeEach(() => { directory = fs.mkdtempSync(path.join(os.tmpdir(), 'iaf-state-contract-')); });
 afterEach(() => { fs.rmSync(directory, { recursive: true, force: true }); });
 
-it.each([undefined, null, { kind: 'unknown' }, { kind: 'running' }, { kind: 'gate-waiting', phaseId: 'review' }])('拒绝缺失或无效的快照 %j，原文件保持不变', state => {
+it.each([
+  undefined,
+  null,
+  { kind: 'unknown' },
+  { kind: 'running' },
+  { kind: 'waiting', phase: 'unknown' },
+  { kind: 'failed', retry: 'auto' },
+])('拒绝缺失或无效的 lifecycle %j，原文件保持不变', lifecycle => {
   const tracker = new IssueTracker(directory, managers());
   tracker.create(input());
   const file = tracker.store.file(1);
   const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
-  stored.record.orchestrationState = state;
+  stored.record.lifecycle = lifecycle;
   const content = JSON.stringify(stored);
   fs.writeFileSync(file, content);
-  expect(() => new IssueTracker(directory, managers())).toThrow('编排状态快照缺失或无效');
   expect(() => new IssueTracker(directory, managers())).toThrow(file);
   expect(fs.readFileSync(file, 'utf8')).toBe(content);
 });
 
-it.each(Object.values(IssueState))('当前状态 %s 写入后可完整恢复', state => {
+it.each<IssueLifecycle>([
+  { kind: 'pending' },
+  { kind: 'skipped' },
+  { kind: 'ready' },
+  { kind: 'running', phase: 'build' },
+  { kind: 'waiting', phase: 'review', planRevision: 1 },
+  { kind: 'paused', phase: 'verify' },
+  { kind: 'failed', phase: 'build', retry: 'manual', error: { message: '测试错误', retryable: 'hard-no-auto' } },
+  { kind: 'delivering' },
+  { kind: 'completed' },
+  { kind: 'cancelled' },
+])('生命周期 $kind 写入后可完整恢复', lifecycle => {
   const tracker = new IssueTracker(directory, managers());
   tracker.create(input());
-  tracker.updateState(1, state, { currentPhase: 'review', pausedAtPhase: 'review', lastError: '测试错误' });
-  const record = tracker.get(1)!;
-  expect(new IssueTracker(directory, managers()).get(1)?.orchestrationState).toEqual(record.orchestrationState);
+  tracker.transaction(1, record => { writeIssueLifecycle(record, lifecycle); });
+  expect(readIssueLifecycle(new IssueTracker(directory, managers()).get(1)!)).toEqual(lifecycle);
 });
 
-it('未初始化任务使用默认流程，未知模式或未注册默认流程直接报错', () => {
+it('v4 文件只持久化 lifecycle，不保存旧状态和 orchestrationState', () => {
   const tracker = new IssueTracker(directory, managers());
   tracker.create(input());
+  const stored = JSON.parse(fs.readFileSync(tracker.store.file(1), 'utf8'));
+  expect(stored.format).toBe('iaf-mini/issue-run/v4-langgraph');
+  expect(stored.record.lifecycle).toEqual({ kind: 'pending' });
+  for (const key of ['state', 'currentPhase', 'pausedAtPhase', 'attempts', 'lastError', 'failedAtState', 'lastErrorRetryable', 'orchestrationState']) {
+    expect(stored.record).not.toHaveProperty(key);
+  }
+});
+
+it('未初始化任务不依赖展示状态映射器，未知模式保持可读取', () => {
+  const tracker = new IssueTracker(directory, managers());
+  tracker.create(input('unknown-mode'));
   expect(tracker.getAllActive()).toHaveLength(1);
-  expect(() => new IssueTracker(directory, new Map()).getAllActive()).toThrow('任务流水线未注册');
-  tracker.updateState(1, IssueState.Pending, { pipelineMode: 'unknown-mode' });
-  expect(() => tracker.getAllActive()).toThrow('unknown-mode');
+  expect(new IssueTracker(directory, new Map()).getAllActive()).toHaveLength(1);
 });

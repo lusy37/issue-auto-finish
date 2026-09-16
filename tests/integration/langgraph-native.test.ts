@@ -33,7 +33,7 @@ function fixture(e2eEnabled = true) {
   };
 }
 
-async function projectBuildRetryWindow(f: ReturnType<typeof fixture>, retryUsed: number, attempts: number): Promise<void> {
+async function projectBuildRetryWindow(f: ReturnType<typeof fixture>, retryUsed: number, completedRetries: number): Promise<void> {
   await f.workflow().drive();
   await f.workflow().resumeReview({ action: 'approve', planRevision: 1 });
   f.tracker().transaction(1, record => {
@@ -42,8 +42,9 @@ async function projectBuildRetryWindow(f: ReturnType<typeof fixture>, retryUsed:
     record.failedAtState = IssueState.PhaseRunning;
     record.lastError = '模拟已落盘失败';
     record.lastErrorRetryable = true;
-    record.attempts = attempts;
     record.run!.retryUsed.build = retryUsed;
+    // 已执行次数包含首次执行；retryUsed === phaseExecutions 表示下一次重试已预留、尚未开始。
+    record.run!.phaseExecutions.build = completedRetries + 1;
     record.orchestrationState = { kind: 'pipeline-failed', failedAt: 'build', retryable: 'auto', error: { message: record.lastError, retryable: 'hard' } };
     record.phaseProgress!.build = { status: 'failed', error: record.lastError };
   });
@@ -188,7 +189,7 @@ describe('LangGraph 原生持久化和人工介入', () => {
     run.mockImplementation(original);
     f.restart();
     f.tracker().resumeFromPause(1);
-    expect(f.tracker().get(1)?.currentPhase).toBe('build');
+    expect(f.tracker().get(1)?.lifecycle).toEqual({ kind: 'ready' });
     expect(f.tracker().getDrivableIssues(1)).toHaveLength(1);
     await f.workflow().drive();
     expect(f.calls).toEqual(['plan', 'build', 'build', 'verify', 'uat', 'deliver']);
@@ -281,7 +282,7 @@ describe('LangGraph 原生持久化和人工介入', () => {
     expect(f.tracker().get(1)?.run?.retryUsed.build).toBeUndefined();
     f.tracker().resetForRetry(1);
     expect(f.tracker().getDrivableIssues(1)).toHaveLength(1);
-    expect(f.tracker().get(1)?.currentPhase).toBe('build');
+    expect(f.tracker().get(1)?.lifecycle).toEqual({ kind: 'ready' });
     run.mockImplementation(original);
     await f.restart().drive();
     expect(f.calls).toEqual(['plan', 'build', 'verify', 'uat', 'deliver']);

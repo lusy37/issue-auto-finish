@@ -44,14 +44,48 @@ export class InvalidLifecycleTransitionError extends Error {
   }
 }
 
+/** 持久化边界的最小结构校验；跨字段业务规则由专用 invariant 函数负责。 */
+export function assertIssueLifecycleShape(value: unknown): asserts value is IssueLifecycle {
+  if (!value || typeof value !== 'object' || !('kind' in value)) throw new Error('业务生命周期缺失或无效');
+  const lifecycle = value as Record<string, unknown>;
+  const kind = lifecycle.kind;
+  if (!['pending', 'skipped', 'ready', 'running', 'waiting', 'paused', 'failed', 'delivering', 'completed', 'cancelled'].includes(String(kind))) {
+    throw new Error('业务生命周期缺失或无效');
+  }
+  if (['running', 'waiting', 'paused'].includes(String(kind))
+    && (typeof lifecycle.phase !== 'string' || !PHASE_IDS.includes(lifecycle.phase as PhaseId))) {
+    throw new Error('业务生命周期阶段无效');
+  }
+  if (kind === 'waiting' && lifecycle.planRevision !== undefined
+    && (!Number.isInteger(lifecycle.planRevision) || Number(lifecycle.planRevision) <= 0)) {
+    throw new Error('等待状态的计划版本无效');
+  }
+  if (kind === 'failed') {
+    const error = lifecycle.error as Record<string, unknown> | undefined;
+    if (!['auto', 'manual'].includes(String(lifecycle.retry)) || !error || typeof error.message !== 'string') {
+      throw new Error('失败生命周期缺少错误或重试策略');
+    }
+    if (lifecycle.phase !== undefined
+      && (typeof lifecycle.phase !== 'string' || !PHASE_IDS.includes(lifecycle.phase as PhaseId))) {
+      throw new Error('失败生命周期阶段无效');
+    }
+  }
+}
+
 function phaseId(value: string | undefined, fallback?: PhaseId): PhaseId {
   if (value && PHASE_IDS.includes(value as PhaseId)) return value as PhaseId;
   if (fallback) return fallback;
   throw new Error(`阶段 ID 无效：${value ?? '<empty>'}`);
 }
 
-/** v3 过渡适配器：从旧持久化字段读取唯一的逻辑生命周期。 */
+/** 读取唯一持久化的业务生命周期。 */
 export function readIssueLifecycle(record: IssueRecord): IssueLifecycle {
+  return structuredClone(record.lifecycle);
+}
+
+/** 仅供新记录和 v3 REST 兼容入口使用，不参与 v4 文件迁移。 */
+export function lifecycleFromLegacyProjection(record: Pick<IssueRecord,
+  'state' | 'currentPhase' | 'pausedAtPhase' | 'lastError' | 'lastErrorRetryable' | 'run'>): IssueLifecycle {
   switch (record.state) {
     case IssueState.Pending:
       return { kind: 'pending' };
@@ -174,11 +208,21 @@ export function reduceIssueLifecycle(
   throw new InvalidLifecycleTransitionError(current, event);
 }
 
-/** v3 过渡适配器：所有旧字段同步集中在这里，业务调用方不得直接拼装。 */
-export function writeLegacyIssueLifecycle(record: IssueRecord, lifecycle: IssueLifecycle): void {
+/** REST 兼容层使用的重试次数投影，不参与调度判断。 */
+export function projectRetryAttempts(record: Pick<IssueRecord, 'run' | 'retryCount'>): number {
+  const current = Object.values(record.run?.retryUsed ?? {}).reduce((sum, value) => sum + value, 0);
+  return Math.max(record.retryCount ?? 0, current);
+}
+
+/** 从唯一生命周期生成 v3 REST 兼容字段；这些字段不会写入 run.json。 */
+export function syncLegacyIssueProjection(record: IssueRecord): void {
+  const lifecycle = record.lifecycle;
   record.lastError = undefined;
   record.lastErrorRetryable = undefined;
   record.failedAtState = undefined;
+  record.currentPhase = undefined;
+  record.pausedAtPhase = undefined;
+  record.attempts = projectRetryAttempts(record);
   switch (lifecycle.kind) {
     case 'pending':
       record.state = IssueState.Pending;
@@ -192,7 +236,6 @@ export function writeLegacyIssueLifecycle(record: IssueRecord, lifecycle: IssueL
       break;
     case 'ready':
       record.state = IssueState.BranchCreated;
-      record.pausedAtPhase = undefined;
       break;
     case 'running':
       record.state = IssueState.PhaseRunning;
@@ -211,7 +254,7 @@ export function writeLegacyIssueLifecycle(record: IssueRecord, lifecycle: IssueL
       break;
     case 'failed':
       record.state = IssueState.Failed;
-      record.currentPhase = lifecycle.phase ?? record.currentPhase;
+      record.currentPhase = lifecycle.phase;
       record.lastError = lifecycle.error.message;
       record.lastErrorRetryable = lifecycle.retry === 'auto';
       record.failedAtState = IssueState.PhaseRunning;
@@ -246,12 +289,39 @@ export function writeLegacyIssueLifecycle(record: IssueRecord, lifecycle: IssueL
   }
 }
 
+/** 写入唯一生命周期，并立即刷新只读兼容投影。 */
+export function writeIssueLifecycle(record: IssueRecord, lifecycle: IssueLifecycle): void {
+  record.lifecycle = structuredClone(lifecycle);
+  syncLegacyIssueProjection(record);
+}
+
+/**
+ * 兼容旧调用方在事务内直接赋值 state/currentPhase。
+ * v4 磁盘从不保存这些字段；若兼容投影被改动，则在事务提交前单向翻译为 lifecycle。
+ */
+export function reconcileLegacyIssueProjection(
+  record: IssueRecord,
+  lifecycleBeforeUpdate?: IssueLifecycle,
+): void {
+  // 同一事务已经通过生命周期事件完成权威写入时，不允许随后生成的旧 API
+  // 投影再反向覆盖它（例如丢失 waiting.planRevision）。
+  if (lifecycleBeforeUpdate
+    && JSON.stringify(record.lifecycle) !== JSON.stringify(lifecycleBeforeUpdate)) {
+    syncLegacyIssueProjection(record);
+    return;
+  }
+  const candidate = lifecycleFromLegacyProjection(record);
+  if (JSON.stringify(candidate) !== JSON.stringify(record.lifecycle)) {
+    writeIssueLifecycle(record, candidate);
+  }
+}
+
 export function applyIssueLifecycleEvent(
   record: IssueRecord,
   event: IssueLifecycleEvent,
 ): IssueLifecycle {
   const next = reduceIssueLifecycle(readIssueLifecycle(record), event);
-  writeLegacyIssueLifecycle(record, next);
+  writeIssueLifecycle(record, next);
   // v3 API 仍对外暴露审核专用枚举；兼容投影集中保留在适配器中，
   // 生命周期本身只表达 ready / pending，不重新引入一套业务状态。
   if (event.type === 'gate-resolved') {

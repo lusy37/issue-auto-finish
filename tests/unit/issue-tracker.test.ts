@@ -211,14 +211,14 @@ describe('IssueTracker', () => {
       expect(record.failedAtState).toBeUndefined();
     });
 
-    it('preserves lastError when transitioning to non-Completed state', () => {
+    it('进入非失败状态时清除失败投影，避免组合出运行中且失败的非法状态', () => {
       createRecord(1, IssueState.PhaseRunning);
       tracker.markFailed(1, 'some error', IssueState.PhaseRunning);
 
       tracker.updateState(1, IssueState.PhaseRunning);
       const record = tracker.get(1)!;
       expect(record.state).toBe(IssueState.PhaseRunning);
-      expect(record.lastError).toBe('some error');
+      expect(record.lastError).toBeUndefined();
     });
   });
 
@@ -268,13 +268,21 @@ describe('IssueTracker', () => {
     it('重做 build 时直接指定图入口，不伪造审核已批准状态', () => {
       createRecord(1, IssueState.PhaseRunning);
       expect(tracker.resetToPhase(1, 'build', PLAN_MODE_PIPELINE)).toBe(true);
-      expect(tracker.get(1)).toMatchObject({ state: IssueState.BranchCreated, currentPhase: 'build', run: { workflow: { generation: 1, entry: 'build' } } });
+      expect(tracker.get(1)).toMatchObject({
+        state: IssueState.BranchCreated,
+        lifecycle: { kind: 'ready' },
+        run: { workflow: { generation: 1, entry: 'build' } },
+      });
     });
 
     it('重做 verify 时直接指定图入口，不伪造 build 完成状态', () => {
       createRecord(1, IssueState.Completed);
       expect(tracker.resetToPhase(1, 'verify', PLAN_MODE_PIPELINE)).toBe(true);
-      expect(tracker.get(1)).toMatchObject({ state: IssueState.BranchCreated, currentPhase: 'verify', run: { workflow: { generation: 1, entry: 'verify' } } });
+      expect(tracker.get(1)).toMatchObject({
+        state: IssueState.BranchCreated,
+        lifecycle: { kind: 'ready' },
+        run: { workflow: { generation: 1, entry: 'verify' } },
+      });
     });
 
     it('returns false for unknown phase name', () => {

@@ -169,7 +169,7 @@ export class IssueWorkflow {
   }
 
   /**
-   * retryUsed 大于 attempts 表示预算已为下一次执行预留。retryPolicy 与崩溃恢复共用本函数，
+   * retryUsed 不小于当前阶段执行次数表示预算已为下一次执行预留。retryPolicy 与崩溃恢复共用本函数，
    * 因而在“失败已保存”和“预算已预留”两个窗口退出都不会漏重试或重复扣减。
    */
   private reserveRetry(phase: Exclude<PhaseId, 'review'>, retryable: boolean): boolean {
@@ -177,11 +177,13 @@ export class IssueWorkflow {
     this.check();
     const record = this.record();
     const used = record.run!.retryUsed[phase] ?? 0;
-    if (used > record.attempts) return true;
+    const executions = record.run!.phaseExecutions[phase] ?? 0;
+    if (used >= executions && used > 0) return true;
     if (used >= this.options.maxRetries) return false;
     this.update(current => {
       const currentUsed = current.run!.retryUsed[phase] ?? 0;
-      if (currentUsed <= current.attempts) current.run!.retryUsed[phase] = currentUsed + 1;
+      const currentExecutions = current.run!.phaseExecutions[phase] ?? 0;
+      if (currentUsed < currentExecutions || currentUsed === 0) current.run!.retryUsed[phase] = currentUsed + 1;
     });
     return true;
   }
@@ -224,7 +226,6 @@ export class IssueWorkflow {
           retry: canAutoRetry ? 'auto' : 'manual',
           error: intent.error,
         });
-        record.attempts = retryUsed;
         record.phaseProgress![phase] = { ...record.phaseProgress![phase], status: 'failed', error: intent.error.message };
         this.history(record, { phaseId: phase, attemptId, startedAt, endedAt: new Date().toISOString(), outcome: 'failed', sessionId: intent.sessionId, errorMessage: intent.error.message });
       });
@@ -254,7 +255,6 @@ export class IssueWorkflow {
       } else {
         applyIssueLifecycleEvent(record, { type: 'phase-completed', phase });
       }
-      record.attempts = record.run!.retryUsed[phase] ?? 0;
       record.phaseProgress![phase] = { ...record.phaseProgress![phase], status: result.outcome === 'completed' ? 'completed' : 'pending', completedAt: result.outcome === 'completed' ? new Date().toISOString() : undefined, sessionId: result.sessionId };
       this.history(record, { phaseId: phase, attemptId, startedAt, endedAt: new Date().toISOString(), outcome: result.outcome, sessionId: result.sessionId, ...(result.outcome === 'retried-from' ? { fixIteration: record.run!.repairRounds, errorMessage: result.report, retryFromContext: { verifyFailures: result.failures ?? [], rawReport: result.report ?? '' } } : {}) });
     });

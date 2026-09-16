@@ -15,7 +15,7 @@ import { eventBus } from '../../src/events/EventBus.js';
 let directory: string;
 beforeEach(() => { directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dag-state-')); });
 afterEach(() => { fs.rmSync(directory, { recursive: true, force: true }); vi.restoreAllMocks(); });
-const record = (number: number): IssueRecord => ({ state: IssueState.Pending, orchestrationState: { kind: 'queued' }, branchName: `iaf-${number}`, attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), demandSpec: { demandId: `gh-${number}`, sourceRef: { source: 'github-issue', externalId: String(number), displayId: String(number) }, title: '需求', description: '实现并验收', createdAt: new Date().toISOString() }, run: newIssueRun() });
+const record = (number: number): IssueRecord => ({ lifecycle: { kind: 'pending' }, state: IssueState.Pending, orchestrationState: { kind: 'queued' }, branchName: `iaf-${number}`, attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), demandSpec: { demandId: `gh-${number}`, sourceRef: { source: 'github-issue', externalId: String(number), displayId: String(number) }, title: '需求', description: '实现并验收', createdAt: new Date().toISOString() }, run: newIssueRun() });
 const content = (): PlanContent => ({ title: '计划', description: '共同完成父需求', acceptanceCriteria: ['验证通过'], tasks: [{ id: 'a', title: '接口', instructions: '实现接口', acceptanceCriteria: ['接口测试通过'], dependsOn: [] }, { id: 'b', title: '页面', instructions: '实现页面', acceptanceCriteria: ['页面可用'], dependsOn: ['a'] }] });
 const tracker = () => new IssueTracker(directory, new Map([['plan-mode', createLifecycleManager(PLAN_MODE_PIPELINE)]]));
 
@@ -30,15 +30,15 @@ describe('聚合事务与不可变计划', () => {
     expect(store.get(1)).toEqual(previous);
     expect(new IssueRunStore(directory).get(1)).toEqual(previous);
     expect(store.isBlocked(1)).toBe(true);
-    expect(() => store.transaction(1, next => { next.attempts++; })).toThrow('阻断');
+    expect(() => store.transaction(1, next => { next.retryCount = (next.retryCount ?? 0) + 1; })).toThrow('阻断');
   });
   it('并发完成任务及不同父 Issue 更新均不丢失；读返回独立快照', async () => {
     const store = new IssueRunStore(directory);
     store.insert(1, record(1)); store.insert(2, record(2));
-    await Promise.all(Array.from({ length: 20 }, (_, i) => Promise.resolve().then(() => store.transaction(i % 2 + 1, next => { next.attempts++; }))));
-    expect(store.get(1)!.attempts).toBe(10); expect(store.get(2)!.attempts).toBe(10);
-    const copy = store.get(1)!; copy.attempts = 999;
-    expect(store.get(1)!.attempts).toBe(10);
+    await Promise.all(Array.from({ length: 20 }, (_, i) => Promise.resolve().then(() => store.transaction(i % 2 + 1, next => { next.retryCount = (next.retryCount ?? 0) + 1; }))));
+    expect(store.get(1)!.retryCount).toBe(10); expect(store.get(2)!.retryCount).toBe(10);
+    const copy = store.get(1)!; copy.retryCount = 999;
+    expect(store.get(1)!.retryCount).toBe(10);
   });
   it('计划版本不可覆盖，内容篡改及缺失引用在启动时被拒绝', () => {
     const store = new IssueRunStore(directory);
@@ -69,7 +69,7 @@ describe('聚合事务与不可变计划', () => {
     expect(current.phaseProgress?.plan.status).toBe('completed');
     const emitted = vi.spyOn(eventBus, 'emitTyped');
     vi.spyOn(tracked.store as never, 'persist' as never).mockImplementation(() => { throw new Error('磁盘故障'); });
-    expect(() => tracked.transaction(1, next => { next.attempts++; })).toThrow('磁盘故障');
+    expect(() => tracked.transaction(1, next => { next.retryCount = (next.retryCount ?? 0) + 1; })).toThrow('磁盘故障');
     expect(tracked.get(1)).toEqual(current);
     expect(emitted).not.toHaveBeenCalled();
   });
@@ -120,7 +120,8 @@ describe('取消与执行身份', () => {
 
 it('同一阶段发起新调用后，旧调用结果也不能被采用', async () => {
   const tracked = tracker(); tracked.create(record(1));
-  tracked.transaction(1, next => { next.currentPhase = 'plan'; next.run!.dispatchId = 'dispatch'; });
+  tracked.updateState(1, IssueState.PhaseRunning, { currentPhase: 'plan' });
+  tracked.transaction(1, next => { next.run!.dispatchId = 'dispatch'; });
   let finish!: (value: { success: boolean; output: string; exitCode: number }) => void;
   const underlying = { run: vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValue({ success: true, output: '新结果', exitCode: 0 }), killAll() {}, killByWorkDir() { return 0; } };
   const scoped = scopedRunner(underlying, tracked, 1, new AbortController().signal, '$phase:plan');
