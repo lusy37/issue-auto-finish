@@ -13,7 +13,8 @@ import { PlanPersistence } from '../persistence/PlanPersistence.js';
 import { createPhase } from '../phases/PhaseFactory.js';
 import { scopedRunner } from '../dag/ScopedRunner.js';
 import { TaskGraphExecutor } from '../dag/TaskGraphExecutor.js';
-import { validatePlan, renderPlan } from '../dag/contracts.js';
+import { renderPlan } from '../dag/contracts.js';
+import { decodePlanContent } from '../dag/codecs/TaskPlanCodec.js';
 
 /** 外层阶段适配：DAG 限定在 build，verify/UAT 的凭证绑定实际候选提交。 */
 export class DagPhaseRunner {
@@ -85,7 +86,7 @@ export class DagPhaseRunner {
       signal.throwIfAborted();
       if (intent.kind === 'requestRetryFrom' && state().repairRounds >= config.verifyFixLoop.maxIterations) return { kind: 'failed', error: { message: '集成自动修复额度已用完，请人工处理', retryable: 'hard-no-auto' } };
       if (spec.id === 'plan' && intent.kind === 'completed') {
-        const content = validatePlan(JSON.parse(intent.output?.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1] ?? intent.output ?? ''));
+        const content = decodePlanContent(JSON.parse(intent.output?.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1] ?? intent.output ?? ''));
         const plan = tracker.store.savePlan(number, content, state().version);
         this.plan.writePlan(renderPlan(plan));
       }

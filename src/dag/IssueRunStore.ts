@@ -4,7 +4,10 @@ import { getIssueNumber } from '../tracker/IssueRecordHelper.js';
 import type { IssueRecord, LegacyIssueProjection } from '../tracker/IssueState.js';
 import { assertIssueLifecycleShape, reconcileLegacyIssueProjection, syncLegacyIssueProjection } from '../tracker/IssueLifecycle.js';
 import { writeJsonAtomicSync } from '../utils/atomicFile.js';
-import { PLAN_FORMAT, RUN_FORMAT, newIssueRun, planDigest, validatePlan, validateRun, type PlanContent, type TaskPlan } from './contracts.js';
+import { PLAN_FORMAT, RUN_FORMAT, newIssueRun, planDigest, type PlanContent, type TaskPlan } from './contracts.js';
+import { decodePlanContent } from './codecs/TaskPlanCodec.js';
+import { assertIssueRunShape } from './codecs/IssueRunCodec.js';
+import { assertIssueRunInvariants } from './invariants.js';
 
 /** 同步事务中不执行异步副作用；单实例事件循环保证计算及替换之间不能交错。 */
 export class IssueRunStore {
@@ -43,7 +46,8 @@ export class IssueRunStore {
       const value = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (value.format !== RUN_FORMAT || !value.record?.run || !value.record.lifecycle || value.record.demandSpec?.sourceRef?.source !== 'github-issue' || getIssueNumber(value.record) !== number) this.invalid(file, '聚合状态格式无效');
       assertIssueLifecycleShape(value.record.lifecycle);
-      validateRun(value.record.run, number);
+      assertIssueRunShape(value.record.run);
+      assertIssueRunInvariants(value.record.run, number);
       const record = value.record as IssueRecord;
       syncLegacyIssueProjection(record);
       return record;
@@ -120,7 +124,7 @@ export class IssueRunStore {
     const record = this.get(number)!;
     if (record.run!.version !== expectedVersion) throw new Error('生成计划期间状态已改变');
     const revision = record.run!.planRevision + 1;
-    const base = { ...validatePlan(content), format: PLAN_FORMAT, issueNumber: number, revision, demand: structuredClone(record.demandSpec!), createdAt: new Date().toISOString() };
+    const base = { ...decodePlanContent(content), format: PLAN_FORMAT, issueNumber: number, revision, demand: structuredClone(record.demandSpec!), createdAt: new Date().toISOString() };
     const plan: TaskPlan = { ...base, digest: planDigest(base) };
     const file = this.planFile(number, revision);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -158,7 +162,7 @@ export class IssueRunStore {
       const plan: TaskPlan = JSON.parse(fs.readFileSync(file, 'utf8'));
       const { digest: storedDigest, ...base } = plan;
       const { title, description, acceptanceCriteria, tasks } = plan;
-      validatePlan({ title, description, acceptanceCriteria, tasks });
+      decodePlanContent({ title, description, acceptanceCriteria, tasks });
       if (plan.format !== PLAN_FORMAT || plan.issueNumber !== number || plan.revision !== revision || planDigest(base) !== storedDigest || (digest && digest !== storedDigest)) this.invalid(file, '计划引用或摘要无效');
       return plan;
     } catch (error) { return this.invalid(file, `无法读取计划版本：${(error as Error).message}`); }

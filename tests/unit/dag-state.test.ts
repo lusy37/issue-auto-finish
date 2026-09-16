@@ -5,7 +5,8 @@ import path from 'node:path';
 import { IssueRunStore } from '../../src/dag/IssueRunStore.js';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
 import { IssueState, type IssueRecord } from '../../src/tracker/IssueState.js';
-import { validatePlan, type PlanContent, newIssueRun } from '../../src/dag/contracts.js';
+import { type PlanContent, newIssueRun } from '../../src/dag/contracts.js';
+import { decodePlanContent } from '../../src/dag/codecs/TaskPlanCodec.js';
 import { writeJsonAtomicSync } from '../../src/utils/atomicFile.js';
 import { ConcurrencyLimiter } from '../../src/ai-runner/ConcurrencyLimiter.js';
 import { scopedRunner } from '../../src/dag/ScopedRunner.js';
@@ -78,8 +79,8 @@ describe('聚合事务与不可变计划', () => {
 describe('任务图验证', () => {
   it('接受单任务及 A/B 完成后 C 的依赖图', () => {
     const plan = content(); plan.tasks[1].dependsOn = []; plan.tasks.push({ ...plan.tasks[0], id: 'c', dependsOn: ['a', 'b'] });
-    expect(validatePlan(plan).tasks).toHaveLength(3);
-    expect(validatePlan({ ...plan, tasks: [plan.tasks[0]] }).tasks).toHaveLength(1);
+    expect(decodePlanContent(plan).tasks).toHaveLength(3);
+    expect(decodePlanContent({ ...plan, tasks: [plan.tasks[0]] }).tasks).toHaveLength(1);
   });
   it.each(['重复', '循环', '缺失', '自依赖', '空图', '过多'])('拒绝%s', failure => {
     const plan = content();
@@ -89,7 +90,7 @@ describe('任务图验证', () => {
     if (failure === '自依赖') plan.tasks[0].dependsOn = ['a'];
     if (failure === '空图') plan.tasks = [];
     if (failure === '过多') plan.tasks = Array.from({ length: 21 }, (_, i) => ({ ...plan.tasks[0], id: `t${i}` }));
-    expect(() => validatePlan(plan)).toThrow();
+    expect(() => decodePlanContent(plan)).toThrow();
   });
 });
 

@@ -3,7 +3,8 @@ import { z } from 'zod';
 import type { PhaseRunner, PhaseRunnerContext } from '../orchestration/PhaseRunner.js';
 import type { PhaseError } from '../orchestration/PhaseResult.js';
 import type { PhaseHistoryEntry } from '../orchestration/OrchestrationState.js';
-import { PHASE_IDS, requiresWorkflowPhase, reviewDecisionSchema, type PhaseId, type PhaseResultSummary, type ReviewDecision, type WorkflowNode } from '../orchestration/WorkflowState.js';
+import { PHASE_IDS, requiresWorkflowPhase, type PhaseId, type PhaseResultSummary, type ReviewDecision, type WorkflowNode } from '../orchestration/WorkflowState.js';
+import { decodeReviewDecision } from '../orchestration/codecs/WorkflowCodec.js';
 import { getPlanModePhases } from '../orchestration/Phases.js';
 import type { IssueRecord } from '../tracker/IssueState.js';
 import type { IssueTracker } from '../tracker/IssueTracker.js';
@@ -149,14 +150,15 @@ export class IssueWorkflow {
   async resumeReview(decision: ReviewDecision): Promise<void> {
     await this.lock.runExclusive(async () => {
       this.check();
-      const parsed = reviewDecisionSchema.safeParse(decision);
-      if (!parsed.success) throw new ReviewConflictError('审核数据无效，驳回必须提供反馈');
+      let parsed: ReviewDecision;
+      try { parsed = decodeReviewDecision(decision); }
+      catch { throw new ReviewConflictError('审核数据无效，驳回必须提供反馈'); }
       const record = this.record();
       if (record.run!.planRevision !== decision.planRevision || record.run!.review?.decision !== 'waiting') throw new ReviewConflictError('审核计划版本或状态已改变，请刷新页面');
       const saved = await this.graph.getState(this.config);
       const pending = saved.tasks.flatMap(task => task.interrupts ?? []);
       if (!pending.some(item => (item.value as { kind?: string; planRevision?: number })?.kind === 'review' && (item.value as { planRevision?: number }).planRevision === decision.planRevision)) throw new ReviewConflictError('当前没有可恢复的审核中断，请刷新页面');
-      await this.graph.invoke(new Command({ resume: parsed.data }), { ...this.config, interruptAfter: ['review'] });
+      await this.graph.invoke(new Command({ resume: parsed }), { ...this.config, interruptAfter: ['review'] });
     });
   }
 
@@ -298,7 +300,7 @@ export class IssueWorkflow {
     });
     // 已进入审核后恢复时必须使用中断决定，不能因配置变化绕过人工审核。
     const source = wasWaiting || enteredReview ? undefined : this.options.autoReview?.();
-    const decision = reviewDecisionSchema.parse(source ? { action: 'approve', source, planRevision: revision } : interrupt({ kind: 'review', issueNumber: this.options.number, planRevision: revision, planDigest: plan.digest }));
+    const decision = decodeReviewDecision(source ? { action: 'approve', source, planRevision: revision } : interrupt({ kind: 'review', issueNumber: this.options.number, planRevision: revision, planDigest: plan.digest }));
     const result: PhaseResultSummary = { phase: 'review', outcome: decision.action === 'approve' ? 'gate-approved' : 'gate-rejected', next: decision.action === 'approve' ? 'build' : 'plan' };
     this.update(current => {
       const run = current.run!;

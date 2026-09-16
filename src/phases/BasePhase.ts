@@ -1,5 +1,6 @@
 import { resolvePromptRules } from '../knowledge/PromptRules.js';
-import { renderPlan, validatePlan } from '../dag/contracts.js';
+import { renderPlan } from '../dag/contracts.js';
+import { decodePlanContent } from '../dag/codecs/TaskPlanCodec.js';
 import type { AIRunner, RunResult, StreamEvent } from '../ai-runner/index.js';
 
 import { GitOperations } from '../git/GitOperations.js';
@@ -139,7 +140,7 @@ export abstract class BasePhase {
     this.persistSessionId(displayId, result.sessionId);
     if (this.phaseName === 'plan') {
       if (result.output.trim().length < BasePhase.MIN_ARTIFACT_BYTES) return { kind: 'failed', error: { message: '计划内容为空或不完整', retryable: 'hard-no-auto' } };
-      try { this.plan.writePlan(renderPlan(validatePlan(JSON.parse(result.output.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1] ?? result.output)))); }
+      try { this.plan.writePlan(renderPlan(decodePlanContent(JSON.parse(result.output.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1] ?? result.output)))); }
       catch (error) { return { kind: 'failed', error: { message: `结构化计划无效：${(error as Error).message}`, retryable: 'hard' } }; }
     }
     if (this.phaseName === 'verify') this.plan.writeFile('02-verify-report.md', result.output);
