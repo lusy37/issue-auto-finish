@@ -45,9 +45,15 @@ export interface PhaseResultSummary {
   report?: string;
   failures?: readonly string[];
 }
+export interface WorkflowDefinition {
+  /** 本轮工作流的不可变阶段集合；顺序同时用于页面投影。 */
+  phaseIds: PhaseId[];
+}
 export interface WorkflowStorage {
   generation: number;
   entry: WorkflowNode;
+  /** 首次 setup 时固化；pending 任务在 setup 前允许尚未初始化。 */
+  definition?: WorkflowDefinition;
   checkpoints: StoredCheckpoint[];
   writes: StoredWrite[];
   /** 阶段结果与业务事实在同一事务提交，覆盖节点结束至检查点落盘之间的崩溃窗口。 */
@@ -58,6 +64,33 @@ export function newWorkflowStorage(): WorkflowStorage {
   return { generation: 0, entry: 'plan', checkpoints: [], writes: [], results: {}, effects: [] };
 }
 
+export function initializeWorkflowDefinition(
+  workflow: WorkflowStorage,
+  phaseIds: readonly string[],
+): WorkflowDefinition {
+  const unique = new Set(phaseIds);
+  if (unique.size !== phaseIds.length
+    || phaseIds.some(id => !PHASE_IDS.includes(id as PhaseId))
+    || !['plan', 'review', 'build', 'verify'].every(id => unique.has(id))) {
+    throw new Error('工作流阶段定义无效');
+  }
+  const definition = { phaseIds: phaseIds as PhaseId[] };
+  if (workflow.definition) {
+    if (workflow.definition.phaseIds.length !== definition.phaseIds.length
+      || workflow.definition.phaseIds.some((id, index) => id !== definition.phaseIds[index])) {
+      throw new Error('本轮工作流阶段定义已固化，不能随全局配置改变');
+    }
+    return workflow.definition;
+  }
+  workflow.definition = { phaseIds: [...definition.phaseIds] };
+  return workflow.definition;
+}
+
+export function requiresWorkflowPhase(workflow: WorkflowStorage, phase: PhaseId): boolean {
+  if (!workflow.definition) throw new Error('工作流阶段定义尚未初始化');
+  return workflow.definition.phaseIds.includes(phase);
+}
+
 const serializedValue = z.object({
   type: z.string(),
   data: z.string(),
@@ -66,6 +99,7 @@ const serializedValue = z.object({
 export const workflowStorageSchema = z.object({
   generation: z.number().int().nonnegative(),
   entry: z.enum([...PHASE_IDS, 'deliver']),
+  definition: z.object({ phaseIds: z.array(z.enum(PHASE_IDS)).min(4) }).optional(),
   checkpoints: z.array(z.object({
     threadId: z.string(),
     namespace: z.string(),

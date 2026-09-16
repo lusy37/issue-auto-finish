@@ -39,14 +39,19 @@ export async function executeSetup(
     await deps.ensureWorktree(wtCtx);
   }, deps.signal);
 
-  // 3. 更新状态为 BranchCreated
+  // 3. 首次 setup 固化本轮阶段定义，并初始化展示进度。
+  if (!record.run!.workflow.definition || !record.phaseProgress) {
+    deps.tracker.initPhaseProgress(issue.number, pipelineDef);
+  }
+
+  // 4. 更新状态为 BranchCreated
   if (readIssueLifecycle(record).kind === 'pending') {
     deps.tracker.transaction(issue.number, current => {
       applyIssueLifecycleEvent(current, { type: 'setup-completed' });
     });
   }
 
-  // 4. 安装依赖
+  // 5. 安装依赖
   deps.emitProgress(issue.number, 'install', t('orchestrator.installProgress'));
   if (wtCtx.workspace) {
     await deps.installDependencies(wtCtx.workspace.primary.workDir);
@@ -54,7 +59,7 @@ export async function executeSetup(
     await deps.installDependencies(wtCtx.workDir);
   }
 
-  // 5. 初始化 PlanPersistence（在 primary repo）
+  // 6. 初始化 PlanPersistence（在 primary repo）
   deps.emitProgress(issue.number, 'init_plan', t('orchestrator.initPlanProgress'));
   const primaryWorkDir = wtCtx.workspace ? wtCtx.workspace.primary.workDir : wtCtx.workDir;
   const primaryGitRoot = wtCtx.workspace ? wtCtx.workspace.primary.gitRootDir : wtCtx.gitRootDir;
@@ -75,11 +80,6 @@ export async function executeSetup(
     wtPlan.writeProgress(
       wtPlan.createInitialProgress(issue.number, issue.title, branchName, pipelineDef),
     );
-  }
-
-  // 首次执行时初始化 tracker 阶段进度，恢复执行时保留已有进度
-  if (!record.phaseProgress) {
-    deps.tracker.initPhaseProgress(issue.number, pipelineDef);
   }
 
   return { wtGit, wtPlan };

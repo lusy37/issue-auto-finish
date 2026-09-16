@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { PhaseRunner, PhaseRunnerContext } from '../orchestration/PhaseRunner.js';
 import type { PhaseError } from '../orchestration/PhaseResult.js';
 import type { PhaseHistoryEntry } from '../orchestration/OrchestrationState.js';
-import { PHASE_IDS, reviewDecisionSchema, type PhaseId, type PhaseResultSummary, type ReviewDecision, type WorkflowNode } from '../orchestration/WorkflowState.js';
+import { PHASE_IDS, requiresWorkflowPhase, reviewDecisionSchema, type PhaseId, type PhaseResultSummary, type ReviewDecision, type WorkflowNode } from '../orchestration/WorkflowState.js';
 import { getPlanModePhases } from '../orchestration/Phases.js';
 import type { IssueRecord } from '../tracker/IssueState.js';
 import type { IssueTracker } from '../tracker/IssueTracker.js';
@@ -230,7 +230,12 @@ export class IssueWorkflow {
       });
       throw new PhaseExecutionError(phase, intent.error);
     }
-    const next: Record<Exclude<PhaseId, 'review'>, WorkflowNode> = { plan: 'review', build: 'verify', verify: Object.hasOwn(this.record().phaseProgress!, 'uat') ? 'uat' : 'deliver', uat: 'deliver' };
+    const next: Record<Exclude<PhaseId, 'review'>, WorkflowNode> = {
+      plan: 'review',
+      build: 'verify',
+      verify: requiresWorkflowPhase(this.record().run!.workflow, 'uat') ? 'uat' : 'deliver',
+      uat: 'deliver',
+    };
     let result: PhaseResultSummary;
     if (intent.kind === 'completed') result = { phase, outcome: 'completed', next: next[phase], sessionId: intent.sessionId };
     else if (intent.kind === 'requestRetryFrom' && intent.targetPhaseId === 'build' && (phase === 'verify' || phase === 'uat') && this.record().run!.repairRounds < this.options.maxRepairs) {

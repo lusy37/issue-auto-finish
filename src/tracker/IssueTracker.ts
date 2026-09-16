@@ -8,7 +8,7 @@ import { type ExecutableTask, issueToExecutableTask } from './ExecutableTask.js'
 import { getIssueNumber } from './IssueRecordHelper.js';
 import { logger as rootLogger } from '../logger.js';
 import { eventBus } from '../events/EventBus.js';
-import { PHASE_IDS, type PhaseId } from '../orchestration/WorkflowState.js';
+import { initializeWorkflowDefinition, PHASE_IDS, type PhaseId } from '../orchestration/WorkflowState.js';
 import { applyIssueLifecycleEvent, readIssueLifecycle } from './IssueLifecycle.js';
 
 const logger = rootLogger.child('IssueTracker');
@@ -101,15 +101,15 @@ export class IssueTracker {
 
   /** 初始化阶段进度（流水线启动时调用） */
   initPhaseProgress(issueIid: number, def: PipelineDef): void {
-    const record = this.get(issueIid);
-    if (!record) return;
-    const phases: Record<string, PhaseProgress> = {};
-    for (const spec of def.phases) {
-      phases[spec.name] = { status: 'pending' };
-    }
-    record.phaseProgress = phases;
-    record.updatedAt = new Date().toISOString();
-    this.store.replace(record);
+    if (!this.get(issueIid)) return;
+    this.transaction(issueIid, record => {
+      initializeWorkflowDefinition(record.run!.workflow, def.phases.map(spec => spec.name));
+      if (!record.phaseProgress) {
+        const phases: Record<string, PhaseProgress> = {};
+        for (const spec of def.phases) phases[spec.name] = { status: 'pending' };
+        record.phaseProgress = phases;
+      }
+    });
   }
 
   /** 更新单个阶段的进度（原子保存 + SSE 推送） */
@@ -180,6 +180,9 @@ export class IssueTracker {
     const phase = lifecycle.phase;
     // 只恢复调度资格，执行位置和会话继续使用原图检查点。
     applyIssueLifecycleEvent(record, { type: 'continue-requested' });
+    if (record.deliveryPending) {
+      applyIssueLifecycleEvent(record, { type: 'delivery-started' });
+    }
     record.currentPhase = phase;
     record.run!.stopIntent = undefined;
     record.updatedAt = new Date().toISOString();

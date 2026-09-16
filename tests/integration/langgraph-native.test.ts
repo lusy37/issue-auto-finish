@@ -14,11 +14,11 @@ let directory: string;
 beforeEach(() => { directory = fs.mkdtempSync(path.join(os.tmpdir(), 'langgraph-native-')); });
 afterEach(() => { vi.restoreAllMocks(); fs.rmSync(directory, { recursive: true, force: true }); });
 
-function fixture() {
+function fixture(e2eEnabled = true) {
   let tracker = newTracker(directory);
   const demand = { demandId: 'gh-1', sourceRef: { source: 'github-issue' as const, externalId: '1', displayId: '1' }, title: '需求', description: '实施需求', createdAt: new Date().toISOString() };
   tracker.create({ state: IssueState.Pending, demandSpec: demand, branchName: 'iaf-1' });
-  tracker.initPhaseProgress(1, buildPlanModePipeline({ e2eEnabled: true }));
+  tracker.initPhaseProgress(1, buildPlanModePipeline({ e2eEnabled }));
   const calls: string[] = [];
   const runner: WorkflowOptions['runner'] = { run: async spec => {
     calls.push(spec.id);
@@ -310,8 +310,7 @@ describe('LangGraph 原生持久化和人工介入', () => {
 });
 
 it('关闭 E2E 的审核检查点跨实例恢复后，verify 直接交付且完成状态不重跑', async () => {
-  const f = fixture();
-  f.tracker().initPhaseProgress(1, buildPlanModePipeline({ e2eEnabled: false }));
+  const f = fixture(false);
   await f.workflow().drive();
   await f.restart().resumeReview({ action: 'approve', planRevision: 1 });
   await f.restart().drive();

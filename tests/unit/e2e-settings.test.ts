@@ -22,6 +22,7 @@ it.each([false, true])('验收要求 %s 跨重启保持，完整重做才采用�
   config.e2e.enabled = !enabled;
   const restored = new IssueTracker(directory, managers);
   expect(isE2eEnabledForIssue(1, restored, config)).toBe(enabled);
+  expect(restored.get(1)!.run!.workflow.definition?.phaseIds.includes('uat')).toBe(enabled);
   expect(Object.hasOwn(restored.get(1)!.phaseProgress!, 'uat')).toBe(enabled);
   restored.resetFull(1);
   expect(isE2eEnabledForIssue(1, restored, config)).toBe(!enabled);
@@ -30,6 +31,20 @@ it('本轮阶段包含 UAT 时，全局关闭不会绕过验收', () => {
   const config = createTestConfig(); config.e2e.enabled = false;
   const pipeline = buildPlanModePipeline({ e2eEnabled: true });
   const tracker = new IssueTracker(directory, new Map([[pipeline.mode, createLifecycleManager(pipeline)]]));
-  tracker.create({ state: IssueState.PhaseRunning, branchName: 'feat/issue-1', currentPhase: 'uat', phaseProgress: { uat: { status: 'in_progress' } }, demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' }, title: '已有验收', description: '保持原要求', createdAt: new Date().toISOString() } });
+  tracker.create({ state: IssueState.PhaseRunning, branchName: 'feat/issue-1', currentPhase: 'uat', demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' }, title: '已有验收', description: '保持原要求', createdAt: new Date().toISOString() } });
+  tracker.initPhaseProgress(1, pipeline);
   expect(isE2eEnabledForIssue(1, tracker, config)).toBe(true);
+});
+
+it('阶段定义固化后，展示进度和全局配置都不能改写本轮 UAT 要求', () => {
+  const config = createTestConfig(); config.e2e.enabled = true;
+  const disabled = buildPlanModePipeline({ e2eEnabled: false });
+  const enabled = buildPlanModePipeline({ e2eEnabled: true });
+  const tracker = new IssueTracker(directory, new Map([[disabled.mode, createLifecycleManager(disabled)]]));
+  tracker.create({ state: IssueState.Pending, branchName: 'feat/issue-1', demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' }, title: '不可变流程', description: '校验阶段定义', createdAt: new Date().toISOString() } });
+  tracker.initPhaseProgress(1, disabled);
+  tracker.transaction(1, record => { record.phaseProgress!.uat = { status: 'in_progress' }; });
+
+  expect(isE2eEnabledForIssue(1, tracker, config)).toBe(false);
+  expect(() => tracker.initPhaseProgress(1, enabled)).toThrow('本轮工作流阶段定义已固化');
 });
