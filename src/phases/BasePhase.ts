@@ -12,8 +12,8 @@ import type { PortPair } from '../preview/PortAllocator.js';
 import type { DemandSpec } from '../demand/DemandSpec.js';
 import type { WorkspaceLayout } from '../prompts/templates.js';
 import type { PhaseCallbacks } from './PhaseCallbacks.js';
+import type { PhaseSessionStore } from './PhaseSessionStore.js';
 import type { PhaseResult, PhaseError, ArtifactRef } from '../orchestration/PhaseResult.js';
-import type { IssueTracker } from '../tracker/IssueTracker.js';
 import { logger as rootLogger, Logger } from '../logger.js';
 import { t } from '../i18n/index.js';
 
@@ -49,7 +49,7 @@ export interface PhaseContext {
  * - run() 返回 PhaseResult（completed / failed / awaitGate / awaitAsync / requestRetryFrom）。
  * - 阶段内部不推进生命周期，也不触发 eventBus / git commit / GitHub 评论；
  *   这些副作用由编排器根据返回的 Intent 驱动。
- * - 阶段只通过 PlanPersistence 读写产物；执行会话凭证由 IssueTracker 持久化。
+ * - 阶段只通过 PlanPersistence 读写产物；执行会话凭证通过窄存储端口持久化。
  *
  * 失败 → Intent 映射：
  * - 产物校验失败（无变更/缺产物）→ retryable='hard-no-auto'（自动重试无意义，需用户介入）
@@ -64,7 +64,7 @@ export abstract class BasePhase {
   protected git: GitOperations;
   protected plan: PlanPersistence;
   protected config: Config;
-  protected tracker?: IssueTracker;
+  protected sessionStore?: PhaseSessionStore;
   protected logger: Logger;
   private lastStreamSummary?: {
     eventTypeCounts: Map<string, number>;
@@ -78,13 +78,13 @@ export abstract class BasePhase {
     git: GitOperations,
     plan: PlanPersistence,
     config: Config,
-    tracker?: IssueTracker,
+    sessionStore?: PhaseSessionStore,
   ) {
     this.aiRunner = aiRunner;
     this.git = git;
     this.plan = plan;
     this.config = config;
-    this.tracker = tracker;
+    this.sessionStore = sessionStore;
     this.logger = rootLogger.child(this.constructor.name);
   }
 
@@ -174,7 +174,7 @@ export abstract class BasePhase {
   }
 
   protected resolveResumeInfo(issueIid: number): { resumable: boolean; sessionId?: string } {
-    const progress = this.tracker?.getPhaseProgress(issueIid, this.phaseName);
+    const progress = this.sessionStore?.getPhaseProgress(issueIid, this.phaseName);
     const previousSessionId = progress?.sessionId;
     if (!previousSessionId || this.aiRunner.canResumeSession?.(previousSessionId) === false) {
       return { resumable: false };
@@ -306,7 +306,7 @@ export abstract class BasePhase {
   }
 
   protected persistSessionId(issueIid: number, sessionId: string | undefined): void {
-    if (sessionId) this.tracker?.updatePhaseProgress(issueIid, this.phaseName, { sessionId });
+    if (sessionId) this.sessionStore?.updatePhaseProgress(issueIid, this.phaseName, { sessionId });
   }
 
   protected toArtifactRefs(files: ReadonlyArray<{ filename: string; label: string }>): readonly ArtifactRef[] {

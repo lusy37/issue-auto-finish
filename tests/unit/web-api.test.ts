@@ -8,6 +8,7 @@ import http from 'node:http';
 import { createApiRouter } from '../../src/web/routes/api.js';
 import { createMockIssueTracker, createMockGitOperations, createTestConfig } from '../helpers/mock-factories.js';
 import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
+import { newIssueRun } from '../../src/dag/contracts.js';
 import type { IssueRecord } from '../../src/tracker/IssueState.js';
 
 function createTestRecord(overrides?: Partial<IssueRecord>): IssueRecord {
@@ -161,14 +162,12 @@ describe('API Routes', () => {
     ])('按 Issue 阶段列表返回产物：$globalEnabled/$issueEnabled', async ({ globalEnabled, issueEnabled, containsUat }) => {
       const original = config.e2e.enabled;
       config.e2e.enabled = globalEnabled;
+      const run = newIssueRun();
+      run.workflow.definition = {
+        phaseIds: ['plan', 'review', 'build', 'verify', ...(issueEnabled ? ['uat' as const] : [])],
+      };
       const record = createTestRecord({
-        phaseProgress: {
-          plan: { status: 'pending' },
-          review: { status: 'pending' },
-          build: { status: 'pending' },
-          verify: { status: 'pending' },
-          ...(issueEnabled ? { uat: { status: 'pending' as const } } : {}),
-        },
+        run,
       });
       tracker.get.mockReturnValue(record);
       try {
