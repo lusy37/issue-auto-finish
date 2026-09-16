@@ -25,11 +25,12 @@ export type IssueLifecycleEvent =
   | { type: 'phase-started'; phase: PhaseId }
   | { type: 'phase-completed'; phase: PhaseId }
   | { type: 'gate-interrupted'; phase: PhaseId; planRevision?: number }
-  | { type: 'gate-resolved'; phase: PhaseId; planRevision?: number }
+  | { type: 'gate-resolved'; phase: PhaseId; action: 'approve' | 'reject'; planRevision?: number }
   | { type: 'phase-failed'; phase?: PhaseId; retry: 'auto' | 'manual'; error: PhaseError }
   | { type: 'pause-requested'; phase: PhaseId }
   | { type: 'continue-requested' }
   | { type: 'retry-requested' }
+  | { type: 'phase-redo-requested' }
   | { type: 'delivery-started' }
   | { type: 'delivery-confirmed' }
   | { type: 'cancel-requested' }
@@ -62,9 +63,11 @@ export function readIssueLifecycle(record: IssueRecord): IssueLifecycle {
     case IssueState.ResolvingConflict:
       return { kind: 'ready' };
     case IssueState.PhaseRunning:
-      return { kind: 'running', phase: phaseId(record.currentPhase) };
+      // v3 曾允许只写 PhaseRunning 而未写 currentPhase；适配期按首阶段读取，
+      // v4 Codec 会在持久化边界拒绝这种不完整组合。
+      return { kind: 'running', phase: phaseId(record.currentPhase, 'plan') };
     case IssueState.PhaseWaiting: {
-      const phase = phaseId(record.currentPhase);
+      const phase = phaseId(record.currentPhase, 'review');
       return {
         kind: 'waiting',
         phase,
@@ -112,22 +115,33 @@ export function reduceIssueLifecycle(
       if (current.kind !== 'skipped') break;
       return { kind: 'pending' };
     case 'phase-started':
-      if (current.kind !== 'ready' && current.kind !== 'pending') break;
+      if (current.kind !== 'ready'
+        && current.kind !== 'pending'
+        && !(current.kind === 'failed'
+          && current.retry === 'auto'
+          && (!current.phase || current.phase === event.phase))) break;
       return { kind: 'running', phase: event.phase };
     case 'phase-completed':
       if (current.kind !== 'running' || current.phase !== event.phase) break;
       return { kind: 'ready' };
     case 'gate-interrupted':
+      if (current.kind === 'waiting' && current.phase === event.phase) {
+        if (current.phase === 'review'
+          && current.planRevision !== undefined
+          && event.planRevision !== undefined
+          && current.planRevision !== event.planRevision) break;
+        return current;
+      }
       if (current.kind !== 'running' || current.phase !== event.phase) break;
       return { kind: 'waiting', phase: event.phase, planRevision: event.planRevision };
     case 'gate-resolved':
-      if (current.kind !== 'waiting' || current.phase !== event.phase) break;
-      if (current.phase === 'review' && current.planRevision !== event.planRevision) {
+      if ((current.kind !== 'waiting' && current.kind !== 'running') || current.phase !== event.phase) break;
+      if (current.kind === 'waiting' && current.phase === 'review' && current.planRevision !== event.planRevision) {
         throw new InvalidLifecycleTransitionError(current, event, '审核计划版本或等待状态已改变');
       }
-      return { kind: 'ready' };
+      return event.action === 'approve' ? { kind: 'ready' } : { kind: 'pending' };
     case 'phase-failed':
-      if (!['pending', 'ready', 'running', 'delivering'].includes(current.kind)) break;
+      if (!['pending', 'ready', 'running', 'failed', 'delivering'].includes(current.kind)) break;
       if (current.kind === 'running' && event.phase && current.phase !== event.phase) break;
       return { kind: 'failed', phase: event.phase, retry: event.retry, error: event.error };
     case 'pause-requested':
@@ -138,6 +152,9 @@ export function reduceIssueLifecycle(
       return { kind: 'ready' };
     case 'retry-requested':
       if (current.kind !== 'failed') break;
+      return { kind: 'ready' };
+    case 'phase-redo-requested':
+      if (current.kind === 'cancelled') break;
       return { kind: 'ready' };
     case 'delivery-started':
       if (current.kind !== 'ready' && current.kind !== 'running') break;
@@ -235,6 +252,13 @@ export function applyIssueLifecycleEvent(
 ): IssueLifecycle {
   const next = reduceIssueLifecycle(readIssueLifecycle(record), event);
   writeLegacyIssueLifecycle(record, next);
+  // v3 API 仍对外暴露审核专用枚举；兼容投影集中保留在适配器中，
+  // 生命周期本身只表达 ready / pending，不重新引入一套业务状态。
+  if (event.type === 'gate-resolved') {
+    record.state = event.action === 'approve' ? IssueState.PhaseApproved : IssueState.Pending;
+    if (event.action === 'reject') record.currentPhase = undefined;
+    record.orchestrationState = deriveOrchestrationState(record);
+  }
   return next;
 }
 

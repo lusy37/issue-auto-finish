@@ -10,14 +10,12 @@
  */
 import { logger as rootLogger } from '../logger.js';
 import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
-import { IssueState, type IssueRecord } from '../tracker/IssueState.js';
+import type { IssueRecord } from '../tracker/IssueState.js';
+import { readIssueLifecycle } from '../tracker/IssueLifecycle.js';
 import { getIssueNumber } from '../tracker/IssueRecordHelper.js';
 import type { IssueService } from '../orchestrator/IssueService.js';
 
 const logger = rootLogger.child('WorktreeReaper');
-
-/** 可回收 worktree 的终态。失败态保留 worktree 以便调试，不在此列。 */
-const REAPABLE_STATES = new Set<string>([IssueState.Completed]);
 
 export interface WorktreeReaperDeps {
   /** 单实例编排器，每个内部持有自己的 tracker 与清理能力。 */
@@ -138,7 +136,7 @@ export class WorktreeReaper {
   /** 判定某条记录是否到达回收条件：终态 + 未清理 + 已超过保留期。 */
   private shouldReap(record: IssueRecord, now: number): boolean {
     if (record.run?.recoveryRequired || Object.values(record.run?.calls ?? {}).some(call => call.status !== 'exited')) return false;
-    if (!REAPABLE_STATES.has(record.state)) return false;
+    if (readIssueLifecycle(record).kind !== 'completed') return false;
     if (record.worktreeCleanedAt) return false;
     if (!record.completedAt) return false;
     const age = now - new Date(record.completedAt).getTime();

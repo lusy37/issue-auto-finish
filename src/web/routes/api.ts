@@ -10,6 +10,8 @@ import { marked } from 'marked';
 import { createPatch } from 'diff';
 import { IssueTracker } from '../../tracker/IssueTracker.js';
 import { IssueState, type IssueRecord } from '../../tracker/IssueState.js';
+import { readIssueLifecycle } from '../../tracker/IssueLifecycle.js';
+import { issueStateCategory } from '../../tracker/ExecutableTask.js';
 import type { DemandSpec } from '../../demand/DemandSpec.js';
 import { getIssueNumber, getTitle } from '../../tracker/IssueRecordHelper.js';
 import { Config } from '../../config.js';
@@ -100,10 +102,6 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   // 在首次异步请求前占用编号，防止并发启动覆盖同一个任务。
   const startingIssues = new Set<number>();
 
-  function getLifecycleManager(pipelineMode?: string): ActionLifecycleManager {
-    return createLifecycleManager(getPipelineDef(pipelineMode ?? 'plan-mode'));
-  }
-
   router.get('/api/pipeline-meta', (_req: Request, res: Response) => {
     const allDefs = getAllPipelineDefs();
     const allLMs = allDefs.map(def => ({ def, lm: createLifecycleManager(def) }));
@@ -140,17 +138,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   router.get('/api/issues', (_req: Request, res: Response) => {
     const issues = tracker.getAll();
     const enriched = issues.map(r => {
-      const lm = getLifecycleManager(r.pipelineMode);
-      let stateCategory: string;
-      if (lm.isTerminal(r.state)) {
-        if (r.state === IssueState.Failed) stateCategory = 'failed';
-        else if (r.state === IssueState.Completed) stateCategory = 'completed';
-        else stateCategory = 'skipped';
-      } else if (lm.isBlocked(r.state)) {
-        stateCategory = 'blocked';
-      } else {
-        stateCategory = 'active';
-      }
+      const stateCategory = issueStateCategory(r);
       return { ...r, stateCategory, planDocs: getIssuePlanDocs(getIssueNumber(r), r) };
     });
     res.json(enriched);
@@ -525,7 +513,8 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(404).json({ error: 'Issue not found' });
       return;
     }
-    if (record.state !== IssueState.PhaseWaiting) {
+    const lifecycle = readIssueLifecycle(record);
+    if (lifecycle.kind !== 'waiting') {
       res.status(400).json({ error: `Issue is not waiting for review (current state: ${record.state})` });
       return;
     }
@@ -538,7 +527,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(400).json({ error: 'Pipeline has no gate phase' });
       return;
     }
-    if (record.currentPhase !== gateSpec.name) {
+    if (lifecycle.phase !== gateSpec.name) {
       res.status(400).json({
         error: `approve-plan only applies to the ${gateSpec.name} gate phase, but issue is currently at ${record.currentPhase ?? 'unknown'} gate. Use phase-specific approval instead.`,
       });
@@ -571,7 +560,8 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(404).json({ error: 'Issue not found' });
       return;
     }
-    if (record.state !== IssueState.PhaseWaiting) {
+    const lifecycle = readIssueLifecycle(record);
+    if (lifecycle.kind !== 'waiting') {
       res.status(400).json({ error: `Issue is not waiting for review (current state: ${record.state})` });
       return;
     }
@@ -590,7 +580,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(400).json({ error: 'Pipeline has no gate phase' });
       return;
     }
-    if (record.currentPhase !== gateSpec.name) {
+    if (lifecycle.phase !== gateSpec.name) {
       res.status(400).json({
         error: `reject-plan only applies to the ${gateSpec.name} gate phase, but issue is currently at ${record.currentPhase ?? 'unknown'} gate.`,
       });
@@ -623,7 +613,8 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(404).json({ error: 'Issue not found' });
       return;
     }
-    if (record.state !== IssueState.PhaseWaiting) {
+    const lifecycle = readIssueLifecycle(record);
+    if (lifecycle.kind !== 'waiting') {
       res.status(400).json({ error: `Issue is not waiting for review (current state: ${record.state})` });
       return;
     }
@@ -635,7 +626,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(400).json({ error: 'Pipeline has no gate phase' });
       return;
     }
-    if (record.currentPhase !== gateSpec.name) {
+    if (lifecycle.phase !== gateSpec.name) {
       res.status(400).json({
         error: `skip-review only applies to the ${gateSpec.name} gate phase, but issue is currently at ${record.currentPhase ?? 'unknown'} gate.`,
       });
@@ -842,7 +833,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   router.get('/api/system/status', (_req: Request, res: Response) => {
     const runningPreviews = orch.getDevServerManager().getRunningIssues();
     const allIssues = tracker.getAll();
-    const failedCount = allIssues.filter(r => r.state === IssueState.Failed).length;
+    const failedCount = allIssues.filter(r => readIssueLifecycle(r).kind === 'failed').length;
     res.json({
       uptime: Date.now() - startTime,
       startedAt: new Date(startTime).toISOString(),

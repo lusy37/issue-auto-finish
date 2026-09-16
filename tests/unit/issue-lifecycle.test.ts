@@ -9,7 +9,7 @@ describe('IssueLifecycle', () => {
   it('将三个旧 ready 类状态统一为 ready 语义', () => {
     expect(reduceIssueLifecycle({ kind: 'pending' }, { type: 'setup-completed' })).toEqual({ kind: 'ready' });
     expect(reduceIssueLifecycle({ kind: 'running', phase: 'build' }, { type: 'phase-completed', phase: 'build' })).toEqual({ kind: 'ready' });
-    expect(reduceIssueLifecycle({ kind: 'waiting', phase: 'review', planRevision: 2 }, { type: 'gate-resolved', phase: 'review', planRevision: 2 })).toEqual({ kind: 'ready' });
+    expect(reduceIssueLifecycle({ kind: 'waiting', phase: 'review', planRevision: 2 }, { type: 'gate-resolved', phase: 'review', action: 'approve', planRevision: 2 })).toEqual({ kind: 'ready' });
   });
 
   it('waiting 支持非 review gate 且不要求计划版本', () => {
@@ -22,7 +22,7 @@ describe('IssueLifecycle', () => {
   it('拒绝审核计划版本不匹配', () => {
     expect(() => reduceIssueLifecycle(
       { kind: 'waiting', phase: 'review', planRevision: 1 },
-      { type: 'gate-resolved', phase: 'review', planRevision: 2 },
+      { type: 'gate-resolved', phase: 'review', action: 'approve', planRevision: 2 },
     )).toThrow('审核计划版本或等待状态已改变');
   });
 

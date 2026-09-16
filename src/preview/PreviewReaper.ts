@@ -9,7 +9,7 @@
 import { logger as rootLogger } from '../logger.js';
 import { eventBus as defaultEventBus } from '../events/EventBus.js';
 import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
-import { IssueState } from '../tracker/IssueState.js';
+import { readIssueLifecycle } from '../tracker/IssueLifecycle.js';
 import { getIssueNumber } from '../tracker/IssueRecordHelper.js';
 import type { IssueTracker } from '../tracker/IssueTracker.js';
 import type { IssueService } from '../orchestrator/IssueService.js';
@@ -17,8 +17,6 @@ import type { EventBus } from '../events/EventBus.js';
 import { t } from '../i18n/index.js';
 
 const logger = rootLogger.child('PreviewReaper');
-
-const TERMINAL_STATES = new Set<string>([IssueState.Completed, IssueState.Failed]);
 
 export interface PreviewReaperDeps {
   tracker: IssueTracker;
@@ -94,7 +92,7 @@ export class PreviewReaper {
       const records = this.tracker.getAll();
 
       for (const record of records) {
-        if (!TERMINAL_STATES.has(record.state)) continue;
+        if (!['completed', 'failed'].includes(readIssueLifecycle(record).kind)) continue;
         if (!record.previewStartedAt) continue;
 
         const age = now - new Date(record.previewStartedAt).getTime();

@@ -9,7 +9,7 @@ import { ServiceShutdownError } from '../../errors/index.js';
 import { deliverIssueStep } from './DeliverIssueStep.js';
 import { syncResultToIssue } from './PhaseHelpers.js';
 import { createPhase } from '../../phases/PhaseFactory.js';
-import { IssueState } from '../../tracker/IssueState.js';
+import { readIssueLifecycle, type IssueLifecycle } from '../../tracker/IssueLifecycle.js';
 import { logger as rootLogger } from '../../logger.js';
 
 const logger = rootLogger.child('RunWorkflowStep');
@@ -85,7 +85,7 @@ export async function runWorkflow(
   await workflow.drive();
 
   const finalRecord = deps.tracker.get(issueIid);
-  const paused = finalRecord !== undefined && isPipelinePaused(finalRecord.state);
+  const paused = finalRecord !== undefined && isPipelinePaused(readIssueLifecycle(finalRecord));
 
   if (paused) {
     logger.info('Pipeline paused', { number: issueIid, state: finalRecord?.state });
@@ -103,10 +103,6 @@ export async function runWorkflow(
  *
  * 这些状态供调用方展示暂停原因；图自身保存待恢复节点。
  */
-function isPipelinePaused(state: IssueState): boolean {
-  return (
-    state === IssueState.PhaseWaiting ||
-    state === IssueState.Paused ||
-    state === IssueState.Failed
-  );
+function isPipelinePaused(lifecycle: IssueLifecycle): boolean {
+  return ['waiting', 'paused', 'failed'].includes(lifecycle.kind);
 }

@@ -1,7 +1,7 @@
 import { isE2eEnabledForIssue } from '../e2e/E2eSettings.js';
 import type { IssueProcessingContext, OrchestratorDeps } from '../orchestrator/IssueProcessingContext.js';
 import { GitOperations } from '../git/GitOperations.js';
-import { IssueState } from '../tracker/IssueState.js';
+import { applyIssueLifecycleEvent } from '../tracker/IssueLifecycle.js';
 import type { GitHubPullRequest } from '../clients/GitHubClient.js';
 import type { DeliveryIdentity } from './contracts.js';
 
@@ -50,7 +50,10 @@ export async function deliverIssue(ctx: IssueProcessingContext, deps: Orchestrat
   const remote = await git.remoteHead(identity.sourceBranch);
   if (remote !== identity.remoteCommit && !(identity.pushIntent?.commit === remote)) throw new Error('远端分支存在未记录更新，请人工核对，禁止覆盖');
   if (remote !== commit) {
-    deps.tracker.transaction(number, record => { record.run!.delivery!.pushIntent = { commit, lease: remote }; record.deliveryPending = true; record.state = IssueState.Delivering; });
+    deps.tracker.transaction(number, record => {
+      record.run!.delivery!.pushIntent = { commit, lease: remote };
+      if (record.deliveryPending !== true) applyIssueLifecycleEvent(record, { type: 'delivery-started' });
+    });
     await check();
     await git.pushAccepted(identity.sourceBranch, commit, remote);
   }

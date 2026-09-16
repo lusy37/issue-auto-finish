@@ -1,9 +1,9 @@
 import { GitOperations } from '../../git/GitOperations.js';
 import { PlanPersistence } from '../../persistence/PlanPersistence.js';
-import { IssueState } from '../../tracker/IssueState.js';
 import type { IssueProcessingContext, OrchestratorDeps, SetupResult } from '../IssueProcessingContext.js';
 import { logger as rootLogger } from '../../logger.js';
 import { t } from '../../i18n/index.js';
+import { applyIssueLifecycleEvent, readIssueLifecycle } from '../../tracker/IssueLifecycle.js';
 
 const logger = rootLogger.child('SetupStep');
 
@@ -40,8 +40,10 @@ export async function executeSetup(
   }, deps.signal);
 
   // 3. 更新状态为 BranchCreated
-  if (record.state === IssueState.Pending) {
-    deps.tracker.updateState(issue.number, IssueState.BranchCreated);
+  if (readIssueLifecycle(record).kind === 'pending') {
+    deps.tracker.transaction(issue.number, current => {
+      applyIssueLifecycleEvent(current, { type: 'setup-completed' });
+    });
   }
 
   // 4. 安装依赖
@@ -69,7 +71,7 @@ export async function executeSetup(
   });
 
   const existingProgress = wtPlan.readProgress();
-  if (!existingProgress || record.state === IssueState.Pending) {
+  if (!existingProgress || readIssueLifecycle(record).kind === 'pending') {
     wtPlan.writeProgress(
       wtPlan.createInitialProgress(issue.number, issue.title, branchName, pipelineDef),
     );

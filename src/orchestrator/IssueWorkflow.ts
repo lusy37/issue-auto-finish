@@ -5,13 +5,14 @@ import type { PhaseError } from '../orchestration/PhaseResult.js';
 import type { PhaseHistoryEntry } from '../orchestration/OrchestrationState.js';
 import { PHASE_IDS, reviewDecisionSchema, type PhaseId, type PhaseResultSummary, type ReviewDecision, type WorkflowNode } from '../orchestration/WorkflowState.js';
 import { getPlanModePhases } from '../orchestration/Phases.js';
-import { IssueState, type IssueRecord } from '../tracker/IssueState.js';
+import type { IssueRecord } from '../tracker/IssueState.js';
 import type { IssueTracker } from '../tracker/IssueTracker.js';
 import { renderPlan } from '../dag/contracts.js';
 import { AsyncMutex } from '../utils/AsyncMutex.js';
 import { IssueCheckpointer, workflowThreadId } from './IssueCheckpointer.js';
 import { logger } from '../logger.js';
 import { eventBus, type EventBus } from '../events/EventBus.js';
+import { applyIssueLifecycleEvent, readIssueLifecycle } from '../tracker/IssueLifecycle.js';
 
 const State = new StateSchema({
   entry: z.enum([...PHASE_IDS, 'deliver']).default('plan'),
@@ -102,20 +103,22 @@ export class IssueWorkflow {
     await this.lock.runExclusive(async () => {
       this.check();
       const record = this.record();
-      if ([IssueState.Completed, IssueState.Cancelled, IssueState.Paused].includes(record.state)) return;
-      if (record.state === IssueState.Failed && record.lastErrorRetryable === false) return;
-      if (record.state === IssueState.Failed) {
-        const phase = record.currentPhase;
+      const lifecycle = readIssueLifecycle(record);
+      if (['completed', 'cancelled', 'paused'].includes(lifecycle.kind)) return;
+      if (lifecycle.kind === 'failed' && lifecycle.retry === 'manual') return;
+      if (lifecycle.kind === 'failed') {
+        const phase = lifecycle.phase;
         if (!phase || phase === 'review' || !PHASE_IDS.includes(phase as PhaseId)
           || !this.reserveRetry(phase as Exclude<PhaseId, 'review'>, true)) {
           this.update(current => {
-            current.lastErrorRetryable = false;
-            current.orchestrationState = {
-              kind: 'pipeline-failed',
-              failedAt: current.currentPhase ?? '',
-              retryable: 'manual',
-              error: current.lastError ? { message: current.lastError, retryable: 'hard-no-auto' } : undefined,
-            };
+            const failed = readIssueLifecycle(current);
+            if (failed.kind !== 'failed') return;
+            applyIssueLifecycleEvent(current, {
+              type: 'phase-failed',
+              phase: failed.phase,
+              retry: 'manual',
+              error: { ...failed.error, retryable: 'hard-no-auto' },
+            });
           });
           return;
         }
@@ -129,10 +132,8 @@ export class IssueWorkflow {
           && (item.value as { planRevision?: number }).planRevision === this.record().run!.planRevision);
         // 等待状态只在框架已保存审核中断后发布；此前崩溃仍按在途执行恢复。
         if (waiting) this.update(current => {
-          current.state = IssueState.PhaseWaiting;
-          current.currentPhase = 'review';
-          current.orchestrationState = { kind: 'gate-waiting', phaseId: 'review', reason: 'human-review', payload: { planRevision: current.run!.planRevision } };
-          current.phaseProgress!.review.status = 'gate_waiting';
+          applyIssueLifecycleEvent(current, { type: 'gate-interrupted', phase: 'review', planRevision: current.run!.planRevision });
+          if (current.phaseProgress?.review) current.phaseProgress.review.status = 'gate_waiting';
         });
       } catch (error) {
         if (error instanceof PhaseExecutionError && !this.options.tracker.store.isBlocked(this.options.number)) {
@@ -192,12 +193,7 @@ export class IssueWorkflow {
     if (cached) return this.phaseCommand(cached, operation);
     const startedAt = new Date().toISOString();
     this.update(record => {
-      record.state = IssueState.PhaseRunning;
-      record.currentPhase = phase;
-      record.orchestrationState = { kind: 'running', phaseId: phase };
-      record.lastError = undefined;
-      record.lastErrorRetryable = undefined;
-      record.failedAtState = undefined;
+      applyIssueLifecycleEvent(record, { type: 'phase-started', phase });
       record.phaseProgress ??= {};
       record.phaseProgress[phase] = { ...record.phaseProgress[phase], status: 'in_progress', startedAt, error: undefined, completedAt: undefined, sessionId: record.phaseProgress[phase]?.status === 'completed' ? undefined : record.phaseProgress[phase]?.sessionId };
       const executions = record.run!.phaseExecutions[phase] ?? 0;
@@ -222,12 +218,13 @@ export class IssueWorkflow {
       this.update(record => {
         const retryUsed = record.run!.retryUsed[phase] ?? 0;
         const canAutoRetry = intent.error.retryable !== 'hard-no-auto' && retryUsed < this.options.maxRetries;
-        record.state = IssueState.Failed;
-        record.failedAtState = IssueState.PhaseRunning;
-        record.lastError = intent.error.message;
-        record.lastErrorRetryable = canAutoRetry;
+        applyIssueLifecycleEvent(record, {
+          type: 'phase-failed',
+          phase,
+          retry: canAutoRetry ? 'auto' : 'manual',
+          error: intent.error,
+        });
         record.attempts = retryUsed;
-        record.orchestrationState = { kind: 'pipeline-failed', failedAt: phase, retryable: canAutoRetry ? 'auto' : 'manual', error: intent.error };
         record.phaseProgress![phase] = { ...record.phaseProgress![phase], status: 'failed', error: intent.error.message };
         this.history(record, { phaseId: phase, attemptId, startedAt, endedAt: new Date().toISOString(), outcome: 'failed', sessionId: intent.sessionId, errorMessage: intent.error.message });
       });
@@ -247,12 +244,12 @@ export class IssueWorkflow {
         record.run!.verify = undefined; record.run!.uat = undefined;
       }
       record.run!.workflow.results[operation] = result;
-      record.state = result.next === 'deliver' && result.outcome === 'completed' ? IssueState.Delivering : IssueState.PhaseDone;
-      record.orchestrationState = result.next === 'deliver' ? { kind: 'pipeline-completed' } : { kind: 'running', phaseId: result.next };
-      if (record.state === IssueState.Delivering) record.deliveryPending = true;
+      if (result.next === 'deliver' && result.outcome === 'completed') {
+        applyIssueLifecycleEvent(record, { type: 'delivery-started' });
+      } else {
+        applyIssueLifecycleEvent(record, { type: 'phase-completed', phase });
+      }
       record.attempts = record.run!.retryUsed[phase] ?? 0;
-      record.lastErrorRetryable = undefined;
-      record.failedAtState = undefined;
       record.phaseProgress![phase] = { ...record.phaseProgress![phase], status: result.outcome === 'completed' ? 'completed' : 'pending', completedAt: result.outcome === 'completed' ? new Date().toISOString() : undefined, sessionId: result.sessionId };
       this.history(record, { phaseId: phase, attemptId, startedAt, endedAt: new Date().toISOString(), outcome: result.outcome, sessionId: result.sessionId, ...(result.outcome === 'retried-from' ? { fixIteration: record.run!.repairRounds, errorMessage: result.report, retryFromContext: { verifyFailures: result.failures ?? [], rawReport: result.report ?? '' } } : {}) });
     });
@@ -283,12 +280,14 @@ export class IssueWorkflow {
     const revision = record.run!.planRevision;
     if (!revision || record.run!.review?.decision !== 'waiting') throw new ReviewConflictError('没有可审核的完整计划');
     const plan = this.options.tracker.store.readPlan(this.options.number, revision, record.run!.planDigest);
-    const wasWaiting = record.state === IssueState.PhaseWaiting;
-    const enteredReview = record.currentPhase === 'review' && !!record.phaseProgress?.review?.startedAt;
-    if (!wasWaiting || record.currentPhase !== 'review' || !record.phaseProgress?.review) this.update(current => {
-      current.state = IssueState.PhaseRunning;
-      current.currentPhase = 'review';
-      current.orchestrationState = { kind: 'running', phaseId: 'review' };
+    const lifecycle = readIssueLifecycle(record);
+    const wasWaiting = lifecycle.kind === 'waiting' && lifecycle.phase === 'review';
+    const enteredReview = lifecycle.kind === 'running' && lifecycle.phase === 'review' && !!record.phaseProgress?.review?.startedAt;
+    if (!wasWaiting && !enteredReview) this.update(current => {
+      const currentLifecycle = readIssueLifecycle(current);
+      if (currentLifecycle.kind !== 'running' || currentLifecycle.phase !== 'review') {
+        applyIssueLifecycleEvent(current, { type: 'phase-started', phase: 'review' });
+      }
       current.phaseProgress ??= {};
       current.phaseProgress.review = { status: 'in_progress', startedAt: current.phaseProgress.review?.startedAt ?? new Date().toISOString() };
     });
@@ -305,9 +304,7 @@ export class IssueWorkflow {
         run.reviewHistory.push({ round: run.reviewHistory.length + 1, revision, feedback: decision.feedback!, timestamp: new Date().toISOString(), planSnapshot: renderPlan(plan), reviewedSessionId: current.phaseProgress?.plan?.sessionId });
         for (const progress of Object.values(current.phaseProgress ?? {})) Object.assign(progress, { status: 'pending', startedAt: undefined, completedAt: undefined });
       }
-      current.state = decision.action === 'approve' ? IssueState.PhaseApproved : IssueState.Pending;
-      current.currentPhase = decision.action === 'approve' ? 'review' : undefined;
-      current.orchestrationState = decision.action === 'approve' ? { kind: 'gate-approved', phaseId: 'review' } : { kind: 'queued' };
+      applyIssueLifecycleEvent(current, { type: 'gate-resolved', phase: 'review', action: decision.action, planRevision: revision });
       current.phaseProgress!.review = { ...current.phaseProgress!.review, status: decision.action === 'approve' ? 'completed' : 'pending', completedAt: new Date().toISOString() };
       run.workflow.results[operation] = result;
       this.history(current, { phaseId: 'review', attemptId: 1, startedAt: current.phaseProgress!.review.startedAt ?? new Date().toISOString(), endedAt: new Date().toISOString(), outcome: result.outcome, approvalSource: decision.source ?? 'manual' });

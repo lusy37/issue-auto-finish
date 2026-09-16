@@ -2,6 +2,7 @@ import { Config } from '../config.js';
 import { GitHubClient, GitHubIssue } from '../clients/GitHubClient.js';
 import { IssueTracker } from '../tracker/IssueTracker.js';
 import { IssueRecord, IssueState } from '../tracker/IssueState.js';
+import { readIssueLifecycle } from '../tracker/IssueLifecycle.js';
 import { getIssueNumber } from '../tracker/IssueRecordHelper.js';
 import { githubIssueToDemandSpec } from '../demand/adapters/GitHubAdapter.js';
 import { IssueService } from '../orchestrator/IssueService.js';
@@ -239,7 +240,10 @@ export class IssuePoller {
 
     const waiting = this.tracker
       .getAll()
-      .filter((r) => r.state === IssueState.PhaseWaiting);
+      .filter((r) => {
+        const lifecycle = readIssueLifecycle(r);
+        return lifecycle.kind === 'waiting' && lifecycle.phase === 'review';
+      });
     if (!waiting.length) return;
 
     this.autoApproveByLabels(waiting, autoLabels).catch((err) => {
@@ -255,7 +259,8 @@ export class IssuePoller {
       try {
 
         // 标签自动审核只作用于 review 阶段。
-        if (record.currentPhase !== 'review') {
+        const lifecycle = readIssueLifecycle(record);
+        if (lifecycle.kind !== 'waiting' || lifecycle.phase !== 'review') {
           continue;
         }
 

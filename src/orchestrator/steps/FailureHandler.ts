@@ -5,6 +5,7 @@ import type { OrchestratorDeps } from '../IssueProcessingContext.js';
 import { AIExecutionError } from '../../errors/index.js';
 import { logger as rootLogger } from '../../logger.js';
 import { t } from '../../i18n/index.js';
+import { readIssueLifecycle } from '../../tracker/IssueLifecycle.js';
 
 const logger = rootLogger.child('FailureHandler');
 
@@ -21,6 +22,7 @@ export async function handleFailure(
   logger.error('Issue processing failed', { number: issue.number, error: errorMsg, isRetryable, wasActiveAtTimeout });
 
   const currentRecord = deps.tracker.get(issue.number);
+  const currentLifecycle = currentRecord && readIssueLifecycle(currentRecord);
   const failedAtState = currentRecord?.state || IssueState.Pending;
   // 通过 resetGeneration 精确检测并发重置：
   // 处理启动时快照 generation，若中途 restartIssue 调用 resetFull 使其递增，
@@ -29,7 +31,7 @@ export async function handleFailure(
   const currentGeneration = currentRecord?.resetGeneration ?? 0;
   const wasReset = (startResetGeneration ?? 0) !== currentGeneration;
 
-  if (failedAtState !== IssueState.Failed && !wasReset) {
+  if (currentLifecycle?.kind !== 'failed' && !wasReset) {
     if (wasActiveAtTimeout) {
       deps.tracker.markFailedSoft(issue.number, errorMsg.slice(0, 500), failedAtState);
     } else {
@@ -43,7 +45,7 @@ export async function handleFailure(
   }
 
   // 中止操作已在 catch 块中将状态设为 Paused，此处跳过失败处理（含 preview 停止）
-  if (failedAtState === IssueState.Paused) {
+  if (currentLifecycle?.kind === 'paused') {
     logger.info('Issue was paused during processing, skipping failure handling', { number: issue.number });
     throw err;
   }

@@ -1,6 +1,7 @@
 import type { IssueRecord } from './IssueState.js';
 import type { ActionLifecycleManager } from '../lifecycle/ActionLifecycleManager.js';
 import { getIssueNumber, getTitle } from './IssueRecordHelper.js';
+import { readIssueLifecycle } from './IssueLifecycle.js';
 
 /**
  * 工作台展示使用的任务状态，由当前 Issue 生命周期投影。
@@ -89,13 +90,12 @@ export function issueStateToUnified(actionStatus: string): UnifiedTaskStatus {
 /**
  * 根据 Issue 生命周期计算工作台过滤分类，区分完成、失败、跳过和等待。
  */
-export function issueStateCategory(record: IssueRecord, lm: ActionLifecycleManager): string {
-  if (lm.isTerminal(record.state)) {
-    if (record.state === 'failed') return 'failed';
-    if (record.state === 'completed') return 'completed';
-    return 'skipped';
-  }
-  if (lm.isBlocked(record.state)) return 'blocked';
+export function issueStateCategory(record: IssueRecord): string {
+  const lifecycle = readIssueLifecycle(record);
+  if (lifecycle.kind === 'failed') return 'failed';
+  if (lifecycle.kind === 'completed') return 'completed';
+  if (lifecycle.kind === 'skipped' || lifecycle.kind === 'cancelled') return 'skipped';
+  if (lifecycle.kind === 'waiting' || lifecycle.kind === 'paused') return 'blocked';
   return 'active';
 }
 
@@ -139,7 +139,7 @@ export function issueToExecutableTask(
     updatedAt: record.updatedAt,
     branchName: record.branchName,
     sourceState: record.state,
-    stateCategory: issueStateCategory(record, lm),
+    stateCategory: issueStateCategory(record),
     displayLabel: lm.resolveLabel(record.state, record.currentPhase),
     phaseProgress,
   };
