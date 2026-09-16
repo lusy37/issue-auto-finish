@@ -21,7 +21,11 @@ export function computeReviewGateStatus(
   currentPhase: string | undefined,
   gatePhaseName: string,
   reviewHistoryLength: number,
+  reviewDecision?: 'waiting' | 'approved' | 'rejected',
 ): ReviewGateStatus {
+  // Native 的 ready 是通用调度状态；审核结果必须读取明确的业务凭证，不能由 ready/branch_created 猜测。
+  if (reviewDecision === 'approved') return 'approved';
+
   // 仅当 PhaseWaiting + currentPhase 与 gate phase 严格一致时，才视为待审核。
   if (state === 'phase_waiting' && currentPhase === gatePhaseName) {
     return 'waiting';

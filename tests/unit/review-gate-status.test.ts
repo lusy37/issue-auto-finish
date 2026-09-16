@@ -53,6 +53,11 @@ describe('computeReviewGateStatus (Bug 2 regression)', () => {
       expect(computeReviewGateStatus('phase_approved', 'review', 'review', 0)).toBe('approved');
     });
 
+    it('Native ready 投影只在存在审核凭证时视为通过', () => {
+      expect(computeReviewGateStatus('branch_created', undefined, 'review', 0, 'approved')).toBe('approved');
+      expect(computeReviewGateStatus('branch_created', undefined, 'review', 0)).toBe('not_started');
+    });
+
     it('returns "approved" for completed', () => {
       expect(computeReviewGateStatus('completed', 'verify', 'review', 0)).toBe('approved');
     });

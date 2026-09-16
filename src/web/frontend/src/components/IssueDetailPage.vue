@@ -404,6 +404,7 @@ onUnmounted(() => {
               :approval-source="getReviewApprovalSource(detail.selectedIssue.value)"
               :issue-state="detail.selectedIssue.value.state"
               :current-phase="detail.selectedIssue.value.currentPhase"
+              :review-decision="detail.selectedIssue.value.run?.review?.decision"
               :plan-doc-content="detail.planDocContent.value"
               :plan-diff="detail.planDiff.value"
               @update:review-feedback="detail.reviewFeedback.value = $event"

@@ -262,8 +262,11 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
     expect(detailRequests.filter((url) => url === "/api/tasks")).toHaveLength(0);
     await page.getByRole("button", { name: "通过计划" }).click();
     await browserExpect
-      .poll(() => tracker.get(1)?.state)
-      .toBe(IssueState.PhaseApproved);
+      .poll(() => tracker.get(1)?.lifecycle.kind)
+      .toBe('ready');
+    await browserExpect
+      .poll(() => tracker.get(1)?.run?.review?.decision)
+      .toBe('approved');
     await browserExpect(
       page.getByText("审查已通过", { exact: false }).first(),
     ).toBeVisible();

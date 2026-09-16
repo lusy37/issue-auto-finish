@@ -8,6 +8,7 @@ const props = defineProps<{
   reviewHistory: ReviewRound[];
   issueState?: IssueState;
   currentPhase?: string;
+  reviewDecision?: 'waiting' | 'approved' | 'rejected';
   /** 流水线中 kind='gate' 阶段名，默认 'review'（plan-mode）。 */
   gatePhaseName?: string;
   planDocContent?: string;
@@ -47,6 +48,7 @@ const reviewStatus = computed(() =>
     props.currentPhase,
     props.gatePhaseName ?? 'review',
     props.reviewHistory.length,
+    props.reviewDecision,
   ),
 );
 

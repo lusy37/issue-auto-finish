@@ -213,13 +213,14 @@ function openDetailPage() {
 
           <!-- Review Gate -->
           <ReviewGatePanel
-            v-if="issue.state === 'phase_waiting' || reviewHistory.length > 0 || getReviewApprovalSource(issue)"
+            v-if="issue.state === 'phase_waiting' || issue.run?.review || reviewHistory.length > 0 || getReviewApprovalSource(issue)"
             :review-submitting="reviewSubmitting"
             :review-feedback="reviewFeedback"
             :review-history="reviewHistory"
             :approval-source="getReviewApprovalSource(issue)"
             :issue-state="issue.state"
             :current-phase="issue.currentPhase"
+            :review-decision="issue.run?.review?.decision"
             :plan-doc-content="planDocContent"
             @update:review-feedback="emit('update:reviewFeedback', $event)"
             @approve="emit('approve', getIssueIid(issue))"
