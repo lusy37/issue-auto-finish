@@ -1,0 +1,255 @@
+import type { PhaseError } from '../orchestration/PhaseResult.js';
+import { PHASE_IDS, type PhaseId } from '../orchestration/WorkflowState.js';
+import { IssueState, deriveOrchestrationState, type IssueRecord } from './IssueState.js';
+
+/**
+ * Issue 顶层业务生命周期。
+ *
+ * 它只表达调度、人工介入和交付生命周期；LangGraph checkpoint 仍是执行位置的唯一依据。
+ */
+export type IssueLifecycle =
+  | { kind: 'pending' }
+  | { kind: 'skipped' }
+  | { kind: 'ready' }
+  | { kind: 'running'; phase: PhaseId }
+  | { kind: 'waiting'; phase: PhaseId; planRevision?: number }
+  | { kind: 'paused'; phase: PhaseId }
+  | { kind: 'failed'; phase?: PhaseId; retry: 'auto' | 'manual'; error: PhaseError }
+  | { kind: 'delivering' }
+  | { kind: 'completed' }
+  | { kind: 'cancelled' };
+
+export type IssueLifecycleEvent =
+  | { type: 'setup-completed' }
+  | { type: 'start-requested' }
+  | { type: 'phase-started'; phase: PhaseId }
+  | { type: 'phase-completed'; phase: PhaseId }
+  | { type: 'gate-interrupted'; phase: PhaseId; planRevision?: number }
+  | { type: 'gate-resolved'; phase: PhaseId; planRevision?: number }
+  | { type: 'phase-failed'; phase?: PhaseId; retry: 'auto' | 'manual'; error: PhaseError }
+  | { type: 'pause-requested'; phase: PhaseId }
+  | { type: 'continue-requested' }
+  | { type: 'retry-requested' }
+  | { type: 'delivery-started' }
+  | { type: 'delivery-confirmed' }
+  | { type: 'cancel-requested' }
+  | { type: 'full-redo-requested' }
+  | { type: 'conflict-repair-started' };
+
+export class InvalidLifecycleTransitionError extends Error {
+  constructor(current: IssueLifecycle, event: IssueLifecycleEvent, reason?: string) {
+    super(reason ?? `非法生命周期转换：${current.kind} -> ${event.type}`);
+    this.name = 'InvalidLifecycleTransitionError';
+  }
+}
+
+function phaseId(value: string | undefined, fallback?: PhaseId): PhaseId {
+  if (value && PHASE_IDS.includes(value as PhaseId)) return value as PhaseId;
+  if (fallback) return fallback;
+  throw new Error(`阶段 ID 无效：${value ?? '<empty>'}`);
+}
+
+/** v3 过渡适配器：从旧持久化字段读取唯一的逻辑生命周期。 */
+export function readIssueLifecycle(record: IssueRecord): IssueLifecycle {
+  switch (record.state) {
+    case IssueState.Pending:
+      return { kind: 'pending' };
+    case IssueState.Skipped:
+      return { kind: 'skipped' };
+    case IssueState.BranchCreated:
+    case IssueState.PhaseDone:
+    case IssueState.PhaseApproved:
+    case IssueState.ResolvingConflict:
+      return { kind: 'ready' };
+    case IssueState.PhaseRunning:
+      return { kind: 'running', phase: phaseId(record.currentPhase) };
+    case IssueState.PhaseWaiting: {
+      const phase = phaseId(record.currentPhase);
+      return {
+        kind: 'waiting',
+        phase,
+        ...(phase === 'review' && record.run?.planRevision
+          ? { planRevision: record.run.planRevision }
+          : {}),
+      };
+    }
+    case IssueState.Paused:
+      return {
+        kind: 'paused',
+        phase: phaseId(record.pausedAtPhase ?? record.currentPhase, 'plan'),
+      };
+    case IssueState.Failed:
+      return {
+        kind: 'failed',
+        ...(record.currentPhase && PHASE_IDS.includes(record.currentPhase as PhaseId)
+          ? { phase: record.currentPhase as PhaseId }
+          : {}),
+        retry: record.lastErrorRetryable === false ? 'manual' : 'auto',
+        error: {
+          message: record.lastError ?? '任务执行失败',
+          retryable: record.lastErrorRetryable === false ? 'hard-no-auto' : 'hard',
+        },
+      };
+    case IssueState.Delivering:
+      return { kind: 'delivering' };
+    case IssueState.Completed:
+      return { kind: 'completed' };
+    case IssueState.Cancelled:
+      return { kind: 'cancelled' };
+  }
+}
+
+/** 只验证生命周期序列，不推导 LangGraph 下一节点。 */
+export function reduceIssueLifecycle(
+  current: IssueLifecycle,
+  event: IssueLifecycleEvent,
+): IssueLifecycle {
+  switch (event.type) {
+    case 'setup-completed':
+      if (current.kind !== 'pending' && current.kind !== 'ready') break;
+      return { kind: 'ready' };
+    case 'start-requested':
+      if (current.kind !== 'skipped') break;
+      return { kind: 'pending' };
+    case 'phase-started':
+      if (current.kind !== 'ready' && current.kind !== 'pending') break;
+      return { kind: 'running', phase: event.phase };
+    case 'phase-completed':
+      if (current.kind !== 'running' || current.phase !== event.phase) break;
+      return { kind: 'ready' };
+    case 'gate-interrupted':
+      if (current.kind !== 'running' || current.phase !== event.phase) break;
+      return { kind: 'waiting', phase: event.phase, planRevision: event.planRevision };
+    case 'gate-resolved':
+      if (current.kind !== 'waiting' || current.phase !== event.phase) break;
+      if (current.phase === 'review' && current.planRevision !== event.planRevision) {
+        throw new InvalidLifecycleTransitionError(current, event, '审核计划版本或等待状态已改变');
+      }
+      return { kind: 'ready' };
+    case 'phase-failed':
+      if (!['pending', 'ready', 'running', 'delivering'].includes(current.kind)) break;
+      if (current.kind === 'running' && event.phase && current.phase !== event.phase) break;
+      return { kind: 'failed', phase: event.phase, retry: event.retry, error: event.error };
+    case 'pause-requested':
+      if (!['pending', 'ready', 'running', 'waiting', 'failed', 'delivering'].includes(current.kind)) break;
+      return { kind: 'paused', phase: event.phase };
+    case 'continue-requested':
+      if (current.kind !== 'paused') break;
+      return { kind: 'ready' };
+    case 'retry-requested':
+      if (current.kind !== 'failed') break;
+      return { kind: 'ready' };
+    case 'delivery-started':
+      if (current.kind !== 'ready' && current.kind !== 'running') break;
+      return { kind: 'delivering' };
+    case 'delivery-confirmed':
+      if (current.kind !== 'delivering') break;
+      return { kind: 'completed' };
+    case 'cancel-requested':
+      if (current.kind === 'completed' || current.kind === 'cancelled') break;
+      return { kind: 'cancelled' };
+    case 'full-redo-requested':
+      return { kind: 'pending' };
+    case 'conflict-repair-started':
+      if (current.kind !== 'completed') break;
+      return { kind: 'ready' };
+  }
+  throw new InvalidLifecycleTransitionError(current, event);
+}
+
+/** v3 过渡适配器：所有旧字段同步集中在这里，业务调用方不得直接拼装。 */
+export function writeLegacyIssueLifecycle(record: IssueRecord, lifecycle: IssueLifecycle): void {
+  record.lastError = undefined;
+  record.lastErrorRetryable = undefined;
+  record.failedAtState = undefined;
+  switch (lifecycle.kind) {
+    case 'pending':
+      record.state = IssueState.Pending;
+      record.currentPhase = undefined;
+      record.pausedAtPhase = undefined;
+      break;
+    case 'skipped':
+      record.state = IssueState.Skipped;
+      record.currentPhase = undefined;
+      record.pausedAtPhase = undefined;
+      break;
+    case 'ready':
+      record.state = IssueState.BranchCreated;
+      record.pausedAtPhase = undefined;
+      break;
+    case 'running':
+      record.state = IssueState.PhaseRunning;
+      record.currentPhase = lifecycle.phase;
+      record.pausedAtPhase = undefined;
+      break;
+    case 'waiting':
+      record.state = IssueState.PhaseWaiting;
+      record.currentPhase = lifecycle.phase;
+      record.pausedAtPhase = undefined;
+      break;
+    case 'paused':
+      record.state = IssueState.Paused;
+      record.currentPhase = lifecycle.phase;
+      record.pausedAtPhase = lifecycle.phase;
+      break;
+    case 'failed':
+      record.state = IssueState.Failed;
+      record.currentPhase = lifecycle.phase ?? record.currentPhase;
+      record.lastError = lifecycle.error.message;
+      record.lastErrorRetryable = lifecycle.retry === 'auto';
+      record.failedAtState = IssueState.PhaseRunning;
+      break;
+    case 'delivering':
+      record.state = IssueState.Delivering;
+      record.deliveryPending = true;
+      break;
+    case 'completed':
+      record.state = IssueState.Completed;
+      record.deliveryPending = false;
+      break;
+    case 'cancelled':
+      record.state = IssueState.Cancelled;
+      break;
+  }
+  record.orchestrationState = deriveOrchestrationState(record);
+  if (lifecycle.kind === 'waiting' && lifecycle.planRevision !== undefined) {
+    record.orchestrationState = {
+      kind: 'gate-waiting',
+      phaseId: lifecycle.phase,
+      reason: lifecycle.phase === 'review' ? 'human-review' : 'custom',
+      payload: { planRevision: lifecycle.planRevision },
+    };
+  } else if (lifecycle.kind === 'failed') {
+    record.orchestrationState = {
+      kind: 'pipeline-failed',
+      failedAt: lifecycle.phase ?? '',
+      retryable: lifecycle.retry,
+      error: lifecycle.error,
+    };
+  }
+}
+
+export function applyIssueLifecycleEvent(
+  record: IssueRecord,
+  event: IssueLifecycleEvent,
+): IssueLifecycle {
+  const next = reduceIssueLifecycle(readIssueLifecycle(record), event);
+  writeLegacyIssueLifecycle(record, next);
+  return next;
+}
+
+export function isLifecycleSchedulable(lifecycle: IssueLifecycle): boolean {
+  return lifecycle.kind === 'pending'
+    || lifecycle.kind === 'ready'
+    || (lifecycle.kind === 'failed' && lifecycle.retry === 'auto');
+}
+
+export function assertReviewInvariant(record: IssueRecord): void {
+  const lifecycle = readIssueLifecycle(record);
+  if (lifecycle.kind !== 'waiting' || lifecycle.phase !== 'review') return;
+  if (lifecycle.planRevision === undefined
+    || lifecycle.planRevision !== record.run!.planRevision
+    || record.run!.review?.decision !== 'waiting') {
+    throw new Error('Review 等待状态与计划版本不一致');
+  }
+}
