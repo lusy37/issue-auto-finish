@@ -29,7 +29,7 @@
 最重要的不变量是：
 
 - `IssueWorkflow` 的 LangGraph checkpoint 才是流程位置的权威来源。
-- `IssueRecord.currentPhase`、`state` 和 `orchestrationState` 是持久化业务投影，用于展示、资格检查和调度，不负责推导下一节点。
+- `IssueRecord.lifecycle` 是唯一持久化的业务生命周期；`state`、`currentPhase` 和 `orchestrationState` 是 REST/事件兼容投影，不写入 v4 聚合文件，也不负责推导下一节点。
 - 阶段类返回结构化 `PhaseResult`，不直接修改 tracker、调用 GitHub 评论或驱动整体流程。
 - 外部成功只有在本地业务凭证和候选提交都确认后，才能进入下一阶段或交付。
 
@@ -86,13 +86,14 @@
 
 **阅读顺序：**
 
-1. [src/tracker/IssueState.ts](../src/tracker/IssueState.ts)：`IssueRecord`、`IssueState`、阶段进度和状态投影。
-2. [src/dag/contracts.ts](../src/dag/contracts.ts)：`IssueRun`、计划、任务、执行身份和验证凭证。
-3. [src/orchestration/WorkflowState.ts](../src/orchestration/WorkflowState.ts)：固定阶段、审核决定、checkpoint 序列化结构。
-4. [src/orchestration/OrchestrationState.ts](../src/orchestration/OrchestrationState.ts)：面向页面和事件的状态投影。
-5. [src/dag/IssueRunStore.ts](../src/dag/IssueRunStore.ts)：加载、校验、版本、原子写入和事务。
-6. [src/tracker/IssueTracker.ts](../src/tracker/IssueTracker.ts)：状态操作、事件发布、处理锁和执行身份检查。
-7. [src/tracker/ExecutableTask.ts](../src/tracker/ExecutableTask.ts)：把内部记录投影成工作台列表模型。
+1. [src/tracker/IssueState.ts](../src/tracker/IssueState.ts)：`IssueRecord`、阶段进度和旧 REST 投影类型。
+2. [src/tracker/IssueLifecycle.ts](../src/tracker/IssueLifecycle.ts)：唯一业务生命周期、合法事件转换和旧字段单向投影。
+3. [src/dag/contracts.ts](../src/dag/contracts.ts)：`IssueRun`、计划、任务、执行身份和验证凭证。
+4. [src/orchestration/WorkflowState.ts](../src/orchestration/WorkflowState.ts)：固定阶段、审核决定、checkpoint 序列化结构。
+5. `src/dag/codecs/`、`src/orchestration/codecs/` 与 [src/dag/invariants.ts](../src/dag/invariants.ts)：区分输入字段校验和跨字段业务约束。
+6. [src/dag/IssueRunStore.ts](../src/dag/IssueRunStore.ts)：加载、校验、版本、原子写入和事务。
+7. [src/tracker/IssueTracker.ts](../src/tracker/IssueTracker.ts)：生命周期操作、事件发布、处理锁和执行身份检查。
+8. [src/pipeline/PipelineProjection.ts](../src/pipeline/PipelineProjection.ts)：把生命周期投影成旧 REST/页面枚举。
 
 **必须掌握的概念：**
 
@@ -100,7 +101,9 @@
 - `IssueRunStore.transaction()` 每次从磁盘重新读取、修改并原子替换；写入失败后该 Issue 会被阻断，避免继续调度。
 - 计划是不可变版本，计划内容通过 digest 校验；审核、任务和验证必须绑定同一计划版本。
 - `planRevision`、`buildGeneration`、`workflow.generation`、`dispatchId` 和 `callId` 共同防止旧协程的迟到结果覆盖新执行。
-- `phaseProgress` 和 `orchestrationState` 是可重建的展示投影，不等价于 LangGraph 的下一节点。
+- `phaseProgress` 保存阶段审计和会话恢复信息；它不是流程位置，也不再承担 UAT 配置语义。
+- `state`、`currentPhase` 和 `orchestrationState` 是可重建的兼容投影，不写入 v4 文件。
+- 每轮是否包含 UAT 由 `run.workflow.definition.phaseIds` 固化，不能被之后的全局设置改写。
 
 **建议练习：** 打开一份演示数据中的 `issues/<number>/run.json`，手工标出：需求、计划版本、审核、workflow checkpoints、任务、候选提交、verify/uat 收据、delivery 身份和调用记录。
 
@@ -179,9 +182,9 @@ flowchart LR
 1. [src/phases/BasePhase.ts](../src/phases/BasePhase.ts)：提示词、会话恢复、输出分类和产物校验。
 2. [src/phases/PhaseFactory.ts](../src/phases/PhaseFactory.ts)：阶段注册和构造。
 3. [src/phases/PlanPhase.ts](../src/phases/PlanPhase.ts)：只读 plan、结构化 JSON、驳回重规划和会话续聊。
-4. [src/persistence/PlanPersistence.ts](../src/persistence/PlanPersistence.ts)：计划文档、审核历史、进度和 worktree 不存在时的反馈后备。
+4. [src/persistence/PlanPersistence.ts](../src/persistence/PlanPersistence.ts)：计划文档、审核历史和 worktree 不存在时的反馈后备；它不再维护第二份阶段进度文件。
 5. `src/prompts/templates.ts`：需求、计划、构建、验证提示词契约。
-6. `src/dag/contracts.ts` 中的 `validatePlan`、`renderPlan` 和 digest 逻辑。
+6. `src/dag/codecs/TaskPlanCodec.ts` 的输入解码、`src/dag/invariants.ts` 的 DAG 规则，以及 `src/dag/contracts.ts` 中的 `renderPlan` 和 digest 逻辑。
 
 **重点思考：** 阶段可以写自己的产物文件，但不能直接推进 Issue 状态；为什么这样设计能让阶段单测不需要完整启动服务？为什么计划必须同时保存结构化 JSON 和给人看的 Markdown？
 
@@ -426,7 +429,7 @@ npm run test:codex
 完成全部路径后，你应该可以不看目录说明，直接回答：
 
 - [ ] 能从 `run.ts` 走到一次 Issue 的完整调用链。
-- [ ] 能区分 `IssueState`、`OrchestrationState`、LangGraph checkpoint 和阶段结果。
+- [ ] 能区分 `IssueLifecycle`、REST 兼容投影、LangGraph checkpoint、阶段进度和业务凭证。
 - [ ] 能解释计划版本、构建轮次、workflow generation、dispatch 和 call identity 的作用。
 - [ ] 能说明本地 JSON 为什么使用聚合事务和原子替换。
 - [ ] 能说明任务 DAG 为什么并发执行但 Git 合并串行执行。

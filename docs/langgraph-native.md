@@ -2,7 +2,7 @@
 
 本分支为 codex/langgraph-native，独立工作树为 .iaf-mini/worktrees/langgraph-native。它最初从 main 的 dee9fe4 建立，但当前是独立技术方案：只对齐 REST API 和用户可见业务语义，不以 main 的内部状态驱动器为实现标准，也不要求 rebase 或最终合并回 main。原 main 和之前的 langgraph-experiment 工作树均保留。
 
-2026-09-14 的后续职责收口、冗余删除及恢复修正见 [精简说明](langgraph-simplification.md)。本文的行数和完整验收统计记录首次迁移时的结果。
+2026-09-14 的后续职责收口、冗余删除及恢复修正见 [精简说明](langgraph-simplification.md)。2026-09-16 又完成了生命周期单一化和 Codec 分层：持久化的 `IssueLifecycle` 表达业务生命周期，LangGraph checkpoint 表达执行位置，旧状态枚举仅在 REST/事件边界按需投影。
 
 随后从 main 适配的预览重启、交付回写校验和回收目录后完整重做，见 [三项业务修复](native-business-fixes.md)。
 
@@ -30,8 +30,8 @@
 ## 先读这几个文件
 
 1. [IssueWorkflow.ts](../src/orchestrator/IssueWorkflow.ts)：先看构造器中的图，再读 drive、review、runPhase。尝试回答：正常下一步、审核恢复、修复回边分别在哪里声明？
-2. [WorkflowState.ts](../src/orchestration/WorkflowState.ts)、[Phases.ts](../src/orchestration/Phases.ts)、[PhaseResult.ts](../src/orchestration/PhaseResult.ts)：区分图状态、固定阶段名、业务执行结果。这里已删除旧 Pipeline.transitions、awaitGate 和 awaitAsync 协议。
-3. [IssueCheckpointer.ts](../src/orchestrator/IssueCheckpointer.ts)：理解 thread_id、checkpoint namespace、checkpoint、pending writes。随后看 [IssueRunStore.ts](../src/dag/IssueRunStore.ts) 的 transaction，理解如何原子落盘。
+2. [IssueLifecycle.ts](../src/tracker/IssueLifecycle.ts)、[WorkflowState.ts](../src/orchestration/WorkflowState.ts)、[Phases.ts](../src/orchestration/Phases.ts)：区分业务生命周期、图位置和固定阶段名。这里已删除旧 Pipeline.transitions、awaitGate 和 awaitAsync 协议。
+3. [IssueCheckpointer.ts](../src/orchestrator/IssueCheckpointer.ts)：理解 thread_id、checkpoint namespace、checkpoint、pending writes。随后看 [IssueRunStore.ts](../src/dag/IssueRunStore.ts) 的 transaction，理解如何原子落盘；运行时输入校验集中在 `dag/codecs` 与 `orchestration/codecs`，跨字段规则集中在普通 invariant 函数。
 4. [RunWorkflowStep.ts](../src/orchestrator/steps/RunWorkflowStep.ts) 和 [DagPhaseRunner.ts](../src/orchestrator/DagPhaseRunner.ts)：看依赖如何注入、AI 阶段怎样生成业务凭证、实际端口怎样交给 UAT。
 5. [TaskGraphExecutor.ts](../src/dag/TaskGraphExecutor.ts)：先看 execute 中的子图和依赖边，再看 executeTask / integrate。框架负责并发调度，Git 合并仍串行执行。
 6. [IssueService.ts](../src/orchestrator/IssueService.ts)：最后读 API 与轮询入口、Worktree 准备、取消、重试和恢复。它负责资源生命周期，不再用状态转换表驱动阶段。
@@ -45,17 +45,21 @@
 
 批准或驳回、完整计划快照、反馈、阶段历史和节点结果收据在同一个 Issue 事务中提交。即使业务结果已经保存、框架写入随后失败，重启也能复用结果，避免重复规划或重复决定审核。
 
-普通自动重试由 retryPolicy 执行；预算持久化，重启和手动继续不返还已用额度。失败落盘时同时记录错误是否可自动重试：`attempts` 表示已经开始执行的重试次数，阶段 `retryUsed` 表示已经占用的预算，`retryUsed > attempts` 表示重试已预留但尚未执行。retryPolicy 与重启后的 drive 共用幂等预留逻辑，因此崩溃窗口不会重复扣减，最后一次已预留预算仍可被 Poller 驱动；`hard-no-auto` 或预算耗尽则进入人工失败。业务修复次数与普通调用失败重试是不同预算。暂停先保存停止意图，再取消排队和在途进程；继续时恢复原检查点。显式从某阶段重做开始新的图轮次，完整重做还会更新 buildGeneration。
+普通自动重试由 retryPolicy 执行；预算持久化，重启和手动继续不返还已用额度。`phaseExecutions[phase]` 表示实际开始的阶段执行次数，`retryUsed[phase]` 表示已占用的自动重试预算；预算不小于执行次数时，表示下一次重试已经预留。retryPolicy 与重启后的 drive 共用幂等预留逻辑，因此崩溃窗口不会重复扣减，最后一次已预留预算仍可被 Poller 驱动；`hard-no-auto` 或预算耗尽则进入人工失败。业务修复次数与普通调用失败重试是不同预算。暂停先保存停止意图，再取消排队和在途进程；继续时恢复原检查点。显式从某阶段重做开始新的图轮次，完整重做还会更新 buildGeneration。
 
-调试时可以在现有 IssueWorkflow 实例上调用 getState()，查看 next 与 tasks 中的 interrupts；getStateHistory() 读取当前图轮次的历史。不要通过修改 currentPhase 或 orchestrationState 来驱动流程，它们只是展示投影。用户操作应经过审核、继续、重试或指定阶段重做的服务入口。
+调试时可以在现有 IssueWorkflow 实例上调用 getState()，查看 next 与 tasks 中的 interrupts；getStateHistory() 读取当前图轮次的历史。不要通过修改 REST 返回的 `state`、`currentPhase` 或 `orchestrationState` 驱动流程：它们由持久化的 `lifecycle` 单向生成。用户操作应经过审核、继续、重试或指定阶段重做的服务入口。
 
 ## 本地 JSON 与新数据格式
 
-每个 Issue 的 DATA_DIR/issues/<编号>/run.json 是唯一运行状态文件。workflow 中保存框架序列化后的检查点、待提交写入、已提交的阶段结果和附加副作用记录。不可变 plans/<revision>.json 仍保存计划及审核依据。
+每个 Issue 的 DATA_DIR/issues/<编号>/run.json 是唯一运行状态文件。顶层 `lifecycle` 保存业务生命周期；`workflow` 保存框架序列化后的检查点、待提交写入、已提交的阶段结果和附加副作用记录；`phaseProgress` 只保存阶段审计时间、结果和可恢复会话，不再承担 E2E 配置或流程定位。每轮是否包含 UAT 由 `workflow.definition.phaseIds` 在初始化或完整重做时固化。不可变 plans/<revision>.json 仍保存计划及审核依据。
+
+不再写入 `artifacts/progress.json`。页面详情直接读取聚合记录中的阶段投影，会话恢复也通过 `IssueTracker` 读取同一份 `phaseProgress`，避免磁盘上出现两份可能分叉的进度状态。
 
 自定义 IssueCheckpointer 实现框架的存储协议，目的是复用现有每 Issue 聚合事务。另开一个检查点数据库会产生两个独立写入边界，不能自动保证审核事实与执行结果一致。
 
-运行格式为 iaf-mini/issue-run/v3-langgraph。旧 v2 和旧实验分支数据不会自动迁移或覆盖；请使用这个工作树自己的新 DATA_DIR。演示默认使用 .iaf-mini/demo-langgraph-v3。正式配置若指向原工作树的数据目录，应显式选择新目录，并由原程序继续管理需要恢复的旧任务。
+运行格式为 `iaf-mini/issue-run/v4-langgraph`。旧 v3、v2 和实验分支数据不会自动迁移或覆盖；请使用这个工作树自己的新 DATA_DIR。演示默认使用 `.iaf-mini/demo-langgraph-v4`。正式配置若指向原工作树的数据目录，应显式选择新目录，并由原程序继续管理需要恢复的旧任务。
+
+Zod 只保留在不可信数据边界：聚合 JSON、AI 计划输出、审核输入及 LangGraph `StateSchema`。`contracts.ts` 和 `WorkflowState.ts` 只定义 TypeScript 领域类型；DAG 循环、审核反馈、版本与凭证归属等跨字段规则由普通 invariant 函数表达，避免业务规则隐藏在大型 Schema/refine 中。
 
 ## 文件与目录调整
 
@@ -99,18 +103,18 @@ npm run test:all -- --maxWorkers=1 --testTimeout=180000 --hookTimeout=60000
 
 [验收记录](evidence/langgraph-native-validation.json) 保留首轮结果、定向复验结果、逐文件归属、执行命令和最终源码散列，不将分轮复验表述为首轮全绿。完整原始日志位于本工作树的 .iaf-mini/native-validation/。
 
-## 2026-09-16 最新验证
+## 2026-09-17 最新验证
 
-本轮在 N1 至 N4 代码提交及 N5 文档整理内容上重新执行完整门禁。为降低 Windows 上真实 Git 子进程与浏览器冷启动的资源竞争，完整 Vitest 套件使用单 worker；测试逻辑、生产超时和断言没有放宽。浏览器使用本机 Microsoft Edge，Playwright 以本次进程退出码和本次生成结果判断，不复用旧报告。
+本轮在代码基线 `cff9854` 上重新执行完整门禁。为降低 Windows 上真实 Git 子进程与浏览器冷启动的资源竞争，完整 Vitest 套件使用单 worker；测试逻辑、生产超时和断言没有放宽。浏览器使用本机 Microsoft Edge，Playwright 以本次进程退出码和本次生成结果判断，不复用旧报告。Windows 进程测试在允许 `taskkill /T /F` 的环境中执行，验证取消和超时都会等待整棵进程树退出。
 
 | 检查 | 结果 |
 | --- | --- |
 | `npm run typecheck` | 通过，退出码 0 |
 | `npm run lint` | 通过，退出码 0；0 error、23 个既有 warning |
-| `npm test -- --maxWorkers=1` | 111 个文件、1,063 项测试全部通过，退出码 0 |
+| `npm test -- --maxWorkers=1` | 114 个文件、1,010 项测试全部通过，退出码 0；674.25 秒 |
 | `npm run build` | 通过，退出码 0 |
 | `npm run web:build` | 通过，退出码 0 |
-| `IAF_TEST_BROWSER_CHANNEL=msedge npm run test:e2e` | 1/1 通过，退出码 0 |
-| `npm run test:windows` | 1/1 通过，退出码 0 |
+| `IAF_TEST_BROWSER_CHANNEL=msedge npm run test:e2e` | 1/1 通过，退出码 0；28.93 秒 |
+| `npm run test:windows` | 1/1 通过，退出码 0；4.84 秒 |
 
 本轮回归使用真实临时 Git 仓库和真实 Edge 浏览器；AI 与 GitHub 平台均为模拟实现，没有把模拟结果表述为真实 Codex 或真实 GitHub 写入。GitHub 已发出的外部请求仍无法与本地 JSON 做跨系统事务回滚；实现只保证旧 workflow generation、旧派发或旧候选提交的迟到响应不能覆盖新的本地状态。完整结构化证据见 [最新验收记录](evidence/langgraph-native-validation.json)。

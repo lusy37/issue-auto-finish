@@ -1,30 +1,31 @@
 {
-  "recordedAt": "2026-09-16T02:43:20+08:00",
+  "recordedAt": "2026-09-17T00:01:30+08:00",
   "branch": "codex/langgraph-native",
-  "verifiedBaseCommit": "a3ab340",
+  "verifiedBaseCommit": "cff9854621034bcbb1e71f337edcada436b2e448",
   "implementationCommits": [
-    {
-      "commit": "b918d4e",
-      "subject": "refactor(langgraph): 收口原生图与检查点职责"
-    },
-    {
-      "commit": "54142ce",
-      "subject": "fix(langgraph): 完善验收重启与迟到交付保护"
-    },
-    {
-      "commit": "c4ad9a0",
-      "subject": "feat(e2e): 完善原生流程的验收开关"
-    },
-    {
-      "commit": "a3ab340",
-      "subject": "fix(langgraph): 保证自动重试跨崩溃一致"
-    }
+    { "commit": "b918d4e", "subject": "refactor(langgraph): 收口原生图与检查点职责" },
+    { "commit": "54142ce", "subject": "fix(langgraph): 完善验收重启与迟到交付保护" },
+    { "commit": "c4ad9a0", "subject": "feat(e2e): 完善原生流程的验收开关" },
+    { "commit": "a3ab340", "subject": "fix(langgraph): 保证自动重试跨崩溃一致" },
+    { "commit": "ad1979e", "subject": "test(langgraph): 固化原生状态职责边界" },
+    { "commit": "1d65dcd", "subject": "refactor(state): 引入原生生命周期模型" },
+    { "commit": "4b8512c", "subject": "refactor(state): 统一生命周期读写入口" },
+    { "commit": "a764c92", "subject": "refactor(workflow): 固化本轮阶段定义" },
+    { "commit": "593d1f9", "subject": "refactor(state): 迁移原生生命周期持久化" },
+    { "commit": "4a3dc21", "subject": "refactor(state): 删除重复状态映射层" },
+    { "commit": "ec3582a", "subject": "refactor(state): 删除重复阶段进度文件" },
+    { "commit": "8c29b24", "subject": "refactor(validation): 隔离 Zod 编解码边界" },
+    { "commit": "02802e6", "subject": "fix(state): 完善生命周期恢复边界" },
+    { "commit": "2d6903a", "subject": "refactor(state): 隔离阶段会话持久化端口" },
+    { "commit": "2f80400", "subject": "fix(process): 等待 Windows 进程树退出" },
+    { "commit": "cff9854", "subject": "fix(review): 按审核凭证展示通过状态" }
   ],
   "environment": {
     "platform": "win32",
     "node": "v22.18.0",
     "browserChannel": "msedge",
-    "timezone": "Asia/Shanghai"
+    "timezone": "Asia/Shanghai",
+    "processValidation": "Windows 进程测试在允许 taskkill /T /F 的环境中执行"
   },
   "checks": [
     {
@@ -44,10 +45,10 @@
       "command": "$env:IAF_TEST_BROWSER_CHANNEL='msedge'; npm test -- --maxWorkers=1",
       "exitCode": 0,
       "passed": true,
-      "files": 111,
-      "tests": 1063,
-      "durationSeconds": 748.67,
-      "note": "完整套件串行执行，以避免 Windows 上真实 Git 子进程和浏览器冷启动产生资源竞争；未放宽业务断言。"
+      "files": 114,
+      "tests": 1010,
+      "durationSeconds": 674.25,
+      "note": "完整套件串行执行；未放宽业务断言、生产超时或测试等待预算。"
     },
     {
       "command": "npm run build",
@@ -65,6 +66,7 @@
       "passed": true,
       "files": 1,
       "tests": 1,
+      "durationSeconds": 28.93,
       "note": "使用本次 Playwright/Vitest 进程退出码和本次运行结果，不复用旧报告。"
     },
     {
@@ -72,12 +74,18 @@
       "exitCode": 0,
       "passed": true,
       "files": 1,
-      "tests": 1
+      "tests": 1,
+      "durationSeconds": 4.84
     }
   ],
   "nativeRecoveryCoverage": {
     "checkpointResume": true,
     "reviewInterrupt": true,
+    "lifecycleSingleSource": true,
+    "reviewCredentialProjection": true,
+    "immutableWorkflowDefinition": true,
+    "progressFileRemoved": true,
+    "codecBoundary": true,
     "newGenerationForPhaseRedo": true,
     "previewRestartBeforeUat": true,
     "worktreeRecreateForFullRedo": true,
@@ -85,21 +93,23 @@
     "retryReservationAfterCrash": true,
     "reservedFinalRetryIsDrivable": true,
     "hardNoAutoBecomesManualFailure": true,
-    "oldGenerationRetryIsNotRestored": true
+    "oldGenerationRetryIsNotRestored": true,
+    "windowsProcessTreeWait": true
   },
   "externalValidation": {
     "git": "使用真实临时 Git 仓库，覆盖任务依赖、合并、并行隔离、工作树与进程强杀恢复。",
     "browser": "使用真实本机 Microsoft Edge，覆盖工作台交互、UAT 退出码、报告有效性和预览进程树。",
+    "process": "使用 Windows taskkill /T /F 验证取消和超时后整棵 cmd/Node 进程树退出。",
     "ai": "自动回归使用模拟 AI；未调用真实 Codex。",
     "github": "自动回归使用模拟平台；未执行真实 GitHub 写入。"
   },
   "knownLimitations": [
     "GitHub 已发出的标签或 PR 请求无法与本地 JSON 做跨系统事务回滚；本轮只阻止旧响应覆盖新本地状态。",
     "本地聚合 JSON 和检查点面向单用户、单实例及有限任务规模；检查点历史增长会增加原子写入成本。",
-    "旧 v2 或其他实验分支运行数据不自动迁移，必须使用新的数据目录。"
+    "旧 v3、v2 或其他实验分支运行数据不自动迁移，必须使用新的数据目录。"
   ],
   "compatibility": {
-    "runFormat": "iaf-mini/issue-run/v3-langgraph",
+    "runFormat": "iaf-mini/issue-run/v4-langgraph",
     "requiresFreshDataDirectory": true,
     "internalArchitectureSharedWithMain": false,
     "sharedContractWithMain": [
@@ -107,5 +117,15 @@
       "Issue planDocs",
       "E2E 用户语义"
     ]
+  },
+  "sourceHashesSha256": {
+    "src/tracker/IssueLifecycle.ts": "4D344D261E6A4FFE72DBF9EA3CB3822A8CCF5DE84292865F9172835DAB11BAEC",
+    "src/dag/IssueRunStore.ts": "C0226B55B1938FAD5902059D4165CA90527084E508DBCD00E5625342F87C4A0A",
+    "src/orchestrator/IssueWorkflow.ts": "1DE8DABE114537B997B361F26AF84E7EA4FDB97EDDAACD788F2D513E8E878A6A",
+    "src/dag/codecs/IssueRunCodec.ts": "B06AD62925EBA3D5F3668CE0C2E43D3FEA1AAC47D2F7356DBC81ACAD867025F3",
+    "src/utils/process.ts": "6F079B1A4B815D9CC93F437B5AFBFD2B860BDFC55AD2162F270737062407D60E",
+    "tests/integration/langgraph-native.test.ts": "C5844F8CDDF3CC5A094889989ABDCAF8A2449D8302072FE0C0033669C12745F8",
+    "tests/integration/process-lifecycle.test.ts": "A0F898B6903DE13DE132BB33C90F25AB338D3D2BAAF61294D7773B33987150E1",
+    "tests/e2e/workbench.test.ts": "7C642483372670B45EA7B2CE6B6F25957C815C5217E9860D6382CD9A2E7A8544"
   }
 }

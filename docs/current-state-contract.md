@@ -1,19 +1,21 @@
 # 当前状态契约与兼容清理
 
-日期：2026-09-15。范围：main、codex/langgraph-native。
+日期：2026-09-17。范围：main、codex/langgraph-native。
 
 ## 复核结论
 
 项目没有正式用户数据，因此不为缺失关键字段的记录自动补值或猜测执行位置。但未初始化任务、当前流程的重启恢复、业务历史与展示投影仍是现有功能。
 
-上一版说明有两点需要纠正：Native 已删除 StateAdapter 与 TrackerStateStore，不能套用 main 的调用关系；pipelineMode 在轮询发现任务后、执行器初始化前可以为空，不是历史兼容。E2E 也不需要增加必填字段，保存的 phaseProgress 阶段列表已经表达本轮要求。
+Native 已删除 StateAdapter 与 TrackerStateStore，不能套用 main 的调用关系；pipelineMode 在轮询发现任务后、执行器初始化前可以为空，不是历史兼容。E2E 也不需要增加同义布尔字段，但 Native 已将本轮阶段列表固化到 `run.workflow.definition.phaseIds`，不再从 `phaseProgress` 推断配置。
 
 ## 实际调整
 
-- main 与调度版直接读取已保存的 orchestrationState，删除缺失时调用 recordToOrchestrationState 的回退及无用转导出。
-- 两个分支将记录的 orchestrationState 设为必填；创建时生成，读取时使用 Zod 校验，缺失、未知 kind 或缺少该状态必需字段时明确报错并保留文件。
-- 三个分支保留 deriveOrchestrationState，限定为业务状态写入时的当前投影。Native 的执行位置仍由 LangGraph 检查点决定。
-- 删除重复的 e2eEnabled 记录字段及写入、清除、旧记录回退；已初始化任务由 phaseProgress 是否包含 uat 决定验收要求，仅尚未初始化时读取全局配置。
+- main 继续直接读取其已保存的 orchestrationState；Native 不复用这套内部状态驱动器。
+- Native v4 只持久化 `IssueLifecycle`，启动时拒绝缺失、未知 kind 或缺少必要字段的记录；`state`、`currentPhase` 和 `orchestrationState` 仅作为旧 REST/事件兼容投影生成。
+- Native 的执行位置只由 LangGraph 检查点决定，业务生命周期只负责调度、人工介入和交付边界。
+- 删除重复的 e2eEnabled 记录字段及旧记录回退；Native 已初始化任务由不可变 workflow definition 是否包含 uat 决定验收要求，仅尚未初始化时读取全局配置。
+- Native 不再读写 `progress.json`；阶段审计、会话恢复和页面详情统一读取聚合记录中的 `phaseProgress`。
+- Native 的 Zod 校验集中在 I/O/框架 Codec，跨字段规则使用普通 invariant 函数；旧 v3 数据不自动迁移。
 - 生命周期查找保留新任务的 plan-mode 默认值；显式未知模式或默认流程未注册时抛错，不再选择任意一个已注册管理器。
 
 ## 保留边界

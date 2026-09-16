@@ -12,7 +12,9 @@
 | 暂停和取消 | 停止意图、取消信号、受管理进程 | 保存用户意图并确认实际进程退出 |
 | 重试和集成修复额度 | 每 Issue 聚合事务 | 跨重启和人工继续保持业务预算 |
 | 计划版本、Git 合并、UAT 和交付结果 | 业务凭证及不可变计划 | 校验真实提交、当前报告和平台操作，防止重复副作用 |
-| 页面状态、进度和阶段历史 | Issue 记录的展示字段 | 为页面和事件提供可读业务状态，不推导图的下一节点 |
+| 业务生命周期 | `IssueRecord.lifecycle` | 唯一持久化的调度、人工介入和交付生命周期 |
+| 页面状态和旧枚举 | `PipelineProjection` 与 REST/事件适配层 | 从 lifecycle 单向生成，不写回 `run.json` |
+| 阶段进度和历史 | `phaseProgress`、`phaseHistory` | 保存审计、结果和会话，不推导图的下一节点 |
 
 `workflow.results` 和 Git 合并凭证继续保留。节点内的业务提交与随后发生的框架写入存在崩溃窗口，仅靠检查点不能保证业务副作用只执行一次。自定义 Checkpointer 继续复用每 Issue 的聚合存储，不引入第二套运行数据库。
 
@@ -20,28 +22,42 @@
 
 - `pendingActions`、消费回调、`applyPendingAction` 和专用 `PhaseAbortedError`：生产没有写入入口，暂停及取消已经使用停止意图和取消信号。
 - `getPhasePreState` 及继续、重做时伪造上一阶段完成状态的逻辑：恢复由原检查点定位；重做由新的 `workflow.generation` 和 `entry` 定位。
-- 无生产调用的 `setOrchestrationState`、`appendPhaseHistory`：状态和阶段历史通过现有聚合事务提交。
+- `ActionLifecycleManager` 与其双向状态映射：调度资格直接读取 `IssueLifecycle`，页面旧枚举集中由纯投影函数生成。
+- 持久化的 `orchestrationState`、`state`、`currentPhase` 等重复投影：v4 文件只保存 `lifecycle`，旧 REST 字段在读取边界生成。
+- `progress.json` 读写和 fallback：阶段进度、会话 ID 和页面详情统一读取 Issue 聚合记录。
 - 展示状态类型中的四个无调用分类函数：保留服务准入判断，避免存在两组驱动资格规则。
 - 手写的检查点特殊通道索引：改用框架导出的 `WRITES_IDX_MAP`，并显式声明已安装的 checkpoint 包依赖。
 
-继续和失败重试现在恢复为可调度的 `BranchCreated` 状态，同时保留实际 `currentPhase`。这里表示工作区可进入执行，不再表示通过某个前驱阶段来定位流程；具体节点仍取自检查点。已有失败重试曾恢复为 `PhaseRunning`，需要等待停滞检测才能再被轮询选中，本次一并消除了这段等待。
+继续和失败重试现在恢复为可调度的 `ready` 生命周期。这里表示工作区可进入执行，不再表示通过某个前驱阶段定位流程；具体节点仍取自检查点。旧 REST 使用者仍可看到兼容的 `BranchCreated` 投影，但该枚举不再持久化。
 
 ## 恢复边界修正
 
-审核节点先记录进入审核，框架保存中断后才发布 `PhaseWaiting`。在任一写入边界退出，启动恢复都能再次核对该图。启动时也会让已有等待记录核对一次，覆盖同一 v3 格式下遗留的等待投影与中断不一致情况；不读取或迁移旧版本运行格式。
+审核节点先记录进入审核，框架保存中断后才发布 `waiting(review)` 生命周期。在任一写入边界退出，启动恢复都能再次核对该图。运行格式已升级为 `v4-langgraph`，明确拒绝旧 v3 及更早格式，不读取、迁移或覆盖旧数据。
 
 已进入审核的计划在恢复时继续等待中断决定，不能因为审核配置被关闭而自动通过。批准和驳回仍绑定不可变计划版本。
 
 PR 冲突修复入口在同一事务中保存修复任务、消耗额度，并创建从 build 开始的新图轮次。保留原 PR 身份，重新执行构建、验证、UAT 和交付；提交前重新检查停止意图、执行轮次和额度，避免异步查询期间的状态变化被覆盖。
 
+## 状态与校验单一化
+
+当前 Native 不再同时持久化多套流程状态：
+
+- LangGraph checkpoint 是节点位置、审核中断和恢复入口的唯一依据；
+- `IssueLifecycle` 是调度、暂停、失败、交付中的唯一业务生命周期；
+- `TaskRun`、`CallRecord`、验证收据和 `DeliveryIdentity` 是业务凭证，不与生命周期合并；
+- `phaseProgress` 只用于阶段审计和会话恢复；本轮 UAT 要求由不可变 `workflow.definition.phaseIds` 表达；
+- `processingLock`、`buildGeneration`、`workflow.generation` 和重试预算各自保留独立职责，不塞入生命周期。
+
+所有生命周期变更通过 `applyIssueLifecycleEvent()` 完成，并拒绝已完成后重入阶段、暂停时完成阶段、错误计划版本审核等非法转换。`delivering` 表示远程交付正在进行或结果尚未确认，只有交付副作用确认完成后才进入 `completed`。
+
+运行时结构校验集中在 `dag/codecs` 与 `orchestration/codecs`。Zod 只解析聚合 JSON、AI 输出、审核输入和框架 StateSchema；跨字段凭证、DAG 依赖、审核反馈和工作流定义规则使用普通 invariant 函数，领域类型文件不直接依赖 Zod。
+
 ## 验证与限制
 
-回归覆盖中断保存前退出、等待投影保存失败、旧等待记录恢复、恢复时配置变化、暂停继续、手动失败重试、指定阶段重做和已完成流程的冲突修复。已删除接口对应的旧测试和空 mock 同步清理，`tests/reference` 的旧引擎对照测试继续保留。
+回归覆盖中断保存前退出、等待生命周期保存失败、恢复时配置变化、暂停继续、自动重试预留、指定阶段重做、已完成流程的冲突修复、进程树退出和审核凭证展示。`tests/reference` 的旧引擎对照测试继续保留，但不参与生产运行。
 
-类型检查、前后端构建及完整测试的执行记录位于本工作树 `.iaf-mini/native-audit/`。AI 和 GitHub 使用模拟实现；Git、进程及浏览器测试使用本机实际环境，不代表真实 Codex 或真实 GitHub 写入验收。
+最新代码基线 `cff9854` 的完整套件为 114 个文件、1,010 项测试，全部通过；类型检查、Lint、前后端构建、真实 Edge 工作台 E2E 和 Windows 进程专项也全部退出 0。结构化结果、环境说明和源码散列见 [最新验收记录](evidence/langgraph-native-validation.json)。2026-09-14 的历史精简审计仍保留在 [旧验收记录](evidence/langgraph-simplification.json)，不与本轮统计混用。
 
-生产代码新增 54 行、删除 241 行，净减少 187 行。类型检查和前后端构建通过。完整运行覆盖 109 个文件、1,014 项测试，首轮通过 1,005 项；失败包括一项需要更新的重试状态快照、沙箱账户及 Windows 进程限制，还有测试钩子和 worker RPC 超时。更新快照后，在正常 Windows 账户下定向复验全部五个失败文件，63 项全部通过，未放宽测试断言或超时预算。
+AI 和 GitHub 自动回归使用模拟实现；Git、Windows 进程树和浏览器使用本机实际环境，因此不能把该结果表述为真实 Codex 调用或真实 GitHub 写入验收。GitHub 已发出的外部请求仍不能和本地 JSON 跨系统回滚，本地只保证旧执行身份的迟到响应不会覆盖新状态。
 
-两轮合并覆盖 1,014 项：当前实现 101 个文件、936 项，旧引擎对照 8 个文件、78 项，其中 LangGraph 原生恢复测试为 15 项。[验收记录](evidence/langgraph-simplification.json) 保留首轮失败、复验结果和源码散列，不将分轮复验表述为首轮全绿。
-
-外围轮询仍保留业务准入判断，页面仍使用既有状态字段。这次没有更改运行格式，也没有全面重写页面投影协议；这些字段不再用于暂停继续或重做时的前驱阶段推导。
+页面继续返回旧 `state/currentPhase/orchestrationState` 字段以维持 REST 兼容，但它们只由 lifecycle 单向投影。审核面板读取明确的 `run.review.decision`，不会把通用 `ready` 生命周期猜成审核通过。

@@ -7,7 +7,7 @@
 | 职责 | 实现入口 |
 | --- | --- |
 | 单草稿、创建意图、平台标记核对 | `src/demand/DraftService.ts` |
-| 格式、计划校验、执行身份与凭证 | `src/dag/contracts.ts` |
+| 领域契约、输入 Codec、执行身份与凭证 | `src/dag/contracts.ts`、`src/dag/codecs/`、`src/dag/invariants.ts` |
 | 不可变计划、聚合状态事务 | `src/dag/IssueRunStore.ts` |
 | 原生图、审核中断与阶段结果事务 | `src/orchestrator/IssueWorkflow.ts` |
 | 任务派发、依赖、变基、串行合并 | `src/dag/TaskGraphExecutor.ts` |
@@ -20,9 +20,9 @@
 
 `orchestration` 保留阶段结果与纯数据契约，`orchestrator` 通过 LangGraph 图管理流转、调用与副作用。`IssueTracker` 是聚合状态的访问及展示适配层，不再另外保存一份 tracker 权威文件。
 
-每个 Issue 的 `DATA_DIR/issues/<编号>/run.json` 是唯一运行状态。`plans/<revision>.json` 保存不可变计划，包含父需求、补充资料、验收标准、任务定义和内容摘要。历史、父阶段、进度、任务、停止意图、预算、验收、交付身份在同一次同步事务中计算并原子替换；替换成功后才更新缓存并发事件。读接口返回副本，写入失败阻断该 Issue 的新调度和合并。
+每个 Issue 的 `DATA_DIR/issues/<编号>/run.json` 是唯一运行状态。`plans/<revision>.json` 保存不可变计划，包含父需求、补充资料、验收标准、任务定义和内容摘要。生命周期、历史、进度、任务、停止意图、预算、验收、交付身份在同一次同步事务中计算并原子替换；替换成功后才更新缓存并发事件。读接口返回副本，写入失败阻断该 Issue 的新调度和合并。
 
-计划文件先写完整，再更新运行状态中的引用。崩溃留下的未引用版本不执行，也不覆盖；新版本继续递增。Markdown 和 `artifacts/` 下的进度、报告仅供展示及诊断，不是第二份运行状态。
+计划文件先写完整，再更新运行状态中的引用。崩溃留下的未引用版本不执行，也不覆盖；新版本继续递增。Markdown 和 `artifacts/` 下的报告仅供展示及诊断，不是第二份运行状态；阶段进度不再另写 `progress.json`。
 
 ## 状态转换和执行身份
 
@@ -88,11 +88,11 @@ PR 身份跨完整重做保留。开放 PR 继续使用；关闭 PR 要求先重
 
 ## 数据格式和重新初始化
 
-新格式分别为 `iaf-mini/issue-run/v3-langgraph`、`iaf-mini/task-plan/v2`、`iaf-mini/draft/v2`。不兼容或迁移旧任务、旧草稿；启动错误会指出具体文件和重新初始化方法，保留原文件。运行数据从不读取或写回仓库原 `data/`。
+新格式分别为 `iaf-mini/issue-run/v4-langgraph`、`iaf-mini/task-plan/v2`、`iaf-mini/draft/v2`。不兼容或迁移旧任务、旧草稿；启动错误会指出具体文件和重新初始化方法，保留原文件。运行数据从不读取或写回仓库原 `data/`。
 
 需要重新初始化时，先停止原服务并确认任务进程退出，再选择新的 `DATA_DIR` 和工作目录，或归档旧运行目录后初始化。旧状态仍需恢复时保留原目录及原版本程序，不能在活动目录上直接删除数据。
 
-演示使用新的 `.iaf-mini/demo-langgraph-v3`，原演示目录保留。演示的 AI 和 GitHub 为模拟，真实执行 Git、落盘和浏览器，生产执行器没有模拟模式开关。
+演示使用新的 `.iaf-mini/demo-langgraph-v4`，原演示目录保留。演示的 AI 和 GitHub 为模拟，真实执行 Git、落盘和浏览器，生产执行器没有模拟模式开关。
 
 ## 分阶段结果与验证
 
