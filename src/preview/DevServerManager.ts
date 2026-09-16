@@ -83,7 +83,7 @@ export class DevServerManager {
 
     let backendCall: string | undefined;
     try { if (backend.pid) backendCall = this.options.onProcessStarted?.(wtCtx.issueIid, backend.pid, wtCtx.workDir); }
-    catch (error) { stopProcess(backend); await backend; backendLog.end(); frontendLog.end(); throw error; }
+    catch (error) { await stopProcess(backend); await backend; backendLog.end(); frontendLog.end(); throw error; }
     void backend.then(() => { if (backendCall) { try { this.options.onProcessExited?.(wtCtx.issueIid, backendCall); } catch (error) { logger.error('预览退出凭证写入失败', { error: String(error) }); } } });
     backend.nodeChildProcess.on('error', error => { startupError=error; this.stopServers(wtCtx.issueIid); });
     backend.nodeChildProcess.unref();
@@ -116,7 +116,12 @@ export class DevServerManager {
 
     let frontendCall: string | undefined;
     try { if (frontend.pid) frontendCall = this.options.onProcessStarted?.(wtCtx.issueIid, frontend.pid, frontendDir); }
-    catch (error) { stopProcess(backend); stopProcess(frontend); await Promise.allSettled([backend, frontend]); backendLog.end(); frontendLog.end(); throw error; }
+    catch (error) {
+      await Promise.allSettled([stopProcess(backend), stopProcess(frontend)]);
+      await Promise.allSettled([backend, frontend]);
+      backendLog.end(); frontendLog.end();
+      throw error;
+    }
     void frontend.then(() => { if (frontendCall) { try { this.options.onProcessExited?.(wtCtx.issueIid, frontendCall); } catch (error) { logger.error('预览退出凭证写入失败', { error: String(error) }); } } });
     frontend.nodeChildProcess.on('error', error => { startupError=error; this.stopServers(wtCtx.issueIid); });
     frontend.nodeChildProcess.unref();
@@ -155,13 +160,13 @@ export class DevServerManager {
 
     logger.info('Stopping dev servers', { issueIid, ports: set.ports });
 
-    stopProcess(set.backend);
-    stopProcess(set.frontend);
     set.backendLog.end();
     set.frontendLog.end();
 
     this.servers.delete(issueIid);
-    const done = Promise.allSettled([set.backend, set.frontend]).then(() => { this.stopping.delete(issueIid); });
+    const done = Promise.allSettled([stopProcess(set.backend), stopProcess(set.frontend)])
+      .then(() => Promise.allSettled([set.backend, set.frontend]))
+      .then(() => { this.stopping.delete(issueIid); });
     this.stopping.set(issueIid, done);
   }
 
