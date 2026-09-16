@@ -5,6 +5,7 @@ import os from "node:os";
 import { DraftService } from "../../src/demand/DraftService.js";
 import { summarizeTasks } from "../../src/analytics/TaskAnalytics.js";
 import { IssueState, type IssueRecord } from "../../src/tracker/IssueState.js";
+import { lifecycleFromLegacyProjection } from "../../src/tracker/IssueLifecycle.js";
 import {
   validateUatReport,
   executeUat,
@@ -82,15 +83,18 @@ describe("本工具任务统计", () => {
   const record = (
     state: IssueState,
     extra: Partial<IssueRecord> = {},
-  ): IssueRecord =>
-    ({
+  ): IssueRecord => {
+    const value = {
       state,
       attempts: 0,
       branchName: "demo",
       createdAt: "2026-09-08T00:00:00Z",
       updatedAt: "2026-09-08T00:01:00Z",
       ...extra,
-    }) as IssueRecord;
+    } as IssueRecord;
+    value.lifecycle = extra.lifecycle ?? lifecycleFromLegacyProjection(value);
+    return value;
+  };
   it("排除进行中、审核和取消；重试成功只计一个成功任务", () => {
     const data = summarizeTasks(
       [

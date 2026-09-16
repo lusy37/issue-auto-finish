@@ -418,6 +418,7 @@ describe('IssuePoller', () => {
         review: { enabled, autoApproveLabels: ['skip-review'] },
       });
       const waitingRecord = {
+        lifecycle: { kind: 'waiting', phase: 'review', planRevision: 1 },
         run: { planRevision: 1 },
         demandSpec: {
           demandId: 'gh-42',
@@ -458,6 +459,7 @@ describe('IssuePoller', () => {
         review: { enabled: true, autoApproveLabels: ['skip-review'] },
       });
       const waitingAtReleaseGate = {
+        lifecycle: { kind: 'waiting', phase: 'uat' },
         demandSpec: {
           demandId: 'gh-42',
           sourceRef: { source: 'github-issue', externalId: '42', displayId: '42' },
@@ -466,7 +468,7 @@ describe('IssuePoller', () => {
           createdAt: '2024-01-01T00:00:00Z',
         },
         state: IssueState.PhaseWaiting,
-        currentPhase: 'release', // ← release gate，不是 review
+        currentPhase: 'uat',
         branchName: 'feat/issue-42',
         attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       };
@@ -494,6 +496,7 @@ describe('IssuePoller', () => {
         review: { enabled: true, autoApproveLabels: ['skip-review'] },
       });
       const waitingRecord = {
+        lifecycle: { kind: 'waiting', phase: 'review', planRevision: 1 },
         run: { planRevision: 1 },
         demandSpec: {
           demandId: 'gh-42',
@@ -523,6 +526,7 @@ describe('IssuePoller', () => {
 
     it('skips auto-approve check when autoApproveLabels is empty', async () => {
       const waitingRecord = {
+        lifecycle: { kind: 'waiting', phase: 'review', planRevision: 1 },
         run: { planRevision: 1 },
         demandSpec: {
           demandId: 'gh-42',
@@ -552,6 +556,7 @@ describe('IssuePoller', () => {
         review: { enabled: true, autoApproveLabels: ['skip-review'] },
       });
       const waitingRecord = {
+        lifecycle: { kind: 'waiting', phase: 'review', planRevision: 1 },
         run: { planRevision: 1 },
         demandSpec: {
           demandId: 'gh-42',

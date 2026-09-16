@@ -290,9 +290,10 @@ export class IssueWorkflow {
     const lifecycle = readIssueLifecycle(record);
     const wasWaiting = lifecycle.kind === 'waiting' && lifecycle.phase === 'review';
     const enteredReview = lifecycle.kind === 'running' && lifecycle.phase === 'review' && !!record.phaseProgress?.review?.startedAt;
-    if (!wasWaiting && !enteredReview) this.update(current => {
+    if (!enteredReview) this.update(current => {
       const currentLifecycle = readIssueLifecycle(current);
-      if (currentLifecycle.kind !== 'running' || currentLifecycle.phase !== 'review') {
+      const alreadyWaiting = currentLifecycle.kind === 'waiting' && currentLifecycle.phase === 'review';
+      if (!alreadyWaiting && (currentLifecycle.kind !== 'running' || currentLifecycle.phase !== 'review')) {
         applyIssueLifecycleEvent(current, { type: 'phase-started', phase: 'review' });
       }
       current.phaseProgress ??= {};

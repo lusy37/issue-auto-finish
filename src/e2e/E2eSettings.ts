@@ -5,7 +5,6 @@ export function getE2eEnabled(cfg:Config):boolean{return cfg.e2e.enabled;}
 export function isE2eEnabledForIssue(iid:number,tracker:IssueTracker,cfg:Config):boolean {
   const record = tracker.get(iid);
   if (record?.run?.workflow.definition) return record.run.workflow.definition.phaseIds.includes('uat');
-  // v3 过渡期兼容：v4 会拒绝没有 definition 的旧运行记录。
-  if (record?.phaseProgress) return Object.hasOwn(record.phaseProgress, 'uat');
+  // 尚未初始化 workflow definition 的新任务读取当前配置；初始化后只读不可变定义。
   return getE2eEnabled(cfg);
 }

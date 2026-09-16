@@ -48,3 +48,14 @@ it('阶段定义固化后，展示进度和全局配置都不能改写本轮 UAT
   expect(isE2eEnabledForIssue(1, tracker, config)).toBe(false);
   expect(() => tracker.initPhaseProgress(1, enabled)).toThrow('本轮工作流阶段定义已固化');
 });
+
+it('尚未初始化阶段定义时不从 phaseProgress 推断 UAT 配置', () => {
+  const config = createTestConfig(); config.e2e.enabled = false;
+  const pipeline = buildPlanModePipeline({ e2eEnabled: true });
+  const tracker = new IssueTracker(directory, new Map([[pipeline.mode, pipeline]]));
+  tracker.create({ state: IssueState.Pending, branchName: 'feat/issue-1', demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' }, title: '未初始化任务', description: '忽略展示残留', createdAt: new Date().toISOString() } });
+  tracker.transaction(1, record => { record.phaseProgress = { uat: { status: 'pending' } }; });
+
+  expect(tracker.get(1)!.run!.workflow.definition).toBeUndefined();
+  expect(isE2eEnabledForIssue(1, tracker, config)).toBe(false);
+});

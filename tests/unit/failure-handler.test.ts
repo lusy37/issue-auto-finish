@@ -28,6 +28,7 @@ describe('handleFailure', () => {
 
   it('marks failed when resetGeneration matches (normal failure, not a concurrent reset)', async () => {
     (deps.tracker.get as ReturnType<typeof vi.fn>).mockReturnValue({
+      lifecycle: { kind: 'running', phase: 'build' },
       state: IssueState.PhaseRunning,
       attempts: 1,
       resetGeneration: 1,
@@ -48,6 +49,7 @@ describe('handleFailure', () => {
 
   it('skips markFailed when resetGeneration differs (concurrent reset)', async () => {
     (deps.tracker.get as ReturnType<typeof vi.fn>).mockReturnValue({
+      lifecycle: { kind: 'pending' },
       state: IssueState.Pending,
       attempts: 0,
       resetGeneration: 2,
@@ -68,6 +70,7 @@ describe('handleFailure', () => {
     // setup fails → handleFailure with startResetGeneration=1
     // tracker still has generation=1 → wasReset=false → should markFailed
     (deps.tracker.get as ReturnType<typeof vi.fn>).mockReturnValue({
+      lifecycle: { kind: 'pending' },
       state: IssueState.Pending,
       attempts: 0,
       resetGeneration: 1,
@@ -89,6 +92,7 @@ describe('handleFailure', () => {
   it('尚未重置的任务按初始代数处理失败', async () => {
     // Old records have no resetGeneration field
     (deps.tracker.get as ReturnType<typeof vi.fn>).mockReturnValue({
+      lifecycle: { kind: 'running', phase: 'build' },
       state: IssueState.PhaseRunning,
       attempts: 1,
       // no resetGeneration → defaults to 0
@@ -105,6 +109,7 @@ describe('handleFailure', () => {
 
   it('does not mark failed when already in Failed state', async () => {
     (deps.tracker.get as ReturnType<typeof vi.fn>).mockReturnValue({
+      lifecycle: { kind: 'failed', retry: 'manual', error: { message: '已有失败' } },
       state: IssueState.Failed,
       attempts: 2,
       resetGeneration: 0,

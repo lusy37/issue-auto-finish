@@ -16,8 +16,8 @@ import { deliverIssueStep } from '../../src/orchestrator/steps/DeliverIssueStep.
 import { IssueWorkflow } from '../../src/orchestrator/IssueWorkflow.js';
 const directories: string[] = [];
 afterEach(() => { for (const directory of directories.splice(0)) fs.rmSync(directory, { recursive: true, force: true }); });
-async function prepared() {
-  const f = graphFixture([task('a')]); directories.push(f.directory);
+async function prepared(e2eEnabled = false) {
+  const f = graphFixture([task('a')], buildPlanModePipeline({ e2eEnabled })); directories.push(f.directory);
   const origin = path.join(f.directory, 'origin.git'); git(f.directory, 'init', '--bare', origin); git(f.repo, 'remote', 'add', 'origin', origin); git(f.repo, 'push', 'origin', 'main');
   let content = '第一轮';
   const runner: AIRunner = { killAll() {}, killByWorkDir: () => 0, async run(options) { fs.writeFileSync(path.join(options.workDir, 'result.txt'), content); return { success: true, exitCode: 0, output: '执行完成' }; } };
@@ -175,9 +175,8 @@ it('Issue 回写响应丢失后保持未知，查到稳定标记后补齐进度�
 });
 
 it.each([false, true])('交付按已保存的 E2E 要求 %s 校验 UAT，不受全局开关变化影响', async enabled => {
-  const f = await prepared();
+  const f = await prepared(enabled);
   f.deps.config.e2e.enabled = !enabled;
-  f.tracker.initPhaseProgress(1, buildPlanModePipeline({ e2eEnabled: enabled }));
   f.tracker.transaction(1, record => { record.run!.uat = undefined; });
   if (enabled) {
     await expect(f.deliver()).rejects.toThrow('浏览器验收凭证');

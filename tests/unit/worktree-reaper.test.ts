@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { WorktreeReaper } from '../../src/workspace/WorktreeReaper.js';
 import { IssueState, type IssueRecord } from '../../src/tracker/IssueState.js';
+import { lifecycleFromLegacyProjection } from '../../src/tracker/IssueLifecycle.js';
 import type { IssueService } from '../../src/orchestrator/IssueService.js';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -9,7 +10,7 @@ const EXPIRED = new Date(Date.now() - 8 * DAY).toISOString();
 const FRESH = new Date(Date.now() - 1 * DAY).toISOString();
 
 function makeRecord(number: number, overrides: Partial<IssueRecord> = {}): IssueRecord {
-  return {
+  const record = {
     state: IssueState.Completed,
     branchName: `feat/issue-${number}`,
     attempts: 0,
@@ -25,6 +26,8 @@ function makeRecord(number: number, overrides: Partial<IssueRecord> = {}): Issue
     },
     ...overrides,
   } as IssueRecord;
+  record.lifecycle = overrides.lifecycle ?? lifecycleFromLegacyProjection(record);
+  return record;
 }
 
 function makeOrchestrator(records: IssueRecord[]) {
