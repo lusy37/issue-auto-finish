@@ -11,7 +11,7 @@ import { runWorkflow } from '../../src/orchestrator/steps/RunWorkflowStep.js';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
 import { IssueState } from '../../src/tracker/IssueState.js';
 import { PlanPersistence } from '../../src/persistence/PlanPersistence.js';
-import { buildPlanModePipeline, createLifecycleManager } from '../../src/pipeline/PipelineMetadata.js';
+import { buildPlanModePipeline } from '../../src/pipeline/PipelineMetadata.js';
 import { resetKnowledgeCache } from '../../src/knowledge/KnowledgeLoader.js';
 import { createMockOrchestratorDeps, createTestConfig, createTestIssue } from '../helpers/mock-factories.js';
 import type { AIRunner, RunOptions } from '../../src/ai-runner/AIRunner.js';
@@ -62,7 +62,7 @@ function fixture(options: { e2e?: boolean; review?: boolean; label?: boolean; ma
   config.verifyFixLoop.enabled = options.loop ?? true;
   config.verifyFixLoop.maxIterations = options.max ?? 3;
   const pipelineDef = buildPlanModePipeline({ e2eEnabled: config.e2e.enabled });
-  const managers = new Map([[pipelineDef.mode, createLifecycleManager(pipelineDef)]]);
+  const managers = new Map([[pipelineDef.mode, pipelineDef]]);
   const tracker = new IssueTracker(dir, managers);
   const demand = {
     demandId: 'gh-1', sourceRef: { source: 'github-issue' as const, externalId: '1', displayId: '1' },

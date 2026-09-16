@@ -6,11 +6,7 @@ import type { Config } from '../../src/config.js';
 import type { GitHubIssue } from '../../src/clients/GitHubClient.js';
 import type { RunResult } from '../../src/ai-runner/index.js';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
-import {
-  PLAN_MODE_PIPELINE,
-  createLifecycleManager,
-} from '../../src/pipeline/PipelineMetadata.js';
-import { ActionLifecycleManager } from '../../src/lifecycle/ActionLifecycleManager.js';
+import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 
 
 // ── Mock type aliases ──
@@ -46,9 +42,7 @@ export function createHarness(configOverrides?: Partial<Config>): IntegrationHar
   const aiRunner = createMockAIRunner();
   const git = createMockGitOperations();
 
-  // Create real lifecycle managers for tracker
-  const lifecycleManagers = new Map<string, ActionLifecycleManager>();
-  lifecycleManagers.set('plan-mode', createLifecycleManager(PLAN_MODE_PIPELINE));
+  const lifecycleManagers = new Map([['plan-mode', PLAN_MODE_PIPELINE]]);
 
   const tracker = new IssueTracker(dataDir, lifecycleManagers);
 
@@ -355,8 +349,7 @@ export function createScriptedHarness(
   const aiRunner = new ScriptedAIRunner(scripts);
   const git = createMockGitOperations();
 
-  const lifecycleManagers = new Map<string, ActionLifecycleManager>();
-  lifecycleManagers.set('plan-mode', createLifecycleManager(PLAN_MODE_PIPELINE));
+  const lifecycleManagers = new Map([['plan-mode', PLAN_MODE_PIPELINE]]);
 
   const tracker = new IssueTracker(dataDir, lifecycleManagers);
 

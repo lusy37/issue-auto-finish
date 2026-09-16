@@ -5,10 +5,10 @@ import path from 'node:path';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
 import { IssueState } from '../../src/tracker/IssueState.js';
 import { readIssueLifecycle, writeIssueLifecycle, type IssueLifecycle } from '../../src/tracker/IssueLifecycle.js';
-import { PLAN_MODE_PIPELINE, createLifecycleManager } from '../../src/pipeline/PipelineMetadata.js';
+import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 
 let directory: string;
-const managers = () => new Map([['plan-mode', createLifecycleManager(PLAN_MODE_PIPELINE)]]);
+const managers = () => new Map([['plan-mode', PLAN_MODE_PIPELINE]]);
 const input = (pipelineMode?: string) => ({
   state: IssueState.Pending, branchName: 'feat/issue-1', pipelineMode,
   demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue' as const, externalId: '1', displayId: '1' }, title: '需求', description: '', createdAt: new Date().toISOString() },

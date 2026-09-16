@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ActionLifecycleManager } from '../../src/lifecycle/ActionLifecycleManager.js';
-import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 import { IssueState, deriveOrchestrationState, type IssueRecord } from '../../src/tracker/IssueState.js';
 import { newIssueRun } from '../../src/dag/contracts.js';
+import { isLifecycleSchedulable, type IssueLifecycle } from '../../src/tracker/IssueLifecycle.js';
 
-const record = (state: IssueState, currentPhase?: string): IssueRecord => ({
+const record = (lifecycle: IssueLifecycle, state: IssueState, currentPhase?: string): IssueRecord => ({
+  lifecycle,
   state,
   currentPhase,
   orchestrationState: deriveOrchestrationState({ state, currentPhase }),
@@ -16,18 +16,12 @@ const record = (state: IssueState, currentPhase?: string): IssueRecord => ({
 });
 
 describe('Native 状态职责特征', () => {
-  const lifecycle = new ActionLifecycleManager(PLAN_MODE_PIPELINE);
-
-  it.each([
-    IssueState.BranchCreated,
-    IssueState.PhaseDone,
-    IssueState.PhaseApproved,
-  ])('%s 都只表达可以再次驱动，具体节点不由父状态决定', state => {
-    expect(lifecycle.isDrivable(state, 0, 2)).toBe(true);
+  it('ready 只表达可以再次驱动，具体节点不由父状态决定', () => {
+    expect(isLifecycleSchedulable({ kind: 'ready' })).toBe(true);
   });
 
   it('审核等待同时保留阶段和计划版本事实', () => {
-    const value = record(IssueState.PhaseWaiting, 'review');
+    const value = record({ kind: 'waiting', phase: 'review', planRevision: 3 }, IssueState.PhaseWaiting, 'review');
     value.run!.planRevision = 3;
     value.run!.review = { revision: 3, decision: 'waiting' };
     value.orchestrationState = {
@@ -42,7 +36,7 @@ describe('Native 状态职责特征', () => {
   });
 
   it('阶段列表、任务、调用、合并和交付分别保存独立业务事实', () => {
-    const value = record(IssueState.PhaseRunning, 'build');
+    const value = record({ kind: 'running', phase: 'build' }, IssueState.PhaseRunning, 'build');
     value.phaseProgress = {
       plan: { status: 'completed' },
       review: { status: 'completed' },

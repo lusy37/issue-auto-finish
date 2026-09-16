@@ -12,6 +12,7 @@ import type { IssueRecord } from '../../src/tracker/IssueState.js';
 
 function createTestRecord(overrides?: Partial<IssueRecord>): IssueRecord {
   return {
+    lifecycle: { kind: 'pending' },
     demandSpec: {
       demandId: 'gh-42',
       sourceRef: { source: 'github-issue', externalId: '100', displayId: '42' },
@@ -20,6 +21,7 @@ function createTestRecord(overrides?: Partial<IssueRecord>): IssueRecord {
       createdAt: '2024-01-01T00:00:00Z',
     },
     state: 'pending' as IssueRecord['state'],
+    orchestrationState: { kind: 'queued' },
     branchName: 'feat/issue-42',
     attempts: 0,
     createdAt: '2024-01-01T00:00:00Z',

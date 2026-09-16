@@ -17,8 +17,6 @@ export enum IssueState {
   PhaseWaiting = 'phase_waiting',
   /** Gate 阶段已批准（配合 currentPhase 使用） */
   PhaseApproved = 'phase_approved',
-  // Conflict resolution (post-completion)
-  ResolvingConflict = 'resolving_conflict',
   /** 用户主动中止，保留 worktree/分支/session，可继续或重做 */
   Paused = 'paused',
   // Terminal
@@ -193,9 +191,6 @@ export function deriveOrchestrationState(record: StateSource): OrchestrationStat
 
     case IssueState.Paused:
       return { kind: 'paused', phaseId: record.pausedAtPhase ?? phaseId };
-
-    case IssueState.ResolvingConflict:
-      return { kind: 'conflict-resolving' };
 
     case IssueState.Delivering:
     case IssueState.Cancelled:

@@ -1,7 +1,6 @@
 import { IssueState, type IssueRecord, type LegacyIssueProjection, type PhaseProgress } from './IssueState.js';
 import { type PipelineDef } from '../pipeline/PipelineMetadata.js';
 import { IssueNotFoundError } from '../errors/index.js';
-import { ActionLifecycleManager } from '../lifecycle/ActionLifecycleManager.js';
 import { IssueRunStore } from '../dag/IssueRunStore.js';
 import { newIssueRun, sameIdentity, type ExecutionIdentity } from '../dag/contracts.js';
 import { type ExecutableTask, issueToExecutableTask } from './ExecutableTask.js';
@@ -16,14 +15,14 @@ const logger = rootLogger.child('IssueTracker');
 
 export class IssueTracker {
   readonly store: IssueRunStore;
-  private lifecycleManagers: Map<string, ActionLifecycleManager>;
+  private pipelineDefinitions: Map<string, PipelineDef>;
 
   constructor(
     dataDir: string,
-    lifecycleManagers: Map<string, ActionLifecycleManager>,
+    pipelineDefinitions: Map<string, PipelineDef>,
   ) {
     this.store = new IssueRunStore(dataDir);
-    this.lifecycleManagers = lifecycleManagers;
+    this.pipelineDefinitions = pipelineDefinitions;
   }
 
   transaction(issueIid: number, update: (record: IssueRecord) => void): IssueRecord {
@@ -48,12 +47,12 @@ export class IssueTracker {
 
   private getAllRecords(): IssueRecord[] { return this.store.all(); }
 
-  private lifecycleFor(record: IssueRecord): ActionLifecycleManager {
+  private pipelineFor(record: IssueRecord): PipelineDef {
     // 尚未初始化的任务使用当前默认流程；显式指定的模式必须已注册。
     const mode = record.pipelineMode ?? 'plan-mode';
-    const manager = this.lifecycleManagers.get(mode);
-    if (!manager) throw new Error(`任务流水线未注册：${mode}`);
-    return manager;
+    const definition = this.pipelineDefinitions.get(mode);
+    if (!definition) throw new Error(`任务流水线未注册：${mode}`);
+    return definition;
   }
 
   get(issueIid: number): IssueRecord | undefined { return this.store.get(issueIid); }
@@ -72,7 +71,7 @@ export class IssueTracker {
     full.phaseHistory ??= [];
     full.run ??= newIssueRun();
     if (!full.run.workflow.definition && !['pending', 'skipped'].includes(full.lifecycle.kind)) {
-      initializeWorkflowDefinition(full.run.workflow, this.lifecycleFor(full).getPhaseDefs().map(phase => phase.name));
+      initializeWorkflowDefinition(full.run.workflow, this.pipelineFor(full).phases.map(phase => phase.name));
     }
     syncLegacyIssueProjection(full);
     this.store.insert(getIssueNumber(full), full);
@@ -484,8 +483,7 @@ export class IssueTracker {
   /** 将所有 IssueRecord 投影为 ExecutableTask[] */
   toExecutableTasks(): ExecutableTask[] {
     return this.getAllRecords().map((record) => {
-      const lm = this.lifecycleFor(record);
-      return issueToExecutableTask(record, lm);
+      return issueToExecutableTask(record, this.pipelineFor(record));
     });
   }
 }

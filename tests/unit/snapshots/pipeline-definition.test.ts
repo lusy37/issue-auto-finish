@@ -31,11 +31,6 @@ vi.mock('../../../src/phases/PhaseFactory.js', () => ({
   registerPhase: vi.fn(),
 }));
 
-// Mock ActionLifecycleManager
-vi.mock('../../../src/lifecycle/ActionLifecycleManager.js', () => ({
-  ActionLifecycleManager: vi.fn(),
-}));
-
 import {
   PLAN_MODE_PIPELINE,
   resolvePipelineMode,

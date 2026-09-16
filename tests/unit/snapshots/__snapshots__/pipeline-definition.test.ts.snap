@@ -52,14 +52,11 @@ exports[`Pipeline Definitions > PLAN_MODE_PIPELINE definition (snapshot) 1`] = `
           "label": "实施计划",
         },
       ],
-      "doneState": "phase_done",
       "kind": "ai",
       "label": "规划",
       "name": "plan",
-      "startState": "phase_running",
     },
     {
-      "approvedState": "phase_approved",
       "artifacts": [
         {
           "editable": false,
@@ -72,20 +69,16 @@ exports[`Pipeline Definitions > PLAN_MODE_PIPELINE definition (snapshot) 1`] = `
           "label": "审核历史",
         },
       ],
-      "doneState": "phase_approved",
       "kind": "gate",
       "label": "审核",
       "name": "review",
       "retryable": false,
-      "startState": "phase_waiting",
     },
     {
       "deploysPreview": true,
-      "doneState": "phase_done",
       "kind": "ai",
       "label": "实施",
       "name": "build",
-      "startState": "phase_running",
     },
     {
       "artifacts": [
@@ -95,11 +88,9 @@ exports[`Pipeline Definitions > PLAN_MODE_PIPELINE definition (snapshot) 1`] = `
           "label": "验证报告",
         },
       ],
-      "doneState": "completed",
       "kind": "ai",
       "label": "验证",
       "name": "verify",
-      "startState": "phase_running",
     },
   ],
 }
@@ -168,14 +159,11 @@ exports[`Pipeline Definitions > getPipelineDef returns plan-mode def 1`] = `
           "label": "实施计划",
         },
       ],
-      "doneState": "phase_done",
       "kind": "ai",
       "label": "规划",
       "name": "plan",
-      "startState": "phase_running",
     },
     {
-      "approvedState": "phase_approved",
       "artifacts": [
         {
           "editable": false,
@@ -188,20 +176,16 @@ exports[`Pipeline Definitions > getPipelineDef returns plan-mode def 1`] = `
           "label": "审核历史",
         },
       ],
-      "doneState": "phase_approved",
       "kind": "gate",
       "label": "审核",
       "name": "review",
       "retryable": false,
-      "startState": "phase_waiting",
     },
     {
       "deploysPreview": true,
-      "doneState": "phase_done",
       "kind": "ai",
       "label": "实施",
       "name": "build",
-      "startState": "phase_running",
     },
     {
       "artifacts": [
@@ -211,11 +195,9 @@ exports[`Pipeline Definitions > getPipelineDef returns plan-mode def 1`] = `
           "label": "验证报告",
         },
       ],
-      "doneState": "completed",
       "kind": "ai",
       "label": "验证",
       "name": "verify",
-      "startState": "phase_running",
     },
   ],
 }

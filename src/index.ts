@@ -13,7 +13,6 @@ import { IssueService } from "./orchestrator/IssueService.js";
 import {
   buildPlanModePipeline,
   registerPipeline,
-  createLifecycleManager,
 } from "./pipeline/PipelineMetadata.js";
 import { IssuePoller } from "./poller/IssuePoller.js";
 import { WebServer } from "./web/WebServer.js";
@@ -47,7 +46,7 @@ export async function main(): Promise<void> {
     registerPipeline(pipeline);
     const tracker = new IssueTracker(
       dataDir,
-      new Map([[pipeline.mode, createLifecycleManager(pipeline)]]),
+      new Map([[pipeline.mode, pipeline]]),
     );
     validateDraftStorage(path.join(dataDir, "drafts"));
 

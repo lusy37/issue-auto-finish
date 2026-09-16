@@ -221,7 +221,7 @@ describe('集成测试：流水线正常流程', () => {
     expect(record!.state).toBe(IssueState.Completed);
 
     // 应该执行了 build + verify = 2 个 AI 阶段
-    expect(mockPhaseRun).toHaveBeenCalledTimes(3);
+    expect(mockPhaseRun).toHaveBeenCalledTimes(2);
   });
 
   it('tracker 持久化到文件并可恢复', async () => {
@@ -245,13 +245,10 @@ describe('集成测试：流水线正常流程', () => {
 
     // 创建新的 tracker 实例读取同一文件
     const { IssueTracker: TrackerClass } = await import('../../src/tracker/IssueTracker.js');
-    const {
-      PLAN_MODE_PIPELINE: planPipeline,
-      createLifecycleManager: createLM,
-    } = await import('../../src/pipeline/PipelineMetadata.js');
+    const { PLAN_MODE_PIPELINE: planPipeline } = await import('../../src/pipeline/PipelineMetadata.js');
 
     const lifecycleManagers = new Map();
-    lifecycleManagers.set('plan-mode', createLM(planPipeline));
+    lifecycleManagers.set('plan-mode', planPipeline);
 
     const tracker2 = new TrackerClass(harness.dataDir, lifecycleManagers);
     const recoveredRecord = tracker2.get(issue.number);

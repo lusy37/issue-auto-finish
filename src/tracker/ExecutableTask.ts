@@ -1,5 +1,10 @@
 import type { IssueRecord } from './IssueState.js';
-import type { ActionLifecycleManager } from '../lifecycle/ActionLifecycleManager.js';
+import type { PipelineDef } from '../pipeline/PipelineMetadata.js';
+import {
+  projectLifecycleAction,
+  projectLifecycleLabel,
+  projectLifecyclePhaseStatuses,
+} from '../pipeline/PipelineProjection.js';
 import { getIssueNumber, getTitle } from './IssueRecordHelper.js';
 import { readIssueLifecycle } from './IssueLifecycle.js';
 
@@ -41,7 +46,7 @@ export interface ExecutableTask {
   readonly sourceState?: string;
   /** 过滤分类：active/completed/failed/blocked/idle/skipped */
   readonly stateCategory?: string;
-  /** 预计算的状态展示标签（由后端投影时通过 ActionLifecycleManager.resolveLabel 生成） */
+  /** 预计算的状态展示标签 */
   readonly displayLabel?: string;
 
   /** 阶段进度快照（由后端投影时预计算）。
@@ -57,9 +62,7 @@ export interface ExecutableTask {
 }
 
 /**
- * ActionStatus → UnifiedTaskStatus 映射。
- *
- * 使用 ActionLifecycleManager 的 resolve() 返回的 ActionStatus 做语义映射：
+ * 页面动作状态 → UnifiedTaskStatus 映射。
  * - idle/skipped → 'idle'
  * - ready → 'preparing'
  * - running → 'running'
@@ -104,12 +107,13 @@ export function issueStateCategory(record: IssueRecord): string {
 /** 将 IssueRecord 投影为 ExecutableTask */
 export function issueToExecutableTask(
   record: IssueRecord,
-  lm: ActionLifecycleManager,
+  def: PipelineDef,
 ): ExecutableTask {
-  const actionState = lm.resolve(record.state, record.currentPhase);
+  const lifecycle = readIssueLifecycle(record);
+  const actionState = projectLifecycleAction(lifecycle);
 
   // 阶段进度快照：使用已持久化的进度；尚未初始化进度时由任务状态推导
-  const phaseDefs = lm.getPhaseDefs();
+  const phaseDefs = def.phases.map(phase => ({ name: phase.name, label: phase.label }));
   let phaseProgress: ExecutableTask['phaseProgress'];
   if (record.phaseProgress) {
     phaseProgress = phaseDefs.map(p => ({
@@ -120,7 +124,7 @@ export function issueToExecutableTask(
       completedAt: record.phaseProgress![p.name]?.completedAt,
     }));
   } else {
-    const phaseStatusMap = lm.derivePhaseStatuses(record.state, record.currentPhase);
+    const phaseStatusMap = projectLifecyclePhaseStatuses(def, lifecycle);
     phaseProgress = phaseDefs.map(p => ({
       name: p.name,
       label: p.label,
@@ -140,7 +144,7 @@ export function issueToExecutableTask(
     branchName: record.branchName,
     sourceState: record.state,
     stateCategory: issueStateCategory(record),
-    displayLabel: lm.resolveLabel(record.state, record.currentPhase),
+    displayLabel: projectLifecycleLabel(lifecycle),
     phaseProgress,
   };
 }

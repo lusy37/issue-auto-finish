@@ -94,7 +94,6 @@ export function lifecycleFromLegacyProjection(record: Pick<IssueRecord,
     case IssueState.BranchCreated:
     case IssueState.PhaseDone:
     case IssueState.PhaseApproved:
-    case IssueState.ResolvingConflict:
       return { kind: 'ready' };
     case IssueState.PhaseRunning:
       // v3 曾允许只写 PhaseRunning 而未写 currentPhase；适配期按首阶段读取，

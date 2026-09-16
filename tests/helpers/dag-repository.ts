@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
 import { IssueState } from '../../src/tracker/IssueState.js';
-import { PLAN_MODE_PIPELINE, createLifecycleManager } from '../../src/pipeline/PipelineMetadata.js';
+import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 import type { TaskDefinition } from '../../src/dag/contracts.js';
 import { GitOperations } from '../../src/git/GitOperations.js';
 import { AsyncMutex } from '../../src/utils/AsyncMutex.js';
@@ -15,7 +15,7 @@ export function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore','pipe','pipe'] }).trim();
 }
 export const task = (id: string, dependsOn: string[] = []): TaskDefinition => ({ id, dependsOn, title: id, instructions: `实现 ${id}`, acceptanceCriteria: [`${id} 验证通过`] });
-export function newTracker(data: string): IssueTracker { return new IssueTracker(data, new Map([['plan-mode', createLifecycleManager(PLAN_MODE_PIPELINE)]])); }
+export function newTracker(data: string): IssueTracker { return new IssueTracker(data, new Map([['plan-mode', PLAN_MODE_PIPELINE]])); }
 export function graphFixture(tasks = [task('a'), task('b'), task('c', ['a', 'b'])]) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), '中文 DAG 仓库 '));
   const repo = path.join(directory, 'repo');

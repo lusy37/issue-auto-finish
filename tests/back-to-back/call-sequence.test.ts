@@ -183,12 +183,10 @@ describe('Back-to-Back: tracker state update sequences', () => {
     expect(callLog).toMatchSnapshot();
   });
 
-  it('pipeline lifecycle manager phase order', () => {
+  it('pipeline phase order does not carry lifecycle state mappings', () => {
     const phaseOrder = PLAN_MODE_PIPELINE.phases.map(p => ({
       name: p.name,
       kind: p.kind,
-      startState: p.startState,
-      doneState: 'doneState' in p ? p.doneState : undefined,
     }));
     expect(phaseOrder).toMatchSnapshot();
   });

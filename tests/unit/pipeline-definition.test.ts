@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   resolvePipelineMode,
   getPipelineDef,
-  createLifecycleManager,
   registerPipeline,
   getRegisteredModes,
   getAllPipelineDefs,
@@ -12,6 +11,7 @@ import {
 } from '../../src/pipeline/PipelineMetadata.js';
 import { IssueState } from '../../src/tracker/IssueState.js';
 import { getPlanModePhases } from '../../src/orchestration/Phases.js';
+import { collectLegacyStateLabels, projectLegacyPhaseStatuses } from '../../src/pipeline/PipelineProjection.js';
 
 describe('PipelineDefinition', () => {
   beforeEach(() => {
@@ -39,8 +39,7 @@ describe('PipelineDefinition', () => {
       registerPipeline({
         mode: 'custom',
         phases: [
-          { name: 'test', label: 'Test', startState: IssueState.PhaseRunning,
-            doneState: IssueState.Completed, kind: 'ai' },
+          { name: 'test', label: 'Test', kind: 'ai' },
         ],
       });
       expect(resolvePipelineMode('custom')).toBe('custom');
@@ -62,8 +61,7 @@ describe('PipelineDefinition', () => {
       const customDef = {
         mode: 'custom-test',
         phases: [
-          { name: 'my-phase', label: 'My Phase', startState: IssueState.PhaseRunning,
-            doneState: IssueState.Completed, kind: 'ai' as const },
+          { name: 'my-phase', label: 'My Phase', kind: 'ai' as const },
         ],
       };
       registerPipeline(customDef);
@@ -75,8 +73,7 @@ describe('PipelineDefinition', () => {
       const def2 = {
         mode: 'overwrite-test',
         phases: [
-          { name: 'x', label: 'X', startState: IssueState.PhaseRunning,
-            doneState: IssueState.Completed, kind: 'ai' as const },
+          { name: 'x', label: 'X', kind: 'ai' as const },
         ],
       };
       registerPipeline(def1);
@@ -119,10 +116,6 @@ describe('PipelineDefinition', () => {
       }))).toEqual(execution.phases.map(({ id, label, kind, artifacts, retryable, deploysPreview }) => ({
         id, label, kind, artifacts, retryable, deploysPreview,
       })));
-      expect(view.phases.at(-1)?.doneState).toBe(IssueState.Completed);
-      expect(view.phases.find(phase => phase.name === 'verify')?.doneState)
-        .toBe(e2eEnabled ? IssueState.PhaseDone : IssueState.Completed);
-
       view.phases[0].artifacts![0].label = '局部展示修改';
       expect(execution.phases[0].artifacts![0].label).toBe('实施计划');
       expect(buildPlanModePipeline({ e2eEnabled }).phases[0].artifacts![0].label).toBe('实施计划');
@@ -134,11 +127,13 @@ describe('PipelineDefinition', () => {
       expect(PLAN_MODE_PIPELINE.phases.filter(p => p.kind === 'ai')).toHaveLength(3);
     });
 
-    it('has review gate with approvedState', () => {
+    it('has review gate without a second state mapping', () => {
       const gate = PLAN_MODE_PIPELINE.phases.find(p => p.kind === 'gate');
       expect(gate).toBeDefined();
       expect(gate!.name).toBe('review');
-      expect(gate!.approvedState).toBe(IssueState.PhaseApproved);
+      expect(gate).not.toHaveProperty('approvedState');
+      expect(gate).not.toHaveProperty('startState');
+      expect(gate).not.toHaveProperty('doneState');
     });
 
     it('has correct phase names', () => {
@@ -150,36 +145,35 @@ describe('PipelineDefinition', () => {
 
   describe('collectStateLabels', () => {
     it('includes Pending and Failed for plan-mode pipeline', () => {
-      const labels = createLifecycleManager(PLAN_MODE_PIPELINE).collectStateLabels();
+      const labels = collectLegacyStateLabels(PLAN_MODE_PIPELINE);
       expect(labels.get(IssueState.Pending)).toBe('待处理');
       expect(labels.get(IssueState.Failed)).toBe('失败');
       expect(labels.get(IssueState.Completed)).toBe('已完成');
     });
 
     it('generates labels from phase definitions', () => {
-      const labels = createLifecycleManager(PLAN_MODE_PIPELINE).collectStateLabels();
+      const labels = collectLegacyStateLabels(PLAN_MODE_PIPELINE);
       expect(labels.get('phase_running:plan')).toBe('规划中');
       expect(labels.get('phase_done:plan')).toBe('规划完成');
     });
 
-    it('includes approvedState label for plan-mode', () => {
-      const labels = createLifecycleManager(PLAN_MODE_PIPELINE).collectStateLabels();
+    it('includes review approved compatibility label for plan-mode', () => {
+      const labels = collectLegacyStateLabels(PLAN_MODE_PIPELINE);
       expect(labels.get('phase_approved:review')).toBe('审核通过');
     });
   });
 
   describe('derivePhaseStatuses', () => {
     it('marks current phase as in_progress', () => {
-      const lm = createLifecycleManager(PLAN_MODE_PIPELINE);
-      const statuses = lm.derivePhaseStatuses(IssueState.PhaseRunning, 'build');
+      const statuses = projectLegacyPhaseStatuses(PLAN_MODE_PIPELINE, IssueState.PhaseRunning, 'build');
       expect(statuses.plan).toBe('completed');
       expect(statuses.review).toBe('completed');
       expect(statuses.build).toBe('in_progress');
       expect(statuses.verify).toBe('pending');
     });
 
-    it('marks all phases as completed when state is Completed (last phase doneState)', () => {
-      const statuses = createLifecycleManager(PLAN_MODE_PIPELINE).derivePhaseStatuses(IssueState.Completed);
+    it('marks all phases as completed when state is Completed', () => {
+      const statuses = projectLegacyPhaseStatuses(PLAN_MODE_PIPELINE, IssueState.Completed);
       expect(statuses.plan).toBe('completed');
       expect(statuses.review).toBe('completed');
       expect(statuses.build).toBe('completed');
@@ -187,8 +181,7 @@ describe('PipelineDefinition', () => {
     });
 
     it('handles plan-mode gate phase', () => {
-      const lm = createLifecycleManager(PLAN_MODE_PIPELINE);
-      const statuses = lm.derivePhaseStatuses(IssueState.PhaseRunning, 'build');
+      const statuses = projectLegacyPhaseStatuses(PLAN_MODE_PIPELINE, IssueState.PhaseRunning, 'build');
       expect(statuses.plan).toBe('completed');
       expect(statuses.review).toBe('completed');
       expect(statuses.build).toBe('in_progress');

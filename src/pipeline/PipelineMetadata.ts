@@ -1,5 +1,3 @@
-import { IssueState } from '../tracker/IssueState.js';
-import { ActionLifecycleManager } from '../lifecycle/ActionLifecycleManager.js';
 import { PipelineNotFoundError } from '../errors/index.js';
 import { t } from '../i18n/index.js';
 import { getPlanModePhases } from '../orchestration/Phases.js';
@@ -10,10 +8,7 @@ export type KnownPipelineMode = 'plan-mode';
 export interface PhaseSpec {
   name: string;
   label: string;
-  startState: IssueState;
-  doneState: IssueState;
   kind: 'ai' | 'gate';
-  approvedState?: IssueState;
   /** 此阶段是否可被用户单独重试。默认：kind === 'ai' */
   retryable?: boolean;
   /** 此阶段完成后是否应启动预览服务器。默认：false */
@@ -82,16 +77,11 @@ pipelineRegistry.set(PLAN_MODE_PIPELINE.mode, PLAN_MODE_PIPELINE);
  */
 export function buildPlanModePipeline(opts: { e2eEnabled: boolean }): PipelineDef {
   const specs = getPlanModePhases(opts.e2eEnabled);
-  // 状态字段只在任务展示与生命周期层派生，阶段内容统一由编排核心提供。
-  const phases: PhaseSpec[] = specs.map((spec, index) => ({
+  // 阶段内容统一由编排核心提供，不再附带另一套 IssueState 映射。
+  const phases: PhaseSpec[] = specs.map(spec => ({
     name: spec.id,
     label: spec.label,
     kind: spec.kind,
-    startState: spec.kind === 'gate' ? IssueState.PhaseWaiting : IssueState.PhaseRunning,
-    doneState: spec.kind === 'gate'
-      ? IssueState.PhaseApproved
-      : index === specs.length - 1 ? IssueState.Completed : IssueState.PhaseDone,
-    ...(spec.kind === 'gate' ? { approvedState: IssueState.PhaseApproved } : {}),
     ...(spec.retryable !== undefined ? { retryable: spec.retryable } : {}),
     ...(spec.deploysPreview !== undefined ? { deploysPreview: spec.deploysPreview } : {}),
     ...(spec.artifacts ? { artifacts: spec.artifacts.map(artifact => ({ ...artifact })) } : {}),
@@ -114,13 +104,6 @@ export function getPipelineDef(mode: PipelineMode): PipelineDef {
     throw new PipelineNotFoundError(mode);
   }
   return def;
-}
-
-/**
- * 从 PipelineDef 创建 ActionLifecycleManager 实例。
- */
-export function createLifecycleManager(def: PipelineDef): ActionLifecycleManager {
-  return new ActionLifecycleManager(def);
 }
 
 export function getPhaseLabel(phaseName: string): string {

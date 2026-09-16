@@ -20,9 +20,16 @@ import { IssueService } from '../../orchestrator/IssueService.js';
 import { GitOperations } from '../../git/GitOperations.js';
 import { GitHubClient } from '../../clients/GitHubClient.js';
 import { SupplementStore } from '../../supplement/SupplementStore.js';
-import { buildPlanModePipeline, getPipelineDef, getAllPipelineDefs, createLifecycleManager } from '../../pipeline/PipelineMetadata.js';
+import { buildPlanModePipeline, getPipelineDef, getAllPipelineDefs } from '../../pipeline/PipelineMetadata.js';
 import type { PipelineDef } from '../../pipeline/PipelineMetadata.js';
-import { ActionLifecycleManager } from '../../lifecycle/ActionLifecycleManager.js';
+import {
+  collectLegacyStateLabels,
+  collectPipelineArtifacts,
+  getGatePhase,
+  getRetryablePhases,
+  projectLegacyPhaseStatuses,
+  projectLegacyStateAction,
+} from '../../pipeline/PipelineProjection.js';
 import { eventBus, EventPayload } from '../../events/EventBus.js';
 import { GateActionError } from '../../orchestration/index.js';
 import { getNoteSyncEnabled, setNoteSyncOverride } from '../../notesync/NoteSyncSettings.js';
@@ -104,28 +111,27 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
   router.get('/api/pipeline-meta', (_req: Request, res: Response) => {
     const allDefs = getAllPipelineDefs();
-    const allLMs = allDefs.map(def => ({ def, lm: createLifecycleManager(def) }));
 
     const modes: Record<string, unknown> = {};
     const phaseStatuses: Record<string, Record<string, Record<string, string>>> = {};
-    for (const { def, lm } of allLMs) {
+    for (const def of allDefs) {
       modes[def.mode] = {
         phases: def.phases.map(p => ({ name: p.name, label: p.label, kind: p.kind })),
-        artifacts: lm.collectArtifacts().map(a => ({
+        artifacts: collectPipelineArtifacts(def).map(a => ({
           filename: a.filename, label: a.label, editable: a.editable,
         })),
-        retryablePhases: lm.getRetryablePhases(),
+        retryablePhases: getRetryablePhases(def),
       };
-      phaseStatuses[def.mode] = buildPhaseStatusMap(def, lm);
+      phaseStatuses[def.mode] = buildPhaseStatusMap(def);
     }
 
     res.json({
       modes,
       stateLabels: Object.fromEntries(new Map(
-        allLMs.flatMap(({ lm }) => [...lm.collectStateLabels()]),
+        allDefs.flatMap(def => [...collectLegacyStateLabels(def)]),
       )),
       phaseStatuses,
-      stateCategories: buildStateCategoryMap(allLMs.map(({ lm }) => lm)),
+      stateCategories: buildStateCategoryMap(),
     });
   });
 
@@ -168,7 +174,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   }
 
   function getIssuePlanDocs(number: number, record: IssueRecord | undefined = tracker.get(number)) {
-    return createLifecycleManager(getIssuePipelineDef(number, record)).collectArtifacts()
+    return collectPipelineArtifacts(getIssuePipelineDef(number, record))
       .map(artifact => ({ file: artifact.filename, label: artifact.label }));
   }
 
@@ -176,9 +182,8 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     const number = parseInt(req.params.number, 10);
     const filename = req.params.filename;
     const def = getIssuePipelineDef(number);
-    const lm = createLifecycleManager(def);
     const allowed = [
-      ...lm.collectArtifacts().map(f => f.filename),
+      ...collectPipelineArtifacts(def).map(f => f.filename),
       'progress.json', 'issue-meta.json',
     ];
     if (!allowed.includes(filename)) {
@@ -274,8 +279,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     const number = parseInt(req.params.number, 10);
     const { phase } = req.body as { phase?: string };
     const def = getIssuePipelineDef(number);
-    const lm = createLifecycleManager(def);
-    const validPhases = lm.getRetryablePhases();
+    const validPhases = getRetryablePhases(def);
     if (!phase || !validPhases.includes(phase)) {
       res.status(400).json({ error: `Invalid phase. Must be one of: ${validPhases.join(', ')}` });
       return;
@@ -336,8 +340,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     const filename = req.params.filename;
     if (filename === '01-plan.md') { res.status(403).json({ error: '计划由结构化版本生成，只能通过审核反馈重新规划' }); return; }
     const def = getIssuePipelineDef(number);
-    const lm = createLifecycleManager(def);
-    const editableFiles = lm.collectArtifacts().filter(f => f.editable).map(f => f.filename);
+    const editableFiles = collectPipelineArtifacts(def).filter(f => f.editable).map(f => f.filename);
     if (!editableFiles.includes(filename)) {
       res.status(400).json({ error: `File not editable. Allowed: ${editableFiles.join(', ')}` });
       return;
@@ -521,8 +524,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
     // 审核入口只处理当前流水线的审核阶段，避免覆盖其他阶段。
     const def = getIssuePipelineDef(number);
-    const lm = createLifecycleManager(def);
-    const gateSpec = lm.getGatePhase();
+    const gateSpec = getGatePhase(def);
     if (!gateSpec) {
       res.status(400).json({ error: 'Pipeline has no gate phase' });
       return;
@@ -574,8 +576,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
     // 抛 GateActionError('reject-not-allowed')，这里翻译为 409。
     const def = getIssuePipelineDef(number);
-    const lm = createLifecycleManager(def);
-    const gateSpec = lm.getGatePhase();
+    const gateSpec = getGatePhase(def);
     if (!gateSpec) {
       res.status(400).json({ error: 'Pipeline has no gate phase' });
       return;
@@ -620,8 +621,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     }
     // skip-review 与 approve-plan 等价（都是把 gate 标记为通过），同样严格校验 currentPhase。
     const def = getIssuePipelineDef(number);
-    const lm = createLifecycleManager(def);
-    const gateSpec = lm.getGatePhase();
+    const gateSpec = getGatePhase(def);
     if (!gateSpec) {
       res.status(400).json({ error: 'Pipeline has no gate phase' });
       return;
@@ -928,8 +928,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     const title = record ? getTitle(record) : `Issue #${number}`;
 
     const def = getIssuePipelineDef(number);
-    const lm = createLifecycleManager(def);
-    const allowed = lm.collectArtifacts().map(f => f.filename);
+    const allowed = collectPipelineArtifacts(def).map(f => f.filename);
     if (!allowed.includes(filename)) {
       res.status(400).type('html').send(renderDocPage(number, title, t('api.invalidFilename'), filename));
       return;
@@ -1060,79 +1059,25 @@ async function readProgress(
   }
 }
 
-/**
- * 遍历所有 IssueState，调用 lm.derivePhaseStatuses 生成 { state → { phase → status } } 映射。
- * 为通用状态 PhaseRunning/PhaseDone，生成每个阶段的复合 key 条目。
- */
-function buildPhaseStatusMap(
-  def: PipelineDef,
-  lm: ActionLifecycleManager,
-): Record<string, Record<string, string>> {
+/** 为 v3 前端生成旧枚举对应的只读阶段展示映射。 */
+function buildPhaseStatusMap(def: PipelineDef): Record<string, Record<string, string>> {
   const result: Record<string, Record<string, string>> = {};
   for (const state of Object.values(IssueState)) {
-    result[state] = lm.derivePhaseStatuses(state);
+    result[state] = projectLegacyPhaseStatuses(def, state);
   }
-  // Generate composite key entries for generic PhaseRunning/PhaseDone per phase
   for (const phase of def.phases) {
-    if (phase.startState === IssueState.PhaseRunning) {
-      const compositeKey = `phase_running:${phase.name}`;
-      result[compositeKey] = lm.derivePhaseStatuses(IssueState.PhaseRunning, phase.name);
-    }
-    if (phase.doneState === IssueState.PhaseDone) {
-      const compositeKey = `phase_done:${phase.name}`;
-      result[compositeKey] = lm.derivePhaseStatuses(IssueState.PhaseDone, phase.name);
-    }
-    // Generate composite key entries for generic PhaseWaiting/PhaseApproved per phase
-    if (phase.startState === IssueState.PhaseWaiting) {
-      const compositeKey = `phase_waiting:${phase.name}`;
-      result[compositeKey] = lm.derivePhaseStatuses(IssueState.PhaseWaiting, phase.name);
-    }
-    if (phase.doneState === IssueState.PhaseApproved) {
-      const compositeKey = `phase_approved:${phase.name}`;
-      result[compositeKey] = lm.derivePhaseStatuses(IssueState.PhaseApproved, phase.name);
-    }
-    // Generate composite key entries for Failed per phase
-    {
-      const failedKey = `failed:${phase.name}`;
-      result[failedKey] = lm.derivePhaseStatuses(IssueState.Failed, phase.name);
-    }
-    // Generate composite key entries for Paused per phase
-    {
-      const pausedKey = `paused:${phase.name}`;
-      result[pausedKey] = lm.derivePhaseStatuses(IssueState.Paused, phase.name);
-    }
+    const activeState = phase.kind === 'gate' ? IssueState.PhaseWaiting : IssueState.PhaseRunning;
+    const doneState = phase.kind === 'gate' ? IssueState.PhaseApproved : IssueState.PhaseDone;
+    result[`${activeState}:${phase.name}`] = projectLegacyPhaseStatuses(def, activeState, phase.name);
+    result[`${doneState}:${phase.name}`] = projectLegacyPhaseStatuses(def, doneState, phase.name);
+    result[`failed:${phase.name}`] = projectLegacyPhaseStatuses(def, IssueState.Failed, phase.name);
+    result[`paused:${phase.name}`] = projectLegacyPhaseStatuses(def, IssueState.Paused, phase.name);
   }
   return result;
 }
 
-/**
- * 合并所有模式的状态分类映射：{ state → ActionStatus }。
- */
-function buildStateCategoryMap(
-  lifecycleManagers: ActionLifecycleManager[],
-): Record<string, string> {
-  const result: Record<string, string> = {};
-  const [first, ...rest] = lifecycleManagers;
-  if (!first) return result;
-  for (const state of Object.values(IssueState)) {
-    const resolved = first.resolve(state);
-    // 如果第一个 LM 映射不到具体阶段（fallback to idle），尝试其余 LM
-    if (resolved.action === 'init' && resolved.status === 'idle' && state !== IssueState.Pending) {
-      let found = false;
-      for (const lm of rest) {
-        const altResolved = lm.resolve(state);
-        if (altResolved.action !== 'init' || altResolved.status !== 'idle') {
-          result[state] = altResolved.status;
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        result[state] = resolved.status;
-      }
-    } else {
-      result[state] = resolved.status;
-    }
-  }
-  return result;
+function buildStateCategoryMap(): Record<string, string> {
+  return Object.fromEntries(
+    Object.values(IssueState).map(state => [state, projectLegacyStateAction(state).status]),
+  );
 }

@@ -18,7 +18,8 @@ import { isNoteSyncEnabledForIssue } from '../notesync/NoteSyncSettings.js';
 import type { WorktreeContext } from '../git/WorktreeContext.js';
 import { getLocalIP } from '../utils/network.js';
 import type { PhaseContext } from '../phases/BasePhase.js';
-import { resolvePipelineMode, getPipelineDef, buildPlanModePipeline, registerPipeline, createLifecycleManager, PipelineDef } from '../pipeline/PipelineMetadata.js';
+import { resolvePipelineMode, getPipelineDef, buildPlanModePipeline, registerPipeline, PipelineDef } from '../pipeline/PipelineMetadata.js';
+import { isRetryablePhase } from '../pipeline/PipelineProjection.js';
 import { SupplementStore } from '../supplement/SupplementStore.js';
 import { githubIssueToDemandSpec } from '../demand/adapters/GitHubAdapter.js';
 import { getIssueNumber } from '../tracker/IssueRecordHelper.js';
@@ -419,8 +420,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
 
     if (phase === 'plan' && Object.values(record.run!.tasks).some(task => task.attemptNo > 0)) throw new Error('已有合并结果，请使用完整重做来重新规划');
     const issueDef = this.getIssueSpecificPipelineDef(issueIid);
-    const issueLM = createLifecycleManager(issueDef);
-    if (!issueLM.isRetryable(phase)) {
+    if (!isRetryablePhase(issueDef, phase)) {
       throw new InvalidPhaseError(phase);
     }
 

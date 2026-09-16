@@ -5,7 +5,7 @@ import { runProcess } from '../../src/utils/process.js';
 import { envSchema, transformEnvToConfig } from '../../src/config-schema.js';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
 import { IssueState } from '../../src/tracker/IssueState.js';
-import { buildPlanModePipeline, createLifecycleManager } from '../../src/pipeline/PipelineMetadata.js';
+import { buildPlanModePipeline } from '../../src/pipeline/PipelineMetadata.js';
 import { IssueService } from '../../src/orchestrator/IssueService.js';
 import { GitOperations } from '../../src/git/GitOperations.js';
 import { GitHubClient, type GitHubPullRequest } from '../../src/clients/GitHubClient.js';
@@ -34,7 +34,7 @@ it('无浏览器配置的仓库关闭 E2E 后，经审核重启仍可完成 veri
   await git(repo, 'remote', 'add', 'origin', origin); await git(repo, 'push', '-u', 'origin', 'main');
   const config = transformEnvToConfig(envSchema.parse({ GITHUB_TOKEN: 'mock', GITHUB_REPOSITORY: 'test/project', PROJECT_WORK_DIR: repo, BASE_BRANCH: 'main', WORKTREE_BASE_DIR: path.join(directory, 'worktrees'), E2E_UI_ENABLED: 'false', PREVIEW_ENABLED: 'false', ISSUE_NOTE_SYNC_ENABLED: 'false' }), directory);
   const definition = buildPlanModePipeline({ e2eEnabled: false });
-  const managers = new Map([[definition.mode, createLifecycleManager(definition)]]);
+  const managers = new Map([[definition.mode, definition]]);
   const tracker = new IssueTracker(process.env.DATA_DIR!, managers);
   const platform = new GitHubClient(config.github);
   const issue = createTestIssue({ number: 1, title: '实现计算函数', labels: ['auto-finish'] });

@@ -9,7 +9,6 @@ import { IssueTracker } from "../../src/tracker/IssueTracker.js";
 import { IssueState } from "../../src/tracker/IssueState.js";
 import {
   buildPlanModePipeline,
-  createLifecycleManager,
   registerPipeline,
 } from "../../src/pipeline/PipelineMetadata.js";
 import { IssueService } from "../../src/orchestrator/IssueService.js";
@@ -99,7 +98,7 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
     registerPipeline(pipeline);
     const tracker = new IssueTracker(
       process.env.DATA_DIR!,
-      new Map([[pipeline.mode, createLifecycleManager(pipeline)]]),
+      new Map([[pipeline.mode, pipeline]]),
     );
     const issue: GitHubIssue = {
       id: 101,
@@ -237,7 +236,7 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
       ).toHaveLength(1);
       const reloaded = new IssueTracker(
         process.env.DATA_DIR!,
-        new Map([[pipeline.mode, createLifecycleManager(pipeline)]]),
+        new Map([[pipeline.mode, pipeline]]),
       );
       expect(summarizeTasks(reloaded.getAll(), "all")).toEqual(
         summarizeTasks(tracker.getAll(), "all"),

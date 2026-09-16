@@ -5,9 +5,9 @@ import os from 'node:os';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
 import { IssueState } from '../../src/tracker/IssueState.js';
 import { getIssueNumber } from '../../src/tracker/IssueRecordHelper.js';
-import { PLAN_MODE_PIPELINE, createLifecycleManager } from '../../src/pipeline/PipelineMetadata.js';
+import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 
-const planModeLM = createLifecycleManager(PLAN_MODE_PIPELINE);
+const planModeLM = PLAN_MODE_PIPELINE;
 
 function createTracker(dir: string) {
   return new IssueTracker(dir, new Map([['plan-mode', planModeLM]]));

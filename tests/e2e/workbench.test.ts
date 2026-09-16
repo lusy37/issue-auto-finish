@@ -10,7 +10,6 @@ import { IssueTracker } from "../../src/tracker/IssueTracker.js";
 import {
   buildPlanModePipeline,
   registerPipeline,
-  createLifecycleManager,
 } from "../../src/pipeline/PipelineMetadata.js";
 import { IssueService } from "../../src/orchestrator/IssueService.js";
 import { GitHubClient } from "../../src/clients/GitHubClient.js";
@@ -50,7 +49,7 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
   registerPipeline(pipeline);
   const tracker = new IssueTracker(
     process.env.DATA_DIR!,
-    new Map([[pipeline.mode, createLifecycleManager(pipeline)]]),
+    new Map([[pipeline.mode, pipeline]]),
   );
   tracker.create({
     state: IssueState.PhaseWaiting,

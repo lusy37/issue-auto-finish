@@ -6,18 +6,22 @@ import {
   type UnifiedTaskStatus,
 } from '../../src/tracker/ExecutableTask.js';
 import { IssueState, type IssueRecord } from '../../src/tracker/IssueState.js';
-import { PLAN_MODE_PIPELINE, createLifecycleManager } from '../../src/pipeline/PipelineMetadata.js';
+import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
+import { newIssueRun } from '../../src/dag/contracts.js';
 
-const planModeLM = createLifecycleManager(PLAN_MODE_PIPELINE);
+const planModeDef = PLAN_MODE_PIPELINE;
 
 function makeIssueRecord(overrides?: Partial<IssueRecord>): IssueRecord {
   const now = new Date().toISOString();
   return {
+    lifecycle: { kind: 'pending' },
     state: IssueState.Pending,
+    orchestrationState: { kind: 'queued' },
     branchName: 'feat/issue-1',
     attempts: 0,
     createdAt: now,
     updatedAt: now,
+    run: newIssueRun(),
     demandSpec: {
       demandId: 'gh-1',
       sourceRef: { source: 'github-issue', externalId: '100', displayId: '1' },
@@ -66,7 +70,7 @@ describe('issueStateToUnified', () => {
 describe('issueToExecutableTask', () => {
   it('projects a pending IssueRecord correctly', () => {
     const record = makeIssueRecord();
-    const task = issueToExecutableTask(record, planModeLM);
+    const task = issueToExecutableTask(record, planModeDef);
 
     expect(task.kind).toBe('issue');
     expect(task.taskId).toBe('1');
@@ -81,16 +85,16 @@ describe('issueToExecutableTask', () => {
   });
 
   it('projects a running IssueRecord correctly', () => {
-    const record = makeIssueRecord({ state: IssueState.PhaseRunning, currentPhase: 'plan' });
-    const task = issueToExecutableTask(record, planModeLM);
+    const record = makeIssueRecord({ lifecycle: { kind: 'running', phase: 'plan' }, state: IssueState.PhaseRunning, currentPhase: 'plan' });
+    const task = issueToExecutableTask(record, planModeDef);
     expect(task.status).toBe('running');
     expect(task.sourceState).toBe(IssueState.PhaseRunning);
     expect(task.stateCategory).toBe('active');
   });
 
   it('projects a completed IssueRecord correctly', () => {
-    const record = makeIssueRecord({ state: IssueState.Completed });
-    const task = issueToExecutableTask(record, planModeLM);
+    const record = makeIssueRecord({ lifecycle: { kind: 'completed' }, state: IssueState.Completed });
+    const task = issueToExecutableTask(record, planModeDef);
     expect(task.status).toBe('completed');
     expect(task.sourceState).toBe(IssueState.Completed);
     expect(task.stateCategory).toBe('completed');
@@ -99,10 +103,11 @@ describe('issueToExecutableTask', () => {
   it('projects a failed IssueRecord correctly', () => {
     const record = makeIssueRecord({
       state: IssueState.Failed,
+      lifecycle: { kind: 'failed', phase: 'plan', retry: 'auto', error: { message: 'some error', retryable: 'hard' } },
       attempts: 2,
       lastError: 'some error',
     });
-    const task = issueToExecutableTask(record, planModeLM);
+    const task = issueToExecutableTask(record, planModeDef);
     expect(task.status).toBe('failed');
     expect(task.attempts).toBe(2);
     expect(task.lastError).toBe('some error');
@@ -111,8 +116,8 @@ describe('issueToExecutableTask', () => {
   });
 
   it('projects a skipped IssueRecord correctly', () => {
-    const record = makeIssueRecord({ state: IssueState.Skipped });
-    const task = issueToExecutableTask(record, planModeLM);
+    const record = makeIssueRecord({ lifecycle: { kind: 'skipped' }, state: IssueState.Skipped });
+    const task = issueToExecutableTask(record, planModeDef);
     expect(task.stateCategory).toBe('skipped');
   });
 });
@@ -130,22 +135,22 @@ describe('UnifiedTaskStatus completeness', () => {
 
 describe('issueStateCategory', () => {
   it('returns active for running states', () => {
-    const record = makeIssueRecord({ state: IssueState.PhaseRunning, currentPhase: 'plan' });
-    expect(issueStateCategory(record, planModeLM)).toBe('active');
+    const record = makeIssueRecord({ lifecycle: { kind: 'running', phase: 'plan' }, state: IssueState.PhaseRunning, currentPhase: 'plan' });
+    expect(issueStateCategory(record)).toBe('active');
   });
 
   it('returns completed for completed state', () => {
-    const record = makeIssueRecord({ state: IssueState.Completed });
-    expect(issueStateCategory(record, planModeLM)).toBe('completed');
+    const record = makeIssueRecord({ lifecycle: { kind: 'completed' }, state: IssueState.Completed });
+    expect(issueStateCategory(record)).toBe('completed');
   });
 
   it('returns failed for failed state', () => {
-    const record = makeIssueRecord({ state: IssueState.Failed });
-    expect(issueStateCategory(record, planModeLM)).toBe('failed');
+    const record = makeIssueRecord({ lifecycle: { kind: 'failed', retry: 'manual', error: { message: 'error', retryable: 'hard-no-auto' } }, state: IssueState.Failed });
+    expect(issueStateCategory(record)).toBe('failed');
   });
 
   it('returns skipped for skipped state', () => {
-    const record = makeIssueRecord({ state: IssueState.Skipped });
-    expect(issueStateCategory(record, planModeLM)).toBe('skipped');
+    const record = makeIssueRecord({ lifecycle: { kind: 'skipped' }, state: IssueState.Skipped });
+    expect(issueStateCategory(record)).toBe('skipped');
   });
 });
