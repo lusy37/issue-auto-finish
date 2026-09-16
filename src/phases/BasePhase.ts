@@ -12,6 +12,7 @@ import type { DemandSpec } from '../demand/DemandSpec.js';
 import type { WorkspaceLayout } from '../prompts/templates.js';
 import type { PhaseCallbacks } from './PhaseCallbacks.js';
 import type { PhaseResult, PhaseError, ArtifactRef } from '../orchestration/PhaseResult.js';
+import type { IssueTracker } from '../tracker/IssueTracker.js';
 import { logger as rootLogger, Logger } from '../logger.js';
 import { t } from '../i18n/index.js';
 
@@ -45,9 +46,9 @@ export interface PhaseContext {
  *
  * 阶段约定：
  * - run() 返回 PhaseResult（completed / failed / awaitGate / awaitAsync / requestRetryFrom）。
- * - 阶段内部不直接调用 tracker / eventBus / git commit / GitHub评论，
+ * - 阶段内部不推进生命周期，也不触发 eventBus / git commit / GitHub 评论；
  *   这些副作用由编排器根据返回的 Intent 驱动。
- * - 阶段可以读写自己的产物文件（plan.writeFile）和会话 ID（plan.updatePhaseSessionId）。
+ * - 阶段只通过 PlanPersistence 读写产物；执行会话凭证由 IssueTracker 持久化。
  *
  * 失败 → Intent 映射：
  * - 产物校验失败（无变更/缺产物）→ retryable='hard-no-auto'（自动重试无意义，需用户介入）
@@ -62,6 +63,7 @@ export abstract class BasePhase {
   protected git: GitOperations;
   protected plan: PlanPersistence;
   protected config: Config;
+  protected tracker?: IssueTracker;
   protected logger: Logger;
   private lastStreamSummary?: {
     eventTypeCounts: Map<string, number>;
@@ -75,11 +77,13 @@ export abstract class BasePhase {
     git: GitOperations,
     plan: PlanPersistence,
     config: Config,
+    tracker?: IssueTracker,
   ) {
     this.aiRunner = aiRunner;
     this.git = git;
     this.plan = plan;
     this.config = config;
+    this.tracker = tracker;
     this.logger = rootLogger.child(this.constructor.name);
   }
 
@@ -107,7 +111,7 @@ export abstract class BasePhase {
     const rules = await this.resolveRules(ctx);
     if (rules) prompt += `\n\n${t('basePhase.rulesSection', { rules })}`;
 
-    const resumeInfo = this.resolveResumeInfo();
+    const resumeInfo = this.resolveResumeInfo(displayId);
     let result: RunResult;
 
     if (resumeInfo.resumable) {
@@ -122,17 +126,17 @@ export abstract class BasePhase {
       );
     } else {
       result = await this.runAI(
-        prompt, undefined, callbacks?.onStreamEvent,
+        displayId, prompt, undefined, callbacks?.onStreamEvent,
       );
     }
 
     if (!result.success) {
-      this.persistSessionId(result.sessionId);
+      this.persistSessionId(displayId, result.sessionId);
       const error = this.classifyFailure(result);
       return { kind: 'failed', error, sessionId: result.sessionId };
     }
 
-    this.persistSessionId(result.sessionId);
+    this.persistSessionId(displayId, result.sessionId);
     if (this.phaseName === 'plan') {
       if (result.output.trim().length < BasePhase.MIN_ARTIFACT_BYTES) return { kind: 'failed', error: { message: '计划内容为空或不完整', retryable: 'hard-no-auto' } };
       try { this.plan.writePlan(renderPlan(validatePlan(JSON.parse(result.output.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1] ?? result.output)))); }
@@ -168,14 +172,13 @@ export abstract class BasePhase {
     return t('basePhase.resumePrompt');
   }
 
-  protected resolveResumeInfo(): { resumable: boolean; sessionId?: string } {
-
-    const previousSessionId = this.plan.getPhaseSessionId(this.phaseName);
+  protected resolveResumeInfo(issueIid: number): { resumable: boolean; sessionId?: string } {
+    const progress = this.tracker?.getPhaseProgress(issueIid, this.phaseName);
+    const previousSessionId = progress?.sessionId;
     if (!previousSessionId || this.aiRunner.canResumeSession?.(previousSessionId) === false) {
       return { resumable: false };
     }
-    const progress = this.plan.readProgress();
-    const phaseStatus = progress?.phases[this.phaseName]?.status;
+    const phaseStatus = progress?.status;
     if (phaseStatus !== 'failed' && phaseStatus !== 'in_progress') {
       return { resumable: false };
     }
@@ -183,6 +186,7 @@ export abstract class BasePhase {
   }
 
   protected async runAI(
+    issueIid: number,
     prompt: string,
     options?: { sessionId?: string; continueSession?: boolean },
     onStreamEvent?: (event: StreamEvent) => void,
@@ -208,14 +212,14 @@ export abstract class BasePhase {
           const id = event.sessionId ?? content?.session_id;
           if (typeof id === 'string' && id) {
             capturedSessionId = id;
-            this.persistSessionId(capturedSessionId);
+            this.persistSessionId(issueIid, capturedSessionId);
           }
         }
         onStreamEvent?.(event);
       },
     });
     if (result.sessionId) {
-      this.persistSessionId(result.sessionId);
+      this.persistSessionId(issueIid, result.sessionId);
     }
     return result;
   }
@@ -227,7 +231,7 @@ export abstract class BasePhase {
     fullPrompt: string,
     onStreamEvent?: (event: StreamEvent) => void,
   ): Promise<RunResult> {
-    const result = await this.runAI(resumePrompt, {
+    const result = await this.runAI(displayId, resumePrompt, {
       sessionId,
       continueSession: true,
     }, onStreamEvent);
@@ -243,7 +247,7 @@ export abstract class BasePhase {
         content: t('basePhase.resumeFallback'),
         timestamp: new Date().toISOString(),
       });
-      return this.runAI(fullPrompt, undefined, onStreamEvent);
+      return this.runAI(displayId, fullPrompt, undefined, onStreamEvent);
     }
 
     return result;
@@ -300,10 +304,8 @@ export abstract class BasePhase {
     return false;
   }
 
-  protected persistSessionId(sessionId: string | undefined): void {
-    if (sessionId) {
-      this.plan.updatePhaseSessionId(this.phaseName, sessionId);
-    }
+  protected persistSessionId(issueIid: number, sessionId: string | undefined): void {
+    if (sessionId) this.tracker?.updatePhaseProgress(issueIid, this.phaseName, { sessionId });
   }
 
   protected toArtifactRefs(files: ReadonlyArray<{ filename: string; label: string }>): readonly ArtifactRef[] {

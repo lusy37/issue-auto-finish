@@ -64,8 +64,8 @@ export class PlanPhase extends BasePhase {
    * (此时 buildPrompt 返回的 rePlanPrompt 已经在 deterministicCopy 路径注入
    *  `<rejected-plan>` 全文,功能正确性不依赖 resume)。
    */
-  protected resolveResumeInfo(): { resumable: boolean; sessionId?: string } {
-    const standard = super.resolveResumeInfo();
+  protected resolveResumeInfo(issueIid: number): { resumable: boolean; sessionId?: string } {
+    const standard = super.resolveResumeInfo(issueIid);
     if (standard.resumable) return standard;
 
     if (!supportsPlanModeResume(this.config.ai.mode)) {

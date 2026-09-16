@@ -9,9 +9,9 @@ import { DiaryCollector } from '../../../src/distill/DiaryCollector.js';
 import type { DiaryStore } from '../../../src/distill/DiaryStore.js';
 import type { IssueTracker } from '../../../src/tracker/IssueTracker.js';
 import type { PlanPersistence, ReviewRound } from '../../../src/persistence/PlanPersistence.js';
-import { IssueState } from '../../../src/tracker/IssueState.js';
+import { IssueState, type PhaseProgress } from '../../../src/tracker/IssueState.js';
 
-function makeMockTracker(): IssueTracker {
+function makeMockTracker(phaseProgress?: Record<string, PhaseProgress>): IssueTracker {
   return {
     get: vi.fn().mockReturnValue({
       state: IssueState.Completed,
@@ -20,6 +20,7 @@ function makeMockTracker(): IssueTracker {
       branchName: 'feat/issue-42',
       pipelineMode: 'plan-mode',
       demandSpec: { title: 'Test Issue' },
+      phaseProgress,
       createdAt: '2025-01-01T00:00:00.000Z',
       updatedAt: '2025-01-01T00:30:00.000Z',
     }),
@@ -35,11 +36,9 @@ function makeMockDiaryStore(): DiaryStore {
 
 /** 构造 PlanPersistence 工厂：返回的 plan 对象只暴露 collector 用到的方法。 */
 function makePlanFactory(opts: {
-  progress?: unknown;
   reviewHistory?: ReviewRound[];
 }): (number: number) => PlanPersistence | null {
   const planMock = {
-    readProgress: vi.fn().mockReturnValue(opts.progress ?? null),
     readReviewHistory: vi.fn().mockReturnValue(opts.reviewHistory ?? []),
   };
   return () => planMock as unknown as PlanPersistence;
@@ -142,16 +141,12 @@ describe('DiaryCollector 审核驳回反馈承接', () => {
   });
 
   it('与 review-approve 共存：驳回 + 最终通过都进入介入列表', async () => {
+    tracker = makeMockTracker({
+      review: { status: 'completed', completedAt: '2025-01-01T00:20:00.000Z' },
+    });
     const collector = new DiaryCollector({
       tracker, diaryStore,
       createPlanPersistence: makePlanFactory({
-        progress: {
-          displayId: 42, title: 'Test', branchName: 'feat/issue-42',
-          currentPhase: 'verify',
-          phases: {
-            review: { status: 'completed', completedAt: '2025-01-01T00:20:00.000Z' },
-          },
-        },
         reviewHistory: [{
           round: 1, feedback: '需要补充', timestamp: '2025-01-01T00:05:00.000Z',
         }],
@@ -175,7 +170,6 @@ describe('DiaryCollector 审核驳回反馈承接', () => {
 
   it('plan.readReviewHistory 抛异常时整个采集失败返回 null（已有的 try/catch）', async () => {
     const planMock = {
-      readProgress: vi.fn().mockReturnValue(null),
       readReviewHistory: vi.fn().mockImplementation(() => { throw new Error('fs error'); }),
     };
     const collector = new DiaryCollector({

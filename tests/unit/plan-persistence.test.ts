@@ -1,4 +1,3 @@
-import { buildPlanModePipeline } from '../../src/pipeline/PipelineMetadata.js';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -28,11 +27,6 @@ describe('PlanPersistence', () => {
     it('没有仓库目录也能保存产物', () => { const plan = new PlanPersistence(path.join(tmpDir, '不存在'), 42); plan.writePlan('完整计划'); expect(plan.readFile('01-plan.md')).toBe('完整计划'); });
   });
   it('产物目录在显式 DATA_DIR 下', () => { const plan = new PlanPersistence(tmpDir, 42); plan.ensureDir(); expect(plan.planDir).toBe(path.join(process.env.DATA_DIR!, 'issues', '42', 'artifacts')); expect(fs.existsSync(plan.planDir)).toBe(true); });
-
-  it('readProgress returns null when no progress file exists', () => {
-    const plan = new PlanPersistence(tmpDir, 42);
-    expect(plan.readProgress()).toBeNull();
-  });
 
   describe('review history (multi-round feedback)', () => {
     it('readReviewHistory returns empty array when no history exists', () => {
@@ -106,23 +100,9 @@ describe('PlanPersistence', () => {
     });
   });
 
-  describe('updatePhaseProgress', () => {
-    it('returns gracefully when progress.json does not exist (no throw)', () => {
-      const plan = new PlanPersistence(tmpDir, 42);
-      // 不应抛异常，且不应创建文件
-      expect(() => plan.updatePhaseProgress('review', 'completed')).not.toThrow();
-      expect(plan.readProgress()).toBeNull();
-    });
-
-    it('updates status normally when progress.json exists', () => {
-      const plan = new PlanPersistence(tmpDir, 42);
-      const initial = plan.createInitialProgress(42, 'Test', 'feat/issue-42', buildPlanModePipeline({ e2eEnabled: true }));
-      plan.writeProgress(initial);
-
-      plan.updatePhaseProgress('plan', 'in_progress');
-      const progress = plan.readProgress();
-      expect(progress?.phases.plan.status).toBe('in_progress');
-      expect(progress?.phases.plan.startedAt).toBeTruthy();
-    });
+  it('不会生成重复的 progress.json 状态文件', () => {
+    const plan = new PlanPersistence(tmpDir, 42);
+    plan.ensureDir();
+    expect(fs.existsSync(path.join(plan.planDir, 'progress.json'))).toBe(false);
   });
 });

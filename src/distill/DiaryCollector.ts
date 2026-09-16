@@ -11,7 +11,7 @@ import { eventBus, type EventPayload } from '../events/EventBus.js';
 import { logger as rootLogger } from '../logger.js';
 import type { IssueTracker } from '../tracker/IssueTracker.js';
 import type { PlanPersistence, ReviewRound } from '../persistence/PlanPersistence.js';
-import { IssueState, type ProgressData } from '../tracker/IssueState.js';
+import { IssueState, type PhaseProgress } from '../tracker/IssueState.js';
 import type { DiaryStore } from './DiaryStore.js';
 import type { DiaryEntry, DiaryPhaseTiming, DiaryHumanIntervention } from './types.js';
 
@@ -114,9 +114,9 @@ export class DiaryCollector {
         return null;
       }
 
-      // 从 PlanPersistence 读取阶段进度和审核历史
+      // 阶段进度来自聚合状态；PlanPersistence 只负责审核产物。
       const plan = this.createPlanPersistence?.(issueIid);
-      const progress = plan?.readProgress() ?? null;
+      const progress = record.phaseProgress;
       const reviewHistory = plan?.readReviewHistory() ?? [];
 
       const executionKey = [issueIid, record.resetGeneration ?? 0, record.attempts, outcome, record.phaseHistory?.length ?? 0].join(':');
@@ -159,15 +159,15 @@ export class DiaryCollector {
   /** 构建执行计时信息 */
   private buildTiming(
     record: { createdAt: string; updatedAt: string },
-    progress: ProgressData | null,
+    progress: Record<string, PhaseProgress> | undefined,
   ): DiaryEntry['timing'] {
     const startedAt = record.createdAt;
     const finishedAt = record.updatedAt;
     const totalDurationMs = new Date(finishedAt).getTime() - new Date(startedAt).getTime();
 
     const phaseTimings: DiaryPhaseTiming[] = [];
-    if (progress?.phases) {
-      for (const [phaseName, phaseProgress] of Object.entries(progress.phases)) {
+    if (progress) {
+      for (const [phaseName, phaseProgress] of Object.entries(progress)) {
         if (phaseProgress.startedAt) {
           const endTime = phaseProgress.completedAt ?? finishedAt;
           const durationMs = new Date(endTime).getTime() - new Date(phaseProgress.startedAt).getTime();
@@ -210,7 +210,7 @@ export class DiaryCollector {
    */
   private buildInterventions(
     record: { attempts: number },
-    progress: ProgressData | null,
+    progress: Record<string, PhaseProgress> | undefined,
     reviewHistory: ReviewRound[],
   ): DiaryHumanIntervention[] {
     const interventions: DiaryHumanIntervention[] = [];
@@ -231,8 +231,8 @@ export class DiaryCollector {
       });
     }
 
-    if (progress?.phases) {
-      const reviewPhase = progress.phases['review'];
+    if (progress) {
+      const reviewPhase = progress.review;
       if (reviewPhase?.status === 'completed') {
         interventions.push({
           type: 'review-approve',

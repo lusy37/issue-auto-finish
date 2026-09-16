@@ -131,6 +131,11 @@ export class IssueTracker {
     eventBus.emitTyped('issue:stateChanged', { issueIid, state: record.state, record });
   }
 
+  /** 阶段执行器读取会话恢复信息；阶段进度的唯一持久化来源仍是 IssueRecord。 */
+  getPhaseProgress(issueIid: number, phase: string): PhaseProgress | undefined {
+    return this.get(issueIid)?.phaseProgress?.[phase];
+  }
+
   emitFailure(issueIid:number):void {
     const record=this.get(issueIid);
     if(record && readIssueLifecycle(record).kind === 'failed') eventBus.emitTyped('issue:failed',{issueIid,record,error:record.lastError,failedAtState:record.failedAtState});

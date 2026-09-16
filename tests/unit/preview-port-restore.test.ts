@@ -5,6 +5,7 @@ vi.mock('../../src/orchestrator/DagPhaseRunner.js', () => ({ DagPhaseRunner: iso
 import { isolatedPhaseRunner } from '../helpers/isolated-phase-runner.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueState } from '../../src/tracker/IssueState.js';
+import { lifecycleFromLegacyProjection } from '../../src/tracker/IssueLifecycle.js';
 import { buildPlanModePipeline } from '../../src/pipeline/PipelineMetadata.js';
 import type { IssueProcessingContext, OrchestratorDeps } from '../../src/orchestrator/IssueProcessingContext.js';
 import type { PhaseContext } from '../../src/phases/BasePhase.js';
@@ -36,18 +37,7 @@ function createMockWtPlan() {
     baseDir: '/tmp/test-worktrees/issue-42/app/test',
     ensureDir: vi.fn(),
     writeIssueMeta: vi.fn(),
-    writeProgress: vi.fn(),
-    readProgress: vi.fn().mockReturnValue(null),
     getAllPlanFiles: vi.fn().mockReturnValue([]),
-    createInitialProgress: vi.fn().mockReturnValue({
-      displayId: 42,
-      title: 'Test',
-      branchName: 'feat/issue-42',
-      currentPhase: 'uat',
-      phases: {},
-    }),
-    updatePhaseProgress: vi.fn(),
-    updatePhaseSessionId: vi.fn(),
   } as any;
 }
 
@@ -88,6 +78,12 @@ describe('Preview port restore on retry', () => {
 
   function bindTrackerToRecord(ctx: IssueProcessingContext): void {
     ctx.record.run ??= newIssueRun();
+    ctx.record.lifecycle ??= ctx.record.currentPhase
+      ? { kind: 'ready' }
+      : lifecycleFromLegacyProjection(ctx.record);
+    ctx.record.run.workflow.definition ??= {
+      phaseIds: ctx.pipelineDef.phases.map(phase => phase.name),
+    };
     ctx.record.run.workflow.entry = (ctx.record.currentPhase ?? 'plan') as any;
     mockTracker.get.mockImplementation(() => ctx.record as any);
   }

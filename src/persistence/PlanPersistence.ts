@@ -2,8 +2,6 @@ import type { IssueTracker } from '../tracker/IssueTracker.js';
 import { renderPlan } from '../dag/contracts.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import { ProgressData, PhaseProgress, type PhaseStatus } from '../tracker/IssueState.js';
-import type { PipelineDef } from '../pipeline/PipelineMetadata.js';
 import { resolveDataDir } from '../paths.js';
 import { logger as rootLogger } from '../logger.js';
 
@@ -122,35 +120,9 @@ export class PlanPersistence {
     logger.info('Issue meta written');
   }
 
-  writeProgress(data: ProgressData): void {
-    this.ensureDir();
-    const filePath = path.join(this.planDir, 'progress.json');
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-    logger.debug('Progress written', { currentPhase: data.currentPhase });
-  }
-
-  readProgress(): ProgressData | null {
-    const record = this.tracker?.get(this.issueIid);
-    if (record?.phaseProgress) return { displayId: this.issueIid, title: record.demandSpec?.title ?? '', branchName: record.branchName, pipelineMode: record.pipelineMode, currentPhase: record.currentPhase ?? 'plan', phases: record.phaseProgress };
-    const filePath = path.join(this.planDir, 'progress.json');
-    if (!fs.existsSync(filePath)) return null;
-    try {
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    } catch {
-      return null;
-    }
-  }
-
   getAllPlanFiles(): string[] {
     if (!fs.existsSync(this.planDir)) return [];
     return fs.readdirSync(this.planDir).map((f) => path.join(this.planDir, f));
-  }
-
-  /** 根据当前流水线定义创建初始阶段进度。 */
-  createInitialProgress(displayId: number, title: string, branchName: string, def: PipelineDef): ProgressData {
-    const phases: Record<string, PhaseProgress> = {};
-    for (const spec of def.phases) phases[spec.name] = { status: 'pending' };
-    return { displayId, title, branchName, pipelineMode: def.mode, currentPhase: def.phases[0].name, phases };
   }
 
   writePlan(content: string): void {
@@ -270,55 +242,6 @@ export class PlanPersistence {
       lines.push('');
     }
     return lines.join('\n');
-  }
-
-  updatePhaseProgress(
-    phaseName: string,
-    status: PhaseStatus,
-    error?: string,
-    options?: { preserveSessionId?: boolean },
-  ): void {
-    const progress = this.readProgress();
-    if (!progress) {
-      logger.warn('Cannot update phase progress: progress.json not found', {
-        issueIid: this.issueIid, phase: phaseName, targetStatus: status,
-      });
-      return;
-    }
-
-    const now = new Date().toISOString();
-    if (!progress.phases[phaseName]) {
-      progress.phases[phaseName] = { status: 'pending' };
-    }
-    const phase = progress.phases[phaseName];
-
-    phase.status = status;
-    if (status === 'in_progress') {
-      phase.startedAt = now;
-      progress.currentPhase = phaseName;
-      if (!options?.preserveSessionId) {
-        delete phase.sessionId;
-      }
-    } else if (status === 'completed') {
-      phase.completedAt = now;
-    } else if (status === 'failed') {
-      phase.error = error;
-    }
-
-    this.writeProgress(progress);
-  }
-
-  updatePhaseSessionId(phaseName: string, sessionId: string): void {
-    if (this.tracker) { this.tracker.updatePhaseProgress(this.issueIid, phaseName, { sessionId }); return; }
-    const progress = this.readProgress();
-    if (!progress?.phases[phaseName]) return;
-    progress.phases[phaseName].sessionId = sessionId;
-    this.writeProgress(progress);
-  }
-
-  getPhaseSessionId(phaseName: string): string | undefined {
-    const progress = this.readProgress();
-    return progress?.phases[phaseName]?.sessionId;
   }
 
   // ---------------------------------------------------------------------------

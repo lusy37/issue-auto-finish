@@ -119,6 +119,9 @@ export function createMockIssueTracker() {
         const record = tracker.get(number); record.run ??= newIssueRun();
         const revision = ++record.run.planRevision;
         record.run.review = { revision, decision: 'waiting' };
+        if (record.lifecycle?.kind === 'waiting' && record.lifecycle.phase === 'review') {
+          record.lifecycle = { ...record.lifecycle, planRevision: revision };
+        }
         record.run.planDigest = 'mock-digest';
         const plan = { ...content, revision, digest: 'mock-digest', demand: record.demandSpec };
         tracker.store.readPlan.mockReturnValue(plan);
@@ -137,6 +140,7 @@ export function createMockIssueTracker() {
     clearPhaseHistory: vi.fn(),
     initPhaseProgress: vi.fn(),
     updatePhaseProgress: vi.fn(),
+    getPhaseProgress: vi.fn(),
     emitFailure: vi.fn(),
     markFailed: vi.fn(),
     isProcessing: vi.fn().mockReturnValue(false),
@@ -379,21 +383,12 @@ export function createMockPlanPersistence() {
     baseDir: '/tmp/mock-workdir',
     ensureDir: vi.fn(),
     writeIssueMeta: vi.fn(),
-    writeProgress: vi.fn(),
-    readProgress: vi.fn().mockReturnValue(null),
     writePlan: vi.fn(),
     writeReviewFeedback: vi.fn(),
     readReviewFeedback: vi.fn().mockReturnValue(null),
     readReviewHistory: vi.fn().mockReturnValue([]),
     mergeBackupIfPresent: vi.fn(),
     getAllPlanFiles: vi.fn().mockReturnValue([]),
-    createInitialProgress: vi.fn().mockReturnValue({
-      displayId: 42, title: 'Test', branchName: 'feat/issue-42',
-      currentPhase: 'plan', phases: {},
-    }),
-    updatePhaseProgress: vi.fn(),
-    updatePhaseSessionId: vi.fn(),
-    getPhaseSessionId: vi.fn().mockReturnValue(undefined),
     readFile: vi.fn().mockReturnValue(null),
     isArtifactReady: vi.fn().mockReturnValue(false),
     writeFile: vi.fn(),

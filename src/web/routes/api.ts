@@ -160,7 +160,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
     const progress = record.phaseProgress
       ? { phases: record.phaseProgress, currentPhase: record.currentPhase }
-      : await readProgress(number, cfg, tracker, git);
+      : null;
     const preview = buildPreviewInfo(number, orch);
     const worktree = orch.getWorktreeStatus(number);
     res.json({ ...record, progress, preview, worktree, planDocs: getIssuePlanDocs(number, record) });
@@ -184,7 +184,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     const def = getIssuePipelineDef(number);
     const allowed = [
       ...collectPipelineArtifacts(def).map(f => f.filename),
-      'progress.json', 'issue-meta.json',
+      'issue-meta.json',
     ];
     if (!allowed.includes(filename)) {
       res.status(400).json({ error: 'Invalid filename' });
@@ -1026,7 +1026,6 @@ async function readPlanFile(
   mainGit?: GitOperations,
 ): Promise<string | null> {
   if (filename === '01-plan.md') return readImmutablePlan(issueIid, filename, config, tracker, mainGit);
-  if (filename === 'progress.json') { const record = tracker.get(issueIid); return record ? JSON.stringify({ displayId: issueIid, title: getTitle(record), branchName: record.branchName, currentPhase: record.currentPhase, phases: record.phaseProgress ?? {} }) : null; }
   const planDir = getWorktreePlanDir(issueIid, config);
   const filePath = path.join(planDir, filename);
   if (fs.existsSync(filePath)) {
@@ -1037,26 +1036,6 @@ async function readPlanFile(
     }
   }
   return readImmutablePlan(issueIid, filename, config, tracker, mainGit);
-}
-
-async function readProgress(
-  issueIid: number,
-  config: Config,
-  tracker: IssueTracker,
-  mainGit?: GitOperations,
-): Promise<unknown | null> {
-  // 刚重启的 Issue（Pending + 0 次尝试）不应返回旧进度数据
-  const record = tracker.get(issueIid);
-  if (record?.state === 'pending' && record.attempts === 0) {
-    return null;
-  }
-  const content = await readPlanFile(issueIid, 'progress.json', config, tracker, mainGit);
-  if (!content) return null;
-  try {
-    return JSON.parse(content);
-  } catch {
-    return null;
-  }
 }
 
 /** 为 v3 前端生成旧枚举对应的只读阶段展示映射。 */

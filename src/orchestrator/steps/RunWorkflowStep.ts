@@ -68,7 +68,7 @@ export async function runWorkflow(
         return undefined;
       },
     publish: async (phaseId, operation) => {
-      const phase = createPhase(phaseId, deps.aiRunner, wtGit, wtPlan, deps.config);
+      const phase = createPhase(phaseId, deps.aiRunner, wtGit, wtPlan, deps.config, deps.tracker);
       await syncResultToIssue(phase, ctx.phaseCtx, issueIid, phaseId, deps, issueIid, wtPlan, operation);
     },
     deliver: () => deliverIssueStep(ctx, deps, { serversStarted }),

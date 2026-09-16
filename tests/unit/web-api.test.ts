@@ -437,28 +437,13 @@ describe('API Routes — 聚合状态与数据目录中的展示内容', () => {
     expect(res.status).toBe(404);
   });
 
-  it('工作区清理后进度由聚合状态生成', async () => {
-    const progress = {
-      displayId: 100,
-      title: 'Test',
-      branchName: 'feat/issue-42',
-      currentPhase: 'verify',
-      phases: {
-        plan: { status: 'completed' },
-        review: { status: 'completed' },
-        build: { status: 'completed' },
-        verify: { status: 'completed' },
-      },
-    };
+  it('不再把聚合进度伪装成 progress.json 产物', async () => {
     const record = createTestRecord({ branchName: 'feat/issue-42' });
     fbTracker.get.mockReturnValue(record);
-    Object.assign(record, { currentPhase: progress.currentPhase, phaseProgress: progress.phases });
-    fbMockGit.showFile.mockResolvedValue(JSON.stringify(progress));
 
     const res = await fbReq('GET', '/api/issues/42/plans/progress.json');
 
-    expect(res.status).toBe(200);
-    expect((res.body as Record<string, unknown>).currentPhase).toBe('verify');
+    expect(res.status).toBe(400);
   });
 
   it('详情读取聚合进度', async () => {

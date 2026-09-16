@@ -325,7 +325,7 @@ export function applyIssueLifecycleEvent(
   // 生命周期本身只表达 ready / pending，不重新引入一套业务状态。
   if (event.type === 'gate-resolved') {
     record.state = event.action === 'approve' ? IssueState.PhaseApproved : IssueState.Pending;
-    if (event.action === 'reject') record.currentPhase = undefined;
+    record.currentPhase = event.action === 'approve' ? event.phase : undefined;
     record.orchestrationState = deriveOrchestrationState(record);
   }
   return next;

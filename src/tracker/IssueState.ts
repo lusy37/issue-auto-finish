@@ -156,16 +156,6 @@ export interface PhaseProgress {
   sessionId?: string;
 }
 
-export interface ProgressData {
-  displayId: number;
-  title: string;
-  branchName: string;
-  pipelineMode?: PipelineMode;
-  currentPhase: string;
-  phases: Record<string, PhaseProgress>;
-}
-
-
 type StateSource = Pick<IssueRecord, 'state' | 'currentPhase' | 'pausedAtPhase' | 'lastError' | 'lastErrorRetryable'>;
 
 /** 当前业务状态写入时同步编排投影 */

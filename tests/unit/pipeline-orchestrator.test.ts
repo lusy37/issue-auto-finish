@@ -8,6 +8,7 @@ vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssu
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IssueState } from '../../src/tracker/IssueState.js';
+import { lifecycleFromLegacyProjection } from '../../src/tracker/IssueLifecycle.js';
 import { eventBus, type EventPayload } from '../../src/events/EventBus.js';
 import { GateActionError } from '../../src/orchestration/index.js';
 import {
@@ -24,27 +25,11 @@ const mockWtPlanInstance = {
   baseDir: path.join('/tmp/test-worktrees', 'issue-42/app/mmpayxdcdevopslogicsvr'),
   ensureDir: vi.fn(),
   writeIssueMeta: vi.fn(),
-  writeProgress: vi.fn(),
-  readProgress: vi.fn().mockReturnValue(null),
   writePlan: vi.fn(),
   writeReviewFeedback: vi.fn(),
   readReviewFeedback: vi.fn().mockReturnValue(null),
   mergeBackupIfPresent: vi.fn(),
   getAllPlanFiles: vi.fn().mockReturnValue([]),
-  createInitialProgress: vi.fn().mockReturnValue({
-    displayId: 100,
-    title: 'Test',
-    branchName: 'feat/issue-42',
-    currentPhase: 'plan',
-    phases: {
-      plan: { status: 'pending' },
-      review: { status: 'pending' },
-      build: { status: 'pending' },
-      verify: { status: 'pending' },
-    },
-  }),
-  updatePhaseProgress: vi.fn(),
-  updatePhaseSessionId: vi.fn(),
 };
 
 const mockPhaseRun = vi.fn().mockResolvedValue({ kind: 'completed', output: 'ok' });
@@ -129,10 +114,15 @@ describe('IssueService', () => {
   let trackerStore: Map<number, any>;
 
   function attachStatefulTracker(seed?: any): void {
-    if (seed) { seed.run ??= newIssueRun(); trackerStore.set(seed.issueIid ?? Number(seed.demandSpec?.sourceRef?.displayId ?? 42), seed); }
+    if (seed) {
+      seed.run ??= newIssueRun();
+      seed.lifecycle ??= lifecycleFromLegacyProjection(seed);
+      trackerStore.set(seed.issueIid ?? Number(seed.demandSpec?.sourceRef?.displayId ?? 42), seed);
+    }
     mockTracker.create.mockImplementation((record: any) => {
       const r = {
         ...record,
+        lifecycle: record.lifecycle ?? { kind: 'pending' },
         run: newIssueRun(),
         attempts: 0,
         createdAt: new Date().toISOString(),
@@ -143,23 +133,31 @@ describe('IssueService', () => {
     });
     mockTracker.updateState.mockImplementation((number: number, state: any, extra?: any) => {
       const cur = trackerStore.get(number) ?? { issueIid: number, attempts: 0 };
-      trackerStore.set(number, { ...cur, ...extra, state, updatedAt: new Date().toISOString() });
+      const next = { ...cur, ...extra, state, updatedAt: new Date().toISOString() };
+      next.lifecycle = lifecycleFromLegacyProjection(next);
+      trackerStore.set(number, next);
     });
     mockTracker.markFailed.mockImplementation((number: number, error: any, opts?: any) => {
       const cur = trackerStore.get(number) ?? { issueIid: number, attempts: 0 };
-      trackerStore.set(number, {
+      const next = {
         ...cur,
         ...opts,
         state: IssueState.Failed,
         lastError: String(error?.message ?? error),
         attempts: (cur.attempts ?? 0) + 1,
         updatedAt: new Date().toISOString(),
-      });
+      };
+      next.lifecycle = lifecycleFromLegacyProjection(next);
+      trackerStore.set(number, next);
     });
     mockTracker.initPhaseProgress.mockImplementation((number: number, def: any) => {
       const cur = trackerStore.get(number);
-      if (cur && !cur.phaseProgress) {
-        cur.phaseProgress = Object.fromEntries(def.phases.map((phase: { name: string }) => [phase.name, { status: 'pending' }]));
+      if (cur) {
+        cur.run ??= newIssueRun();
+        cur.run.workflow.definition ??= { phaseIds: def.phases.map((phase: { name: string }) => phase.name) };
+        if (!cur.phaseProgress) {
+          cur.phaseProgress = Object.fromEntries(def.phases.map((phase: { name: string }) => [phase.name, { status: 'pending' }]));
+        }
       }
     });
     mockTracker.get.mockImplementation((number: number) => { const record = trackerStore.get(number); if (record) record.run ??= newIssueRun(); return record; });
@@ -427,6 +425,7 @@ describe('IssueService', () => {
         issueIid: 42,
         branchName: 'feat/issue-42',
         state: IssueState.Failed,
+        lifecycle: { kind: 'failed', retry: 'manual', error: { message: '失败', retryable: 'hard-no-auto' } },
       });
       mockTracker.resetFull.mockReturnValue(true);
       const orchestrator = createOrchestrator();

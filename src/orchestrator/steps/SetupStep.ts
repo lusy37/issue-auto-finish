@@ -13,13 +13,13 @@ const logger = rootLogger.child('SetupStep');
  * - fetch + 创建 worktree（受 mutex 保护，通过 WorkspaceManager）
  * - 更新状态为 BranchCreated
  * - 安装依赖
- * - 初始化 PlanPersistence（ensureDir, writeIssueMeta, writeProgress）
+ * - 初始化 PlanPersistence（ensureDir, writeIssueMeta）
  */
 export async function executeSetup(
   ctx: IssueProcessingContext,
   deps: OrchestratorDeps,
 ): Promise<SetupResult> {
-  const { issue, wtCtx, record, pipelineDef, branchName } = ctx;
+  const { issue, wtCtx, record, pipelineDef } = ctx;
 
   // 1. 更新标签
   try {
@@ -74,13 +74,6 @@ export async function executeSetup(
     labels: issue.labels,
     state: issue.state,
   });
-
-  const existingProgress = wtPlan.readProgress();
-  if (!existingProgress || readIssueLifecycle(record).kind === 'pending') {
-    wtPlan.writeProgress(
-      wtPlan.createInitialProgress(issue.number, issue.title, branchName, pipelineDef),
-    );
-  }
 
   return { wtGit, wtPlan };
 }

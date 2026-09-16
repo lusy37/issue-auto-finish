@@ -8,8 +8,9 @@ import { VerifyPhase } from './VerifyPhase.js';
 import { PlanPhase } from './PlanPhase.js';
 import { BuildPhase } from './BuildPhase.js';
 import { UatPhase } from './UatPhase.js';
+import type { IssueTracker } from '../tracker/IssueTracker.js';
 
-type PhaseArgs = [AIRunner, GitOperations, PlanPersistence, Config];
+type PhaseArgs = [AIRunner, GitOperations, PlanPersistence, Config, IssueTracker?];
 export type PhaseConstructor = new (...args: PhaseArgs) => BasePhase;
 
 // ---------------------------------------------------------------------------

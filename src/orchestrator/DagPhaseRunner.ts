@@ -80,7 +80,7 @@ export class DagPhaseRunner {
         if (Object.values(state().tasks).some(task => task.status !== 'merged')) throw new Error('仍有未完成的内部任务');
         if (spec.id === 'uat' && state().verify?.commit !== candidate) throw new Error('缺少当前候选提交的验证凭证');
       }
-      const phase = createPhase(spec.id, runner, this.git, this.plan, config);
+      const phase = createPhase(spec.id, runner, this.git, this.plan, config, tracker);
       const intent = await phase.run(ctx, callbacks);
       signal.throwIfAborted();
       if (intent.kind === 'requestRetryFrom' && state().repairRounds >= config.verifyFixLoop.maxIterations) return { kind: 'failed', error: { message: '集成自动修复额度已用完，请人工处理', retryable: 'hard-no-auto' } };

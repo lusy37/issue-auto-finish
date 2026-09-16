@@ -36,23 +36,7 @@ const mockWtPlanInstance = {
   baseDir: '/tmp/test-plan',
   ensureDir: vi.fn(),
   writeIssueMeta: vi.fn(),
-  writeProgress: vi.fn(),
-  readProgress: vi.fn().mockReturnValue(null),
   getAllPlanFiles: vi.fn().mockReturnValue([]),
-  createInitialProgress: vi.fn().mockReturnValue({
-    displayId: 42,
-    title: 'Test',
-    branchName: 'feat/issue-42',
-    currentPhase: 'plan',
-    phases: {
-      plan: { status: 'pending' },
-      review: { status: 'pending' },
-      build: { status: 'pending' },
-      verify: { status: 'pending' },
-    },
-  }),
-  updatePhaseProgress: vi.fn(),
-  updatePhaseSessionId: vi.fn(),
   writeReviewFeedback: vi.fn(),
   readReviewFeedback: vi.fn().mockReturnValue(null),
   mergeBackupIfPresent: vi.fn(),
@@ -137,7 +121,8 @@ describe('集成测试：Gate 审核流程', () => {
     await orchestrator.applyGateAction(issue.number, { action: 'approve' }, harness.tracker.get(issue.number)!.run!.planRevision);
 
     const recordApproved = harness.tracker.get(issue.number);
-    expect(recordApproved!.state).toBe(IssueState.PhaseApproved);
+    expect(recordApproved!.lifecycle).toEqual({ kind: 'ready' });
+    expect(recordApproved!.state).toBe(IssueState.BranchCreated);
 
     // 第二次调用：从 PhaseApproved 恢复，执行 build + verify
     vi.clearAllMocks();

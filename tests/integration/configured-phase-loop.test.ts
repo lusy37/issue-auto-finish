@@ -72,7 +72,6 @@ function fixture(options: { e2e?: boolean; review?: boolean; label?: boolean; ma
   tracker.initPhaseProgress(1, pipelineDef);
   tracker.transaction(1, record => { record.run!.dispatchId = 'configuration-drive'; });
   const plan = new PlanPersistence(repository.integration, 1, dir, tracker);
-  plan.writeProgress(plan.createInitialProgress(1, demand.title, record.branchName, pipelineDef));
   const calls: RunOptions[] = [];
   const runner: AIRunner = {
     killAll() {}, killByWorkDir() { return 0; },

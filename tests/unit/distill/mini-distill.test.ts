@@ -14,6 +14,9 @@ import {
   createMockGitOperations,
 } from "../../helpers/mock-factories.js";
 import type { AIRunner, RunOptions } from "../../../src/ai-runner/AIRunner.js";
+import { IssueTracker } from "../../../src/tracker/IssueTracker.js";
+import { IssueState } from "../../../src/tracker/IssueState.js";
+import { PLAN_MODE_PIPELINE } from "../../../src/pipeline/PipelineMetadata.js";
 
 it("非法蒸馏不消费日记；手动重试、规则启用、版本及执行记录可跨重启读取", async () => {
   const root = path.resolve(".iaf-mini/distill-tests");
@@ -129,12 +132,27 @@ it("非法蒸馏不消费日记；手动重试、规则启用、版本及执行�
         return "实现任务";
       }
     }
-    const plan = new PlanPersistence(dir, 1),
+    const tracker = new IssueTracker(dir, new Map([["plan-mode", PLAN_MODE_PIPELINE]]));
+    tracker.create({
+      state: IssueState.Pending,
+      pipelineMode: "plan-mode",
+      demandSpec: {
+        demandId: "gh-1",
+        sourceRef: { source: "github-issue", externalId: "1", displayId: "1" },
+        title: "任务",
+        description: "验收",
+        createdAt: now,
+      },
+      branchName: "feat/issue-1",
+    });
+    tracker.initPhaseProgress(1, PLAN_MODE_PIPELINE);
+    const plan = new PlanPersistence(dir, 1, dir, tracker),
       phase = new ContextPhase(
         runner,
         createMockGitOperations() as never,
         plan,
         createTestConfig(),
+        tracker,
       );
     const ctx = {
       demand: {
@@ -156,8 +174,7 @@ it("非法蒸馏不消费日记；手动重试、规则启用、版本及执行�
     await phase.run(ctx);
     expect(calls.at(-1)!.prompt).toContain(rule.content);
     // 恢复会话同样加载当前启用规则，避免恢复旧上下文后遗漏规则。
-    plan.updatePhaseSessionId("build", "session-1");
-    plan.updatePhaseProgress("build", { status: "failed" });
+    tracker.updatePhaseProgress(1, "build", { status: "failed", sessionId: "session-1" });
     await phase.run(ctx);
     expect(calls.at(-1)!.prompt).toContain(rule.content);
     expect(
