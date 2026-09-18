@@ -1,4 +1,4 @@
-# 当前状态契约与兼容清理
+# 当前状态契约与旧模型清理
 
 日期：2026-09-17。范围：main、codex/langgraph-native。
 
@@ -11,18 +11,18 @@ Native 已删除 StateAdapter 与 TrackerStateStore，不能套用 main 的调�
 ## 实际调整
 
 - main 继续直接读取其已保存的 orchestrationState；Native 不复用这套内部状态驱动器。
-- Native v4 只持久化 `IssueLifecycle`，启动时拒绝缺失、未知 kind 或缺少必要字段的记录；`state`、`currentPhase` 和 `orchestrationState` 仅作为旧 REST/事件兼容投影生成。
+- Native v5 只持久化并对外暴露 `IssueLifecycle`，启动时拒绝缺失、未知 kind 或缺少必要字段的记录；不再生成 `state`、`currentPhase` 或 `orchestrationState`。
 - Native 的执行位置只由 LangGraph 检查点决定，业务生命周期只负责调度、人工介入和交付边界。
 - 删除重复的 e2eEnabled 记录字段及旧记录回退；Native 已初始化任务由不可变 workflow definition 是否包含 uat 决定验收要求，仅尚未初始化时读取全局配置。
 - Native 不再读写 `progress.json`；阶段审计、会话恢复和页面详情统一读取聚合记录中的 `phaseProgress`。
-- Native 的 Zod 校验集中在 I/O/框架 Codec，跨字段规则使用普通 invariant 函数；旧 v3 数据不自动迁移。
+- Native 的 Zod 校验集中在 I/O/框架 Codec，跨字段规则使用普通 invariant 函数；非 v5 数据直接拒绝，不提供适配或迁移。
 - 生命周期查找保留新任务的 plan-mode 默认值；显式未知模式或默认流程未注册时抛错，不再选择任意一个已注册管理器。
 
 ## 保留边界
 
 不删除存储格式校验、原子写入、调用身份校验、暂停取消、重启恢复、审核和修复历史、候选提交验收凭证或交付防重。不读取或修改原 data/，不迁移测试运行目录，不修改旧验收记录。
 
-初始化是当前业务入口，不等同于读取时的数据迁移；phaseHistory 等字段在清空历史后仍可缺省。业务 IssueState 与编排投影也不是可逆的一对一关系，不能用删除整套映射替代明确的状态所有权。
+初始化是当前业务入口，不等同于读取时的数据迁移；新建记录会显式初始化 `run` 与 `phaseHistory`。页面展示只从 `IssueLifecycle` 单向计算，不再维护第二套业务状态。
 
 ## 验证范围
 

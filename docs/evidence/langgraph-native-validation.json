@@ -1,7 +1,7 @@
 {
-  "recordedAt": "2026-09-17T00:01:30+08:00",
+  "recordedAt": "2026-09-18T17:16:47+08:00",
   "branch": "codex/langgraph-native",
-  "verifiedBaseCommit": "cff9854621034bcbb1e71f337edcada436b2e448",
+  "verifiedBaseCommit": "cf4954813c0a6b6753b5a405bb2089e7c85496c1",
   "implementationCommits": [
     { "commit": "b918d4e", "subject": "refactor(langgraph): 收口原生图与检查点职责" },
     { "commit": "54142ce", "subject": "fix(langgraph): 完善验收重启与迟到交付保护" },
@@ -18,7 +18,8 @@
     { "commit": "02802e6", "subject": "fix(state): 完善生命周期恢复边界" },
     { "commit": "2d6903a", "subject": "refactor(state): 隔离阶段会话持久化端口" },
     { "commit": "2f80400", "subject": "fix(process): 等待 Windows 进程树退出" },
-    { "commit": "cff9854", "subject": "fix(review): 按审核凭证展示通过状态" }
+    { "commit": "cff9854", "subject": "fix(review): 按审核凭证展示通过状态" },
+    { "commit": "cf49548", "subject": "refactor(state): 删除旧状态兼容层" }
   ],
   "environment": {
     "platform": "win32",
@@ -43,12 +44,33 @@
     },
     {
       "command": "$env:IAF_TEST_BROWSER_CHANNEL='msedge'; npm test -- --maxWorkers=1",
+      "exitCode": 1,
+      "passed": false,
+      "filesPassed": 103,
+      "filesTotal": 106,
+      "testsPassed": 869,
+      "testsTotal": 876,
+      "durationSeconds": 839.69,
+      "note": "受限环境拒绝测试内部 taskkill，并使 tsx 子进程出现 ENOMEM；失败集中在 3 个文件、7 项进程相关测试。"
+    },
+    {
+      "command": "npm test -- tests/integration/process-lifecycle.test.ts tests/integration/windows-preview.test.ts tests/unit/atomic-file.test.ts --maxWorkers=1",
+      "environment": "允许 Windows taskkill /T /F 的非受限进程环境",
       "exitCode": 0,
       "passed": true,
-      "files": 114,
-      "tests": 1010,
-      "durationSeconds": 674.25,
-      "note": "完整套件串行执行；未放宽业务断言、生产超时或测试等待预算。"
+      "files": 3,
+      "tests": 14,
+      "durationSeconds": 18.21,
+      "note": "逐项复验完整运行中仅受进程权限和资源限制影响的 7 项；同文件其余测试一并通过。"
+    },
+    {
+      "command": "npm test -- tests/unit/web-api.test.ts tests/unit/current-state-contract.test.ts tests/unit/native-state-responsibilities.test.ts --maxWorkers=1",
+      "exitCode": 0,
+      "passed": true,
+      "files": 3,
+      "tests": 52,
+      "durationSeconds": 3.96,
+      "note": "删除详情 progress 兼容投影后的当前代码定向复验。"
     },
     {
       "command": "npm run build",
@@ -66,7 +88,7 @@
       "passed": true,
       "files": 1,
       "tests": 1,
-      "durationSeconds": 28.93,
+      "durationSeconds": 27.73,
       "note": "使用本次 Playwright/Vitest 进程退出码和本次运行结果，不复用旧报告。"
     },
     {
@@ -75,9 +97,15 @@
       "passed": true,
       "files": 1,
       "tests": 1,
-      "durationSeconds": 4.84
+      "durationSeconds": 5.46
     }
   ],
+  "aggregateResult": {
+    "allCurrentTestsCovered": true,
+    "allFailedCasesPassedOnTargetedRerun": true,
+    "singleFullSuiteExitZero": false,
+    "reason": "完整运行位于禁止 taskkill 的沙箱；宿主机同时存在 200 余个 Node/MCP 进程。未把分轮复验表述为单次全绿。"
+  },
   "nativeRecoveryCoverage": {
     "checkpointResume": true,
     "reviewInterrupt": true,
@@ -85,7 +113,10 @@
     "reviewCredentialProjection": true,
     "immutableWorkflowDefinition": true,
     "progressFileRemoved": true,
+    "progressApiProjectionRemoved": true,
     "codecBoundary": true,
+    "legacyAdaptersRemoved": true,
+    "referenceEngineTestsRemoved": true,
     "newGenerationForPhaseRedo": true,
     "previewRestartBeforeUat": true,
     "worktreeRecreateForFullRedo": true,
@@ -106,11 +137,12 @@
   "knownLimitations": [
     "GitHub 已发出的标签或 PR 请求无法与本地 JSON 做跨系统事务回滚；本轮只阻止旧响应覆盖新本地状态。",
     "本地聚合 JSON 和检查点面向单用户、单实例及有限任务规模；检查点历史增长会增加原子写入成本。",
-    "旧 v3、v2 或其他实验分支运行数据不自动迁移，必须使用新的数据目录。"
+    "任何非 v5 或其他实验分支运行数据都不读取、不适配且不自动迁移，必须使用新的数据目录。"
   ],
-  "compatibility": {
-    "runFormat": "iaf-mini/issue-run/v4-langgraph",
+  "dataContract": {
+    "runFormat": "iaf-mini/issue-run/v5-langgraph",
     "requiresFreshDataDirectory": true,
+    "legacyReadOrMigration": false,
     "internalArchitectureSharedWithMain": false,
     "sharedContractWithMain": [
       "REST API",
@@ -119,13 +151,16 @@
     ]
   },
   "sourceHashesSha256": {
-    "src/tracker/IssueLifecycle.ts": "4D344D261E6A4FFE72DBF9EA3CB3822A8CCF5DE84292865F9172835DAB11BAEC",
-    "src/dag/IssueRunStore.ts": "C0226B55B1938FAD5902059D4165CA90527084E508DBCD00E5625342F87C4A0A",
-    "src/orchestrator/IssueWorkflow.ts": "1DE8DABE114537B997B361F26AF84E7EA4FDB97EDDAACD788F2D513E8E878A6A",
+    "src/tracker/IssueLifecycle.ts": "066A2BB3072B79075A6C4C3A8B3785A85974D723C3854138107D4A61A40CBEF9",
+    "src/tracker/IssueRecord.ts": "931C39EB380E5112590E7A597AB0FEC6832C0006D032A2E61475627C54073AAC",
+    "src/dag/IssueRunStore.ts": "C5FD927A36F309DDF791EC4F7F0DC806EDFEE1787E4EDADBF47790A775F03539",
+    "src/orchestrator/IssueWorkflow.ts": "7A37812F44DD733EC75651FB00E47BAB8C175E1083EF6750426365D15FEBDBF0",
     "src/dag/codecs/IssueRunCodec.ts": "B06AD62925EBA3D5F3668CE0C2E43D3FEA1AAC47D2F7356DBC81ACAD867025F3",
+    "src/web/routes/api.ts": "A8E2A4C84A0CD659AD997264E4556B52D066F9406BA430152CB4A2557BC0AC28",
     "src/utils/process.ts": "6F079B1A4B815D9CC93F437B5AFBFD2B860BDFC55AD2162F270737062407D60E",
-    "tests/integration/langgraph-native.test.ts": "C5844F8CDDF3CC5A094889989ABDCAF8A2449D8302072FE0C0033669C12745F8",
+    "tests/integration/langgraph-native.test.ts": "CD4EE878FB7144F2A8866BBB387F63513E9943967968958A2BB668F268F68D2F",
+    "tests/integration/dag-delivery.test.ts": "C78D6F843E93C069CD7A328DE84F30C1EAB210E979AC94914AA611D5D1AD7285",
     "tests/integration/process-lifecycle.test.ts": "A0F898B6903DE13DE132BB33C90F25AB338D3D2BAAF61294D7773B33987150E1",
-    "tests/e2e/workbench.test.ts": "7C642483372670B45EA7B2CE6B6F25957C815C5217E9860D6382CD9A2E7A8544"
+    "tests/e2e/workbench.test.ts": "C3C99B87EFDC03F7C1CD575E719EA8D93F4F0408DA06F7EB2E81646C893C577F"
   }
 }

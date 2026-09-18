@@ -12,7 +12,7 @@
 
 1. [README.md](../README.md)：了解产品目标、启动方式、配置、数据目录和固定流程。
 2. [architecture.md](architecture.md)：确认每个后端模块负责什么，以及模块不应该负责什么。
-3. [langgraph-native.md](langgraph-native.md)：理解当前分支为什么用 LangGraph，以及旧编排器哪些内容已经被移到参考测试。
+3. [langgraph-native.md](langgraph-native.md)：理解当前分支为什么用 LangGraph，以及旧编排器职责为何被删除。
 4. [dag-implementation.md](dag-implementation.md)：理解单 Issue 内部任务图、任务凭证和恢复规则。
 5. [development.md](development.md)：了解开发阶段、测试分层和常用验证方式。
 
@@ -29,7 +29,7 @@
 最重要的不变量是：
 
 - `IssueWorkflow` 的 LangGraph checkpoint 才是流程位置的权威来源。
-- `IssueRecord.lifecycle` 是唯一持久化的业务生命周期；`state`、`currentPhase` 和 `orchestrationState` 是 REST/事件兼容投影，不写入 v4 聚合文件，也不负责推导下一节点。
+- `IssueRecord.lifecycle` 是唯一持久化并通过 REST/SSE 暴露的业务生命周期；LangGraph checkpoint 单独负责推导下一节点。
 - 阶段类返回结构化 `PhaseResult`，不直接修改 tracker、调用 GitHub 评论或驱动整体流程。
 - 外部成功只有在本地业务凭证和候选提交都确认后，才能进入下一阶段或交付。
 
@@ -86,14 +86,14 @@
 
 **阅读顺序：**
 
-1. [src/tracker/IssueState.ts](../src/tracker/IssueState.ts)：`IssueRecord`、阶段进度和旧 REST 投影类型。
-2. [src/tracker/IssueLifecycle.ts](../src/tracker/IssueLifecycle.ts)：唯一业务生命周期、合法事件转换和旧字段单向投影。
+1. [src/tracker/IssueRecord.ts](../src/tracker/IssueRecord.ts)：`IssueRecord`、阶段进度及聚合辅助类型。
+2. [src/tracker/IssueLifecycle.ts](../src/tracker/IssueLifecycle.ts)：唯一业务生命周期、合法事件转换和持久化边界校验。
 3. [src/dag/contracts.ts](../src/dag/contracts.ts)：`IssueRun`、计划、任务、执行身份和验证凭证。
 4. [src/orchestration/WorkflowState.ts](../src/orchestration/WorkflowState.ts)：固定阶段、审核决定、checkpoint 序列化结构。
 5. `src/dag/codecs/`、`src/orchestration/codecs/` 与 [src/dag/invariants.ts](../src/dag/invariants.ts)：区分输入字段校验和跨字段业务约束。
 6. [src/dag/IssueRunStore.ts](../src/dag/IssueRunStore.ts)：加载、校验、版本、原子写入和事务。
 7. [src/tracker/IssueTracker.ts](../src/tracker/IssueTracker.ts)：生命周期操作、事件发布、处理锁和执行身份检查。
-8. [src/pipeline/PipelineProjection.ts](../src/pipeline/PipelineProjection.ts)：把生命周期投影成旧 REST/页面枚举。
+8. [src/pipeline/PipelineProjection.ts](../src/pipeline/PipelineProjection.ts)：把生命周期投影成页面动作、文字和阶段回退展示。
 
 **必须掌握的概念：**
 
@@ -102,7 +102,7 @@
 - 计划是不可变版本，计划内容通过 digest 校验；审核、任务和验证必须绑定同一计划版本。
 - `planRevision`、`buildGeneration`、`workflow.generation`、`dispatchId` 和 `callId` 共同防止旧协程的迟到结果覆盖新执行。
 - `phaseProgress` 保存阶段审计和会话恢复信息；它不是流程位置，也不再承担 UAT 配置语义。
-- `state`、`currentPhase` 和 `orchestrationState` 是可重建的兼容投影，不写入 v4 文件。
+- 聚合文件和 API 都使用 `lifecycle`；页面展示不得反向写入或推导流程位置。
 - 每轮是否包含 UAT 由 `run.workflow.definition.phaseIds` 固化，不能被之后的全局设置改写。
 
 **建议练习：** 打开一份演示数据中的 `issues/<number>/run.json`，手工标出：需求、计划版本、审核、workflow checkpoints、任务、候选提交、verify/uat 收据、delivery 身份和调用记录。
@@ -346,7 +346,7 @@ flowchart LR
 按重要性排序，建议每个问题都能在源码中指出答案：
 
 1. LangGraph checkpoint 与 `IssueRunStore.transaction()` 如何共同覆盖“阶段结果已写入但 checkpoint 尚未写入”的崩溃窗口？
-2. 为什么 `currentPhase` 不能作为恢复下一节点的依据？
+2. 为什么 `lifecycle.phase` 只能描述业务阶段，不能作为恢复下一节点的依据？
 3. 一个旧 AI 调用在新 dispatch 或新 workflow generation 后返回时，哪一层拒绝它？
 4. 任务已经生成成功提交但进程在 merge 前退出时，下一次执行为什么不会重复调用 AI？
 5. verify 报告文字、真实命令结果、候选提交和 UAT run ID 分别由谁确认？
@@ -421,7 +421,7 @@ npm run test:codex
 - 用 `IssueWorkflow.getState()` 看图当前状态，用 `getStateHistory()` 看图历史。
 - 用 `IssueTracker.get(number)` 看业务投影，用 `IssueTracker.store.get(number)` 和磁盘文件对比持久化边界。
 - 搜索 `transaction(`、`assertIdentity(`、`checkpoint`、`requestRetryFrom`、`candidateCommit`、`delivery`，这些关键词能快速定位恢复语义。
-- 不要通过手动修改 `currentPhase` 或 `orchestrationState` 推动流程；使用审核、继续、重试或指定阶段重做的服务入口。
+- 不要通过手动修改 `lifecycle` 或 checkpoint 推动流程；使用审核、继续、重试或指定阶段重做的服务入口。
 - 真实 Codex、真实 GitHub 写入、真实 Git 和真实浏览器的结果要分开记录，不能用模拟测试替代外部系统验收。
 
 ## 七、最终学习检查表
@@ -429,7 +429,7 @@ npm run test:codex
 完成全部路径后，你应该可以不看目录说明，直接回答：
 
 - [ ] 能从 `run.ts` 走到一次 Issue 的完整调用链。
-- [ ] 能区分 `IssueLifecycle`、REST 兼容投影、LangGraph checkpoint、阶段进度和业务凭证。
+- [ ] 能区分 `IssueLifecycle`、页面展示投影、LangGraph checkpoint、阶段进度和业务凭证。
 - [ ] 能解释计划版本、构建轮次、workflow generation、dispatch 和 call identity 的作用。
 - [ ] 能说明本地 JSON 为什么使用聚合事务和原子替换。
 - [ ] 能说明任务 DAG 为什么并发执行但 Git 合并串行执行。
@@ -439,4 +439,4 @@ npm run test:codex
 - [ ] 能指出知识、蒸馏、统计和 worktree 回收为什么属于附加能力。
 - [ ] 能为一个恢复场景选择正确测试文件，而不是只运行完整回归。
 
-完成这份检查表后，再阅读旧编排实现的 [tests/reference/README.md](../tests/reference/README.md)，会更容易理解当前实现删掉了哪些职责，以及为什么保留它们只作为迁移对照，而不是生产运行路径。
+完成这份检查表后，可结合 Git 历史查看旧编排实现；当前源码与测试不再保留一套不可执行的参考状态机，避免学习路径出现第二个事实来源。

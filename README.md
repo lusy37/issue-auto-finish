@@ -19,7 +19,7 @@ npm run web:build
 npm run demo
 ~~~
 
-打开 http://127.0.0.1:3000，在任务工作台手动启动演示 Issue，打开详情查看计划并审核通过。演示使用模拟 GitHub 与 AI，Git、状态持久化和浏览器验收真实执行；数据写入 .iaf-mini/demo-langgraph-v4。同时保留其他演示实例时，分别设置 `IAF_DEMO_PORT` 和 `IAF_DEMO_PLATFORM_PORT` 为未占用端口；端口冲突会报错停止。使用本机 Edge 时先设置 $env:IAF_TEST_BROWSER_CHANNEL='msedge'。
+打开 http://127.0.0.1:3000，在任务工作台手动启动演示 Issue，打开详情查看计划并审核通过。演示使用模拟 GitHub 与 AI，Git、状态持久化和浏览器验收真实执行；数据写入 .iaf-mini/demo-langgraph-v5。同时保留其他演示实例时，分别设置 `IAF_DEMO_PORT` 和 `IAF_DEMO_PLATFORM_PORT` 为未占用端口；端口冲突会报错停止。使用本机 Edge 时先设置 $env:IAF_TEST_BROWSER_CHANNEL='msedge'。
 
 ## 连接真实仓库
 
@@ -77,7 +77,7 @@ npm run test:codex
 
 默认配置、任务、日志和 worktree 均位于当前项目 .iaf-mini/github 下。IAF_MINI_HOME 可统一替换根目录，也支持 DATA_DIR、LOGS_DIR、WORKTREE_BASE_DIR 分别显式配置。运行数据和凭据已忽略，不导入 mini 项目的任务数据。
 
-Native 聚合运行状态使用 `iaf-mini/issue-run/v4-langgraph`，不可变计划与草稿分别使用独立格式；不迁移旧任务或草稿。启动遇到旧格式、损坏文件、缺失计划引用会报告具体路径并停止调度，原文件保留。使用新的 `DATA_DIR`（并为旧任务保留独立 `WORKTREE_BASE_DIR`），或归档旧运行目录后重新初始化。不要删除仍有进程使用的工作目录。
+Native 聚合运行状态使用 `iaf-mini/issue-run/v5-langgraph`，不可变计划与草稿分别使用独立格式。项目仍处于开发阶段，不提供旧聚合格式的适配或迁移；启动遇到非 v5、损坏文件或缺失计划引用会报告具体路径并停止调度。更改模型后使用新的 `DATA_DIR` 或清空确认不再需要的开发数据，且不要删除仍有进程使用的工作目录。
 
 暂停／取消先保存停止意图并等待进程退出；不确定的孤儿进程保持目录隔离。普通重试复用已确认任务，完整重做使用新构建轮次但保留原 PR。开放 PR 继续更新，关闭 PR 需先重开，已合并 PR 对应的 Issue 不再重做。详细状态和恢复规则见 [DAG 实施记录](docs/dag-implementation.md)。
 

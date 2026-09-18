@@ -88,11 +88,11 @@ PR 身份跨完整重做保留。开放 PR 继续使用；关闭 PR 要求先重
 
 ## 数据格式和重新初始化
 
-新格式分别为 `iaf-mini/issue-run/v4-langgraph`、`iaf-mini/task-plan/v2`、`iaf-mini/draft/v2`。不兼容或迁移旧任务、旧草稿；启动错误会指出具体文件和重新初始化方法，保留原文件。运行数据从不读取或写回仓库原 `data/`。
+新格式分别为 `iaf-mini/issue-run/v5-langgraph`、`iaf-mini/task-plan/v2`、`iaf-mini/draft/v2`。开发阶段不兼容或迁移旧任务、旧草稿；启动错误会指出具体文件和重新初始化方法。运行数据从不读取或写回仓库原 `data/`。
 
 需要重新初始化时，先停止原服务并确认任务进程退出，再选择新的 `DATA_DIR` 和工作目录，或归档旧运行目录后初始化。旧状态仍需恢复时保留原目录及原版本程序，不能在活动目录上直接删除数据。
 
-演示使用新的 `.iaf-mini/demo-langgraph-v4`，原演示目录保留。演示的 AI 和 GitHub 为模拟，真实执行 Git、落盘和浏览器，生产执行器没有模拟模式开关。
+演示使用 `.iaf-mini/demo-langgraph-v5`。演示的 AI 和 GitHub 为模拟，真实执行 Git、落盘和浏览器，生产执行器没有模拟模式开关。
 
 ## 分阶段结果与验证
 

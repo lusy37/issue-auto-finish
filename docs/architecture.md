@@ -6,7 +6,7 @@ Vue 与 TypeScript 负责工作台，Express 暴露 HTTP 与 SSE，本地 JSON �
 | --- | --- | --- |
 | src/config-schema.ts、cli、paths | 配置校验、环境检查、独立数据目录 | config、settings-api、paths、instance-lock |
 | clients、demand/adapters | GitHub 查询、标签、Issue/PR/回写，平台需求归一 | github-client、demand-adapter |
-| tracker、dag/IssueRunStore | 唯一业务生命周期、业务凭证、检查点聚合事务和兼容投影 | issue-tracker、current-state-contract、dag-state |
+| tracker、dag/IssueRunStore | 唯一业务生命周期、业务凭证和检查点聚合事务 | issue-tracker、current-state-contract、dag-state |
 | persistence | 计划文档、审核历史和报告产物；不维护第二份阶段状态 | plan-persistence、review-history、session-resume |
 | workspace、git、utils/process.ts | 独立 worktree、Git、取消与 Windows 进程树 | workspace、git-operations、windows-preview |
 | orchestration、dag/codecs | 阶段结果、检查点数据契约和边界解码；跨字段规则使用普通 invariant | native-codecs、contracts、dag-state |
@@ -18,9 +18,9 @@ Vue 与 TypeScript 负责工作台，Express 暴露 HTTP 与 SSE，本地 JSON �
 | analytics | 从持久化任务计算统计 | mini-features、workbench、真实重启核对 |
 | web | 六入口、设置、流式日志、计划差异与报告 | web-api、plan-diff-api、workbench |
 
-服务端 pipeline/PipelineMetadata.ts 提供阶段元数据，前端通过 /api/pipeline-meta 使用同一来源。前后端共用 src/shared/workbench.ts 中的草稿、状态、UAT 和统计契约；保留现有 API 路径及 SSE 事件名称。
+服务端 pipeline/PipelineMetadata.ts 提供阶段元数据，前端通过 /api/pipeline-meta 使用同一来源。前后端共用 src/shared/workbench.ts 中的生命周期、草稿、UAT 和统计契约；保留现有 API 路径及 SSE 事件名称。
 
-Native 的状态所有权分成三类：LangGraph checkpoint 保存执行位置，`IssueLifecycle` 保存业务生命周期，任务/调用/验收/交付结构保存业务凭证。页面所需的旧状态枚举由纯投影函数生成，不写入 v4 聚合文件；`phaseProgress` 只保存审计和会话信息，不参与图路由或 E2E 配置判断。
+Native 的状态所有权分成三类：LangGraph checkpoint 保存执行位置，`IssueLifecycle` 保存并直接暴露业务生命周期，任务/调用/验收/交付结构保存业务凭证。页面动作和文字由生命周期做无状态投影；`phaseProgress` 只保存审计和会话信息，不参与图路由或 E2E 配置判断。
 
 计划阶段只读，审核通过是构建门禁；驳回需要上次计划与反馈并再次审核。verify 失败携带原因返回 build，修复次数有限。取消、超时和服务重启通过持久化状态及会话恢复处理。交付只在本次 UAT 退出成功且报告有效时执行，创建或复用 PR，结果回写有幂等标记。
 
@@ -28,4 +28,4 @@ Native 的状态所有权分成三类：LangGraph checkpoint 保存执行位置�
 
 参考项目仅剩两个无调用的聚合导出文件和一个引用已移除阶段的无调用测试工厂未带入；所有实际测试文件及快照均保留。具体精简见 [记录](simplification.md)。
 
-本分支的原生图及新数据格式说明见 [LangGraph 迁移](langgraph-native.md)。旧引擎只保留在 tests/reference，生产构建不包含。
+本分支的原生图及新数据格式说明见 [LangGraph 迁移](langgraph-native.md)。旧引擎及其参考测试已经删除，不参与当前实现与测试统计。

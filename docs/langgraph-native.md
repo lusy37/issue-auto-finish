@@ -2,7 +2,7 @@
 
 本分支为 codex/langgraph-native，独立工作树为 .iaf-mini/worktrees/langgraph-native。它最初从 main 的 dee9fe4 建立，但当前是独立技术方案：只对齐 REST API 和用户可见业务语义，不以 main 的内部状态驱动器为实现标准，也不要求 rebase 或最终合并回 main。原 main 和之前的 langgraph-experiment 工作树均保留。
 
-2026-09-14 的后续职责收口、冗余删除及恢复修正见 [精简说明](langgraph-simplification.md)。2026-09-16 又完成了生命周期单一化和 Codec 分层：持久化的 `IssueLifecycle` 表达业务生命周期，LangGraph checkpoint 表达执行位置，旧状态枚举仅在 REST/事件边界按需投影。
+2026-09-14 的后续职责收口、冗余删除及恢复修正见 [精简说明](langgraph-simplification.md)。2026-09-17 又完成了生命周期单一化和 Codec 分层：持久化并通过 API 暴露的 `IssueLifecycle` 表达业务生命周期，LangGraph checkpoint 表达执行位置，旧状态枚举和双向适配层已删除。
 
 随后从 main 适配的预览重启、交付回写校验和回收目录后完整重做，见 [三项业务修复](native-business-fixes.md)。
 
@@ -47,7 +47,7 @@
 
 普通自动重试由 retryPolicy 执行；预算持久化，重启和手动继续不返还已用额度。`phaseExecutions[phase]` 表示实际开始的阶段执行次数，`retryUsed[phase]` 表示已占用的自动重试预算；预算不小于执行次数时，表示下一次重试已经预留。retryPolicy 与重启后的 drive 共用幂等预留逻辑，因此崩溃窗口不会重复扣减，最后一次已预留预算仍可被 Poller 驱动；`hard-no-auto` 或预算耗尽则进入人工失败。业务修复次数与普通调用失败重试是不同预算。暂停先保存停止意图，再取消排队和在途进程；继续时恢复原检查点。显式从某阶段重做开始新的图轮次，完整重做还会更新 buildGeneration。
 
-调试时可以在现有 IssueWorkflow 实例上调用 getState()，查看 next 与 tasks 中的 interrupts；getStateHistory() 读取当前图轮次的历史。不要通过修改 REST 返回的 `state`、`currentPhase` 或 `orchestrationState` 驱动流程：它们由持久化的 `lifecycle` 单向生成。用户操作应经过审核、继续、重试或指定阶段重做的服务入口。
+调试时可以在现有 IssueWorkflow 实例上调用 getState()，查看 next 与 tasks 中的 interrupts；getStateHistory() 读取当前图轮次的历史。REST 返回的 `lifecycle` 用于业务展示和准入，不是手工指定下一图节点的接口；用户操作应经过审核、继续、重试或指定阶段重做的服务入口。
 
 ## 本地 JSON 与新数据格式
 
@@ -57,7 +57,7 @@
 
 自定义 IssueCheckpointer 实现框架的存储协议，目的是复用现有每 Issue 聚合事务。另开一个检查点数据库会产生两个独立写入边界，不能自动保证审核事实与执行结果一致。
 
-运行格式为 `iaf-mini/issue-run/v4-langgraph`。旧 v3、v2 和实验分支数据不会自动迁移或覆盖；请使用这个工作树自己的新 DATA_DIR。演示默认使用 `.iaf-mini/demo-langgraph-v4`。正式配置若指向原工作树的数据目录，应显式选择新目录，并由原程序继续管理需要恢复的旧任务。
+运行格式为 `iaf-mini/issue-run/v5-langgraph`。开发阶段不保留 v4 及更早格式的读取、投影或迁移代码；非 v5 文件会在加载边界被拒绝。演示默认使用 `.iaf-mini/demo-langgraph-v5`，模型变更后应切换新的 DATA_DIR 或清空确认无用的开发数据。
 
 Zod 只保留在不可信数据边界：聚合 JSON、AI 计划输出、审核输入及 LangGraph `StateSchema`。`contracts.ts` 和 `WorkflowState.ts` 只定义 TypeScript 领域类型；DAG 循环、审核反馈、版本与凭证归属等跨字段规则由普通 invariant 函数表达，避免业务规则隐藏在大型 Schema/refine 中。
 
@@ -79,7 +79,7 @@ Zod 只保留在不可信数据边界：聚合 JSON、AI 计划输出、审核�
 
 ## 验收分层与实际代价
 
-保留的旧状态机契约及其测试集中在 [tests/reference](../tests/reference/README.md)，不进入生产构建。它们用于迁移前后的对照，其通过结果不能计作新图的运行时验收。当前业务预算测试、审核 API、完整流程、Git 崩溃恢复和浏览器测试直接使用新的执行路径。
+旧状态机契约及其参考测试已经删除；需要对照时使用 Git 历史，不在当前测试树维护第二套模型。业务预算测试、审核 API、完整流程、Git 崩溃恢复和浏览器测试均直接使用当前执行路径。
 
 LangGraph 让阶段流转、人工介入和恢复入口更集中，但引入了框架依赖以及 checkpoint / thread / superstep 概念。图的同一超步存在同步边界，因此它不保证比原先随任务完成立即派发下游的调度器更快。Git 合并、全局 AI 额度和外部服务通常仍决定实际吞吐。
 
@@ -103,18 +103,20 @@ npm run test:all -- --maxWorkers=1 --testTimeout=180000 --hookTimeout=60000
 
 [验收记录](evidence/langgraph-native-validation.json) 保留首轮结果、定向复验结果、逐文件归属、执行命令和最终源码散列，不将分轮复验表述为首轮全绿。完整原始日志位于本工作树的 .iaf-mini/native-validation/。
 
-## 2026-09-17 最新验证
+## 2026-09-18 最新验证
 
-本轮在代码基线 `cff9854` 上重新执行完整门禁。为降低 Windows 上真实 Git 子进程与浏览器冷启动的资源竞争，完整 Vitest 套件使用单 worker；测试逻辑、生产超时和断言没有放宽。浏览器使用本机 Microsoft Edge，Playwright 以本次进程退出码和本次生成结果判断，不复用旧报告。Windows 进程测试在允许 `taskkill /T /F` 的环境中执行，验证取消和超时都会等待整棵进程树退出。
+本轮在代码基线 `cf49548` 上重新执行门禁。完整 Vitest 套件使用单 worker；受限执行环境会拒绝测试内部的 `taskkill /T /F`，因此先记录完整运行结果，再在允许进程树管理的环境中只复验受影响文件。业务断言和生产超时没有放宽。浏览器使用本机 Microsoft Edge，Playwright 以本次进程退出码和本次生成结果判断，不复用旧报告。
 
 | 检查 | 结果 |
 | --- | --- |
 | `npm run typecheck` | 通过，退出码 0 |
 | `npm run lint` | 通过，退出码 0；0 error、23 个既有 warning |
-| `npm test -- --maxWorkers=1` | 114 个文件、1,010 项测试全部通过，退出码 0；674.25 秒 |
+| `npm test -- --maxWorkers=1` | 完整覆盖 106 个文件、876 项；受限环境 869 项通过，7 项因 `taskkill` 被拒和子进程 `ENOMEM` 失败 |
+| 受影响的进程、预览和原子文件三组定向复验 | 非受限 Windows 环境 3 个文件、14 项全部通过，退出码 0；18.21 秒 |
+| 状态/API 当前代码定向复验 | 3 个文件、52 项全部通过，退出码 0 |
 | `npm run build` | 通过，退出码 0 |
 | `npm run web:build` | 通过，退出码 0 |
-| `IAF_TEST_BROWSER_CHANNEL=msedge npm run test:e2e` | 1/1 通过，退出码 0；28.93 秒 |
-| `npm run test:windows` | 1/1 通过，退出码 0；4.84 秒 |
+| `IAF_TEST_BROWSER_CHANNEL=msedge npm run test:e2e` | 1/1 通过，退出码 0；27.73 秒 |
+| `npm run test:windows` | 1/1 通过，退出码 0；5.46 秒 |
 
-本轮回归使用真实临时 Git 仓库和真实 Edge 浏览器；AI 与 GitHub 平台均为模拟实现，没有把模拟结果表述为真实 Codex 或真实 GitHub 写入。GitHub 已发出的外部请求仍无法与本地 JSON 做跨系统事务回滚；实现只保证旧 workflow generation、旧派发或旧候选提交的迟到响应不能覆盖新的本地状态。完整结构化证据见 [最新验收记录](evidence/langgraph-native-validation.json)。
+完整运行和定向复验合并覆盖当前 876 项测试；由于宿主机当时有 200 余个 Node/MCP 进程，没有把结果表述成“单次完整命令全绿”。本轮回归使用真实临时 Git 仓库和真实 Edge 浏览器；AI 与 GitHub 平台均为模拟实现，没有把模拟结果表述为真实 Codex 或真实 GitHub 写入。GitHub 已发出的外部请求仍无法与本地 JSON 做跨系统事务回滚；实现只保证旧 workflow generation、旧派发或旧候选提交的迟到响应不能覆盖新的本地状态。完整结构化证据见 [最新验收记录](evidence/langgraph-native-validation.json)。
