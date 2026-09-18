@@ -3,7 +3,7 @@ import { PlanPersistence } from '../../persistence/PlanPersistence.js';
 import type { IssueProcessingContext, OrchestratorDeps, SetupResult } from '../IssueProcessingContext.js';
 import { logger as rootLogger } from '../../logger.js';
 import { t } from '../../i18n/index.js';
-import { applyIssueLifecycleEvent, readIssueLifecycle } from '../../tracker/IssueLifecycle.js';
+import { applyIssueLifecycleEvent } from '../../tracker/IssueLifecycle.js';
 
 const logger = rootLogger.child('SetupStep');
 
@@ -45,7 +45,7 @@ export async function executeSetup(
   }
 
   // 4. 更新状态为 BranchCreated
-  if (readIssueLifecycle(record).kind === 'pending') {
+  if (record.lifecycle.kind === 'pending') {
     deps.tracker.transaction(issue.number, current => {
       applyIssueLifecycleEvent(current, { type: 'setup-completed' });
     });

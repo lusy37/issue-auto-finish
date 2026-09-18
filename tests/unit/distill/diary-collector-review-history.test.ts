@@ -9,14 +9,15 @@ import { DiaryCollector } from '../../../src/distill/DiaryCollector.js';
 import type { DiaryStore } from '../../../src/distill/DiaryStore.js';
 import type { IssueTracker } from '../../../src/tracker/IssueTracker.js';
 import type { PlanPersistence, ReviewRound } from '../../../src/persistence/PlanPersistence.js';
-import { IssueState, type PhaseProgress } from '../../../src/tracker/IssueState.js';
+import type { PhaseProgress } from '../../../src/tracker/IssueRecord.js';
+import { newIssueRun } from '../../../src/dag/contracts.js';
 
 function makeMockTracker(phaseProgress?: Record<string, PhaseProgress>): IssueTracker {
   return {
     get: vi.fn().mockReturnValue({
-      state: IssueState.Completed,
-      currentPhase: 'verify',
-      attempts: 1,
+      lifecycle: { kind: 'completed' },
+      run: newIssueRun(),
+      phaseHistory: [],
       branchName: 'feat/issue-42',
       pipelineMode: 'plan-mode',
       demandSpec: { title: 'Test Issue' },

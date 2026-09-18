@@ -3,14 +3,14 @@ import { DiaryCollector } from '../../../src/distill/DiaryCollector.js';
 import { eventBus } from '../../../src/events/EventBus.js';
 import type { DiaryStore } from '../../../src/distill/DiaryStore.js';
 import type { IssueTracker } from '../../../src/tracker/IssueTracker.js';
-import { IssueState } from '../../../src/tracker/IssueState.js';
+import { newIssueRun } from '../../../src/dag/contracts.js';
 
 function makeMockTracker(): IssueTracker {
   return {
     get: vi.fn().mockReturnValue({
-      state: IssueState.Completed,
-      currentPhase: 'verify',
-      attempts: 1,
+      lifecycle: { kind: 'completed' },
+      run: newIssueRun(),
+      phaseHistory: [],
       branchName: 'feat/issue-42',
       pipelineMode: 'classic',
       prUrl: 'https://example.com/pr/1',
@@ -52,11 +52,9 @@ describe('DiaryCollector', () => {
 
   it('collects diary for failed issue', async () => {
     (tracker.get as ReturnType<typeof vi.fn>).mockReturnValue({
-      state: IssueState.Failed,
-      currentPhase: 'build',
-      attempts: 3,
-      lastError: 'Build failed',
-      failedAtState: IssueState.PhaseRunning,
+      lifecycle: { kind: 'failed', phase: 'build', retry: 'manual', error: { message: 'Build failed', retryable: 'hard-no-auto' } },
+      run: { ...newIssueRun(), retryUsed: { build: 3 } },
+      phaseHistory: [],
       branchName: 'feat/issue-99',
       pipelineMode: 'plan-mode',
       demandSpec: { title: 'Failed Issue' },
@@ -91,9 +89,9 @@ describe('DiaryCollector', () => {
 
   it('records retry interventions when attempts > 1', async () => {
     (tracker.get as ReturnType<typeof vi.fn>).mockReturnValue({
-      state: IssueState.Completed,
-      currentPhase: 'verify',
-      attempts: 3,
+      lifecycle: { kind: 'completed' },
+      run: { ...newIssueRun(), retryUsed: { build: 3 } },
+      phaseHistory: [],
       branchName: 'feat/issue-42',
       pipelineMode: 'classic',
       demandSpec: { title: 'Test' },

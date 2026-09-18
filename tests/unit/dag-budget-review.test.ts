@@ -4,7 +4,6 @@ import path from 'node:path';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { newTracker } from '../helpers/dag-repository.js';
 import { structuredPlanOutput } from '../helpers/structured-plan.js';
-import { IssueState } from '../../src/tracker/IssueState.js';
 import { IssueWorkflow } from '../../src/orchestrator/IssueWorkflow.js';
 import { suspendAtReview } from '../helpers/native-review.js';
 
@@ -13,7 +12,7 @@ beforeEach(() => { directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dag-budget
 afterEach(() => { fs.rmSync(directory, { recursive: true, force: true }); });
 function prepared() {
   const tracker = newTracker(directory);
-  tracker.create({ state: IssueState.Pending, branchName: 'iaf-1', demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' }, title: '需求', description: '实现需求', createdAt: new Date().toISOString() } });
+  tracker.create({ lifecycle: { kind: 'pending' }, branchName: 'iaf-1', demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' }, title: '需求', description: '实现需求', createdAt: new Date().toISOString() } });
   return tracker;
 }
 describe('持久重试预算', () => {
@@ -25,7 +24,7 @@ describe('持久重试预算', () => {
     await new IssueWorkflow({ tracker, number: 1, runner: { run }, context, maxRetries: retries, maxRepairs: 3 }).drive();
     expect(run).toHaveBeenCalledTimes(retries + 1);
     expect(tracker.get(1)!.run!.retryUsed.plan ?? 0).toBe(retries);
-    expect(tracker.get(1)!.state).toBe(IssueState.Failed);
+    expect(tracker.get(1)!.lifecycle.kind).toBe('failed');
     expect(newTracker(directory).get(1)!.run!.retryUsed).toEqual(tracker.get(1)!.run!.retryUsed);
     tracker.resetForRetry(1);
     await new IssueWorkflow({ tracker, number: 1, runner: { run }, context, maxRetries: retries, maxRepairs: 3 }).drive();
@@ -49,7 +48,9 @@ describe('审核事务', () => {
     const plan = JSON.parse(structuredPlanOutput());
     tracker.store.savePlan(1, plan, tracker.get(1)!.run!.version);
     tracker.store.savePlan(1, plan, tracker.get(1)!.run!.version);
-    tracker.updateState(1, IssueState.PhaseWaiting, { currentPhase: 'review' });
+    tracker.transaction(1, record => {
+      record.lifecycle = { kind: 'waiting', phase: 'review', planRevision: record.run.planRevision };
+    });
     await suspendAtReview(tracker, 1);
     const workflow = new IssueWorkflow({ tracker, number: 1, runner: { run: async () => { throw new Error('不能执行 AI'); } }, context: { issueIid: 1, demand: tracker.get(1)!.demandSpec, branchName: 'iaf-1', workDir: directory }, maxRetries: 0, maxRepairs: 0 });
     const action = outcome === 'gate-approved' ? 'approve' as const : 'reject' as const;

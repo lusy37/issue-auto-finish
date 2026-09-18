@@ -9,7 +9,6 @@
 import { logger as rootLogger } from '../logger.js';
 import { eventBus as defaultEventBus } from '../events/EventBus.js';
 import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
-import { readIssueLifecycle } from '../tracker/IssueLifecycle.js';
 import { getIssueNumber } from '../tracker/IssueRecordHelper.js';
 import type { IssueTracker } from '../tracker/IssueTracker.js';
 import type { IssueService } from '../orchestrator/IssueService.js';
@@ -92,7 +91,7 @@ export class PreviewReaper {
       const records = this.tracker.getAll();
 
       for (const record of records) {
-        if (!['completed', 'failed'].includes(readIssueLifecycle(record).kind)) continue;
+        if (!['completed', 'failed'].includes(record.lifecycle.kind)) continue;
         if (!record.previewStartedAt) continue;
 
         const age = now - new Date(record.previewStartedAt).getTime();

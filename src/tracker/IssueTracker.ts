@@ -1,6 +1,5 @@
-import { IssueState, type IssueRecord, type LegacyIssueProjection, type PhaseProgress } from './IssueState.js';
+import type { IssueRecord, NewIssueRecord, PhaseProgress } from './IssueRecord.js';
 import { type PipelineDef } from '../pipeline/PipelineMetadata.js';
-import { IssueNotFoundError } from '../errors/index.js';
 import { IssueRunStore } from '../dag/IssueRunStore.js';
 import { newIssueRun, sameIdentity, type ExecutionIdentity } from '../dag/contracts.js';
 import { type ExecutableTask, issueToExecutableTask } from './ExecutableTask.js';
@@ -8,8 +7,7 @@ import { getIssueNumber } from './IssueRecordHelper.js';
 import { logger as rootLogger } from '../logger.js';
 import { eventBus } from '../events/EventBus.js';
 import { initializeWorkflowDefinition, PHASE_IDS, type PhaseId } from '../orchestration/WorkflowState.js';
-import { applyIssueLifecycleEvent, lifecycleFromLegacyProjection, readIssueLifecycle, reconcileLegacyIssueProjection, syncLegacyIssueProjection } from './IssueLifecycle.js';
-import type { IssueLifecycle } from './IssueLifecycle.js';
+import { applyIssueLifecycleEvent } from './IssueLifecycle.js';
 
 const logger = rootLogger.child('IssueTracker');
 
@@ -27,7 +25,7 @@ export class IssueTracker {
 
   transaction(issueIid: number, update: (record: IssueRecord) => void): IssueRecord {
     const record = this.store.transaction(issueIid, update);
-    eventBus.emitTyped('issue:stateChanged', { issueIid, state: record.state, record });
+    eventBus.emitTyped('issue:updated', { issueIid, lifecycle: record.lifecycle, record });
     return record;
   }
 
@@ -35,7 +33,7 @@ export class IssueTracker {
     const record = this.get(identity.issueNumber);
     const run = record?.run;
     if (!run || this.store.isBlocked(identity.issueNumber) || run.stopIntent || run.planRevision !== identity.planRevision || run.buildGeneration !== identity.buildGeneration || run.dispatchId !== identity.dispatchId || !sameIdentity(run.calls[identity.callId]?.identity, identity)) throw new Error('执行身份已失效');
-    const lifecycle = readIssueLifecycle(record!);
+    const lifecycle = record!.lifecycle;
     if (identity.taskId.startsWith('$phase:')
       && (lifecycle.kind !== 'running' || lifecycle.phase !== identity.taskId.slice(7))) {
       throw new Error('父阶段调用身份已失效');
@@ -57,51 +55,31 @@ export class IssueTracker {
 
   get(issueIid: number): IssueRecord | undefined { return this.store.get(issueIid); }
 
-  create(record: Omit<IssueRecord, keyof LegacyIssueProjection | 'lifecycle' | 'createdAt' | 'updatedAt'>
-    & Pick<LegacyIssueProjection, 'state'>
-    & Partial<Omit<LegacyIssueProjection, 'state'>>
-    & { lifecycle?: IssueLifecycle }): IssueRecord {
+  create(record: NewIssueRecord): IssueRecord {
     const now = new Date().toISOString();
     const full: IssueRecord = {
       ...record,
-      lifecycle: record.lifecycle ?? lifecycleFromLegacyProjection(record),
+      lifecycle: structuredClone(record.lifecycle),
       createdAt: now,
       updatedAt: now,
-    } as IssueRecord;
-    full.phaseHistory ??= [];
-    full.run ??= newIssueRun();
+      phaseHistory: record.phaseHistory ?? [],
+      run: record.run ?? newIssueRun(),
+    };
     if (!full.run.workflow.definition && !['pending', 'skipped'].includes(full.lifecycle.kind)) {
       initializeWorkflowDefinition(full.run.workflow, this.pipelineFor(full).phases.map(phase => phase.name));
     }
-    syncLegacyIssueProjection(full);
     this.store.insert(getIssueNumber(full), full);
-    logger.info('Issue tracked', { issueIid: getIssueNumber(full), state: record.state });
+    logger.info('Issue tracked', { issueIid: getIssueNumber(full), lifecycle: record.lifecycle.kind });
     const saved = this.get(getIssueNumber(full))!;
     eventBus.emitTyped('issue:created', saved);
     return saved;
-  }
-
-  updateState(issueIid: number, state: IssueState, extra?: Partial<IssueRecord>): void {
-    const record = this.get(issueIid);
-    if (!record) {
-      throw new IssueNotFoundError(issueIid);
-    }
-    record.updatedAt = new Date().toISOString();
-    record.state = state;
-    if (extra) {
-      Object.assign(record, extra);
-    }
-    reconcileLegacyIssueProjection(record);
-    this.store.replace(record);
-    logger.info('Issue state updated', { issueIid, state });
-    eventBus.emitTyped('issue:stateChanged', { issueIid, state, record });
   }
 
   /** 清空 phaseHistory（用于 reset / restart） */
   clearPhaseHistory(issueIid: number): void {
     const record = this.get(issueIid);
     if (!record) return;
-    record.phaseHistory = undefined;
+    record.phaseHistory = [];
     record.updatedAt = new Date().toISOString();
     this.store.replace(record);
   }
@@ -128,7 +106,7 @@ export class IssueTracker {
     Object.assign(pp, update);
     record.updatedAt = new Date().toISOString();
     this.store.replace(record);
-    eventBus.emitTyped('issue:stateChanged', { issueIid, state: record.state, record });
+    eventBus.emitTyped('issue:updated', { issueIid, lifecycle: record.lifecycle, record });
   }
 
   /** 阶段执行器读取会话恢复信息；阶段进度的唯一持久化来源仍是 IssueRecord。 */
@@ -136,60 +114,62 @@ export class IssueTracker {
     return this.get(issueIid)?.phaseProgress?.[phase];
   }
 
-  emitFailure(issueIid:number):void {
-    const record=this.get(issueIid);
-    if(record && readIssueLifecycle(record).kind === 'failed') eventBus.emitTyped('issue:failed',{issueIid,record,error:record.lastError,failedAtState:record.failedAtState});
+  emitFailure(issueIid: number): void {
+    const record = this.get(issueIid);
+    if (record?.lifecycle.kind === 'failed') eventBus.emitTyped('issue:failed', {
+      issueIid,
+      record,
+      error: record.lifecycle.error.message,
+      phase: record.lifecycle.phase,
+    });
   }
 
-  markFailed(issueIid: number, error: string, failedAtState: IssueState, isRetryable?: boolean): void {
+  private persistFailure(issueIid: number, error: string, isRetryable: boolean, reserveRetry: boolean): void {
     const record = this.get(issueIid);
     if (!record) return;
-    if (readIssueLifecycle(record).kind === 'cancelled') return;
-    const currentLifecycle = readIssueLifecycle(record);
+    if (record.lifecycle.kind === 'cancelled') return;
+    const currentLifecycle = record.lifecycle;
     const phase = 'phase' in currentLifecycle ? currentLifecycle.phase : undefined;
     applyIssueLifecycleEvent(record, {
       type: 'phase-failed',
       phase,
-      retry: isRetryable === false ? 'manual' : 'auto',
-      error: { message: error, retryable: isRetryable === false ? 'hard-no-auto' : 'hard' },
+      retry: isRetryable ? 'auto' : 'manual',
+      error: { message: error, retryable: isRetryable ? 'hard' : 'hard-no-auto' },
     });
-    record.retryCount = (record.retryCount ?? 0) + 1;
-    if (isRetryable !== false) {
+    if (isRetryable && reserveRetry) {
       const retryPhase = phase ?? 'setup';
       record.run!.retryUsed[retryPhase] = (record.run!.retryUsed[retryPhase] ?? 0) + 1;
     }
-    syncLegacyIssueProjection(record);
     record.updatedAt = new Date().toISOString();
     this.store.replace(record);
-    logger.warn('Issue marked as failed', { issueIid, error, failedAtState, attempts: record.attempts, isRetryable });
-    eventBus.emitTyped('issue:failed', { issueIid, error, failedAtState, record });
+    logger.warn('Issue marked as failed', { issueIid, error, phase, isRetryable });
+    eventBus.emitTyped('issue:failed', { issueIid, error, phase, record });
   }
 
-  /**
-   * Mark as failed WITHOUT incrementing attempts. Used when the agent was still
-   * actively producing output at timeout — a slow-but-progressing run should not
-   * consume the retry budget.
-   */
-  markFailedSoft(issueIid: number, error: string, failedAtState: IssueState): void {
-    this.markFailed(issueIid, error, failedAtState, true);
+  markFailed(issueIid: number, error: string, isRetryable = true): void {
+    this.persistFailure(issueIid, error, isRetryable, true);
   }
 
-  pauseIssue(issueIid: number, currentPhase: string): void {
+  /** 活跃输出超时只记录失败，下一次驱动再预留重试预算。 */
+  markFailedSoft(issueIid: number, error: string): void {
+    this.persistFailure(issueIid, error, true, false);
+  }
+
+  pauseIssue(issueIid: number, phase: PhaseId): void {
     const record = this.get(issueIid);
     if (!record) return;
-    const phase = PHASE_IDS.includes(currentPhase as PhaseId) ? currentPhase as PhaseId : 'plan';
     applyIssueLifecycleEvent(record, { type: 'pause-requested', phase });
     record.processingLock = undefined;
     record.updatedAt = new Date().toISOString();
     this.store.replace(record);
-    logger.info('Issue paused', { issueIid, pausedAtPhase: currentPhase });
-    eventBus.emitTyped('issue:paused', { issueIid, pausedAtPhase: currentPhase, record });
+    logger.info('Issue paused', { issueIid, phase });
+    eventBus.emitTyped('issue:paused', { issueIid, phase, record });
   }
 
   resumeFromPause(issueIid: number): boolean {
     const record = this.get(issueIid);
     if (!record) return false;
-    const lifecycle = readIssueLifecycle(record);
+    const lifecycle = record.lifecycle;
     if (lifecycle.kind !== 'paused') return false;
 
     const phase = lifecycle.phase;
@@ -279,31 +259,26 @@ export class IssueTracker {
   isProcessing(issueIid: number): boolean {
     const record = this.get(issueIid);
     if (!record) return false;
-    return !['completed', 'cancelled', 'skipped'].includes(readIssueLifecycle(record).kind);
+    return !['completed', 'cancelled', 'skipped'].includes(record.lifecycle.kind);
   }
 
   isCompleted(issueIid: number): boolean {
     const record = this.get(issueIid);
-    return !!record && readIssueLifecycle(record).kind === 'completed';
+    return !!record && record.lifecycle.kind === 'completed';
   }
 
   canRetry(issueIid: number, maxRetries: number): boolean {
     const record = this.get(issueIid);
     if (!record) return false;
-    const lifecycle = readIssueLifecycle(record);
+    const lifecycle = record.lifecycle;
     if (lifecycle.kind !== 'failed' || lifecycle.retry !== 'auto') return false;
     return (record.run!.retryUsed[lifecycle.phase ?? 'setup'] ?? 0) < maxRetries;
-  }
-
-  getRetryState(issueIid: number): IssueState | undefined {
-    const record = this.get(issueIid);
-    return record?.failedAtState;
   }
 
   isStalled(issueIid: number, thresholdMs: number = 5 * 60 * 1000): boolean {
     const record = this.get(issueIid);
     if (!record) return false;
-    const lifecycle = readIssueLifecycle(record);
+    const lifecycle = record.lifecycle;
     if (lifecycle.kind === 'waiting' || lifecycle.kind === 'paused' || lifecycle.kind === 'failed') return false;
     if (!this.isProcessing(issueIid)) return false;
     const elapsed = Date.now() - new Date(record.updatedAt).getTime();
@@ -313,7 +288,7 @@ export class IssueTracker {
   getDrivableIssues(maxRetries: number, stalledThresholdMs?: number): IssueRecord[] {
     return this.getAllRecords().filter((record) => {
       if (record.run!.stopIntent || this.store.isBlocked(getIssueNumber(record))) return false;
-      const lifecycle = readIssueLifecycle(record);
+      const lifecycle = record.lifecycle;
       const retryPhase = lifecycle.kind === 'failed' ? lifecycle.phase ?? 'setup' : 'setup';
       const retryUsed = record.run!.retryUsed[retryPhase] ?? 0;
       // 已预留的最后一次重试仍必须可调度；否则 retryUsed 达到上限后会永久滞留在 Failed。
@@ -345,7 +320,7 @@ export class IssueTracker {
 
   getAllActive(): IssueRecord[] {
     return this.getAllRecords().filter(
-      (r) => !['completed', 'cancelled', 'skipped'].includes(readIssueLifecycle(r).kind),
+      (r) => !['completed', 'cancelled', 'skipped'].includes(r.lifecycle.kind),
     );
   }
 
@@ -355,12 +330,12 @@ export class IssueTracker {
 
   startSkipped(issueIid: number): boolean {
     const record = this.get(issueIid);
-    if (!record || readIssueLifecycle(record).kind !== 'skipped') return false;
+    if (!record || record.lifecycle.kind !== 'skipped') return false;
     applyIssueLifecycleEvent(record, { type: 'start-requested' });
     record.updatedAt = new Date().toISOString();
     this.store.replace(record);
     logger.info('Skipped issue started', { issueIid });
-    eventBus.emitTyped('issue:stateChanged', { issueIid, state: IssueState.Pending, record });
+    eventBus.emitTyped('issue:updated', { issueIid, lifecycle: record.lifecycle, record });
     return true;
   }
 
@@ -368,18 +343,19 @@ export class IssueTracker {
     const record = this.get(issueIid);
     if (!record) return false;
     applyIssueLifecycleEvent(record, { type: 'full-redo-requested' });
-    record.retryCount = 0;
     record.phaseProgress = undefined;
     record.processingLock = undefined;
     record.resetGeneration = (record.resetGeneration ?? 0) + 1;
     const previous = record.run!;
     record.run = { ...newIssueRun(), version: previous.version, planRevision: previous.planRevision, buildGeneration: previous.buildGeneration + 1, delivery: previous.delivery, workspaces: previous.workspaces, budgetHistory: [...(previous.budgetHistory ?? []), { planRevision: previous.planRevision, buildGeneration: previous.buildGeneration, retryUsed: previous.retryUsed, phaseExecutions: previous.phaseExecutions, repairRounds: previous.repairRounds }] };
     record.run.planDigest = previous.planDigest;
-    record.deliveryPending = undefined;record.deliveryNoteWritten = undefined;record.uatRunId = undefined;record.completedAt = undefined;
-    record.archivedPhaseHistory = [...(record.archivedPhaseHistory??[]),...(record.phaseHistory??[])];
+    record.deliveryPending = undefined;
+    record.deliveryNoteWritten = undefined;
+    record.uatRunId = undefined;
+    record.completedAt = undefined;
+    record.archivedPhaseHistory = [...(record.archivedPhaseHistory ?? []), ...record.phaseHistory];
     record.updatedAt = new Date().toISOString();
-    record.phaseHistory = undefined;
-    syncLegacyIssueProjection(record);
+    record.phaseHistory = [];
     this.store.replace(record);
     logger.info('Issue fully reset', { issueIid });
     eventBus.emitTyped('issue:restarted', { issueIid, record });
@@ -397,7 +373,9 @@ export class IssueTracker {
     record.run!.workflow.entry = phase as PhaseId;
     applyIssueLifecycleEvent(record, { type: 'phase-redo-requested' });
     record.run!.stopIntent = undefined;
-    record.deliveryPending=undefined;record.uatRunId=undefined;record.completedAt=undefined;
+    record.deliveryPending = undefined;
+    record.uatRunId = undefined;
+    record.completedAt = undefined;
     record.processingLock = undefined;
     // 重置目标阶段及后续阶段的 phaseProgress
     if (record.phaseProgress) {
@@ -421,11 +399,10 @@ export class IssueTracker {
   resetForRetry(issueIid: number): boolean {
     const record = this.get(issueIid);
     if (!record) return false;
-    const failedLifecycle = readIssueLifecycle(record);
+    const failedLifecycle = record.lifecycle;
     if (failedLifecycle.kind !== 'failed') return false;
 
-    const restoreState = record.deliveryPending ? IssueState.Delivering : IssueState.BranchCreated;
-    if(record.deliveryPending) record.retryCount = (record.retryCount ?? 0) + 1;
+    const restoreLifecycle = record.deliveryPending ? 'delivering' : 'ready';
     if (record.deliveryPending) {
       applyIssueLifecycleEvent(record, { type: 'retry-requested' });
       applyIssueLifecycleEvent(record, { type: 'delivery-started' });
@@ -446,8 +423,8 @@ export class IssueTracker {
     }
     record.updatedAt = new Date().toISOString();
     this.store.replace(record);
-    logger.info('Issue reset for retry', { issueIid, restoreState });
-    eventBus.emitTyped('issue:resetForRetry', { issueIid, restoreState, record });
+    logger.info('Issue reset for retry', { issueIid, restoreLifecycle });
+    eventBus.emitTyped('issue:resetForRetry', { issueIid, restoreLifecycle, record });
     return true;
   }
 
@@ -461,14 +438,14 @@ export class IssueTracker {
   recoverInterruptedIssues(): number {
     let count = 0;
     for (const record of this.getAllRecords()) {
-      // 等待审核也在启动后核对一次图，覆盖旧进程在等待投影与中断落盘之间退出的窗口。
-      const lifecycle = readIssueLifecycle(record);
+      // 等待审核也在启动后核对一次图，覆盖生命周期发布与中断落盘之间的退出窗口。
+      const lifecycle = record.lifecycle;
       if (!['running', 'delivering', 'waiting'].includes(lifecycle.kind) && !record.run!.stopIntent) continue;
       this.transaction(getIssueNumber(record), current => {
         current.run!.recoveryRequired = true;
         current.processingLock = undefined;
         if (current.run!.stopIntent) {
-          const currentLifecycle = readIssueLifecycle(current);
+          const currentLifecycle = current.lifecycle;
           if (current.run!.stopIntent.kind === 'cancel') {
             if (currentLifecycle.kind !== 'cancelled') {
               applyIssueLifecycleEvent(current, { type: 'cancel-requested' });

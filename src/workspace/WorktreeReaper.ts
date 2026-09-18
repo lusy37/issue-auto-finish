@@ -10,8 +10,7 @@
  */
 import { logger as rootLogger } from '../logger.js';
 import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
-import type { IssueRecord } from '../tracker/IssueState.js';
-import { readIssueLifecycle } from '../tracker/IssueLifecycle.js';
+import type { IssueRecord } from '../tracker/IssueRecord.js';
 import { getIssueNumber } from '../tracker/IssueRecordHelper.js';
 import type { IssueService } from '../orchestrator/IssueService.js';
 
@@ -136,7 +135,7 @@ export class WorktreeReaper {
   /** 判定某条记录是否到达回收条件：终态 + 未清理 + 已超过保留期。 */
   private shouldReap(record: IssueRecord, now: number): boolean {
     if (record.run?.recoveryRequired || Object.values(record.run?.calls ?? {}).some(call => call.status !== 'exited')) return false;
-    if (readIssueLifecycle(record).kind !== 'completed') return false;
+    if (record.lifecycle.kind !== 'completed') return false;
     if (record.worktreeCleanedAt) return false;
     if (!record.completedAt) return false;
     const age = now - new Date(record.completedAt).getTime();

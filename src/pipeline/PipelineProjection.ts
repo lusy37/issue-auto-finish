@@ -1,6 +1,6 @@
 import { t } from '../i18n/index.js';
 import type { IssueLifecycle } from '../tracker/IssueLifecycle.js';
-import { IssueState, type PhaseStatus } from '../tracker/IssueState.js';
+import type { PhaseStatus } from '../tracker/IssueRecord.js';
 import type { PipelineDef, PhaseSpec, PlanFileSpec } from './PipelineMetadata.js';
 
 export type DisplayActionStatus =
@@ -109,62 +109,4 @@ export function projectLifecyclePhaseStatuses(
     case 'completed': return Object.fromEntries(def.phases.map(phase => [phase.name, 'completed']));
     default: return allPending(def);
   }
-}
-
-/** v3 前端元数据使用的旧枚举投影，隔离在 API 展示边界。 */
-export function projectLegacyStateAction(state: IssueState, currentPhase?: string): DisplayAction {
-  switch (state) {
-    case IssueState.Pending: return { action: 'init', status: 'idle' };
-    case IssueState.Skipped: return { action: 'init', status: 'skipped' };
-    case IssueState.BranchCreated:
-    case IssueState.PhaseDone:
-    case IssueState.PhaseApproved: return { action: currentPhase ?? 'init', status: 'ready' };
-    case IssueState.PhaseRunning: return { action: currentPhase ?? 'init', status: 'running' };
-    case IssueState.PhaseWaiting: return { action: currentPhase ?? 'init', status: 'waiting' };
-    case IssueState.Paused: return { action: currentPhase ?? 'init', status: 'paused' };
-    case IssueState.Failed: return { action: currentPhase ?? 'init', status: 'failed' };
-    case IssueState.Delivering: return { action: 'delivery', status: 'ready' };
-    case IssueState.Completed: return { action: 'delivery', status: 'done' };
-    case IssueState.Cancelled: return { action: 'cancel', status: 'skipped' };
-  }
-}
-
-export function projectLegacyPhaseStatuses(
-  def: PipelineDef,
-  state: IssueState,
-  currentPhase?: string,
-): Record<string, PhaseStatus> {
-  if (state === IssueState.Completed) {
-    return Object.fromEntries(def.phases.map(phase => [phase.name, 'completed']));
-  }
-  if (!currentPhase) return allPending(def);
-  if (state === IssueState.PhaseRunning || state === IssueState.Paused) return statusesAtPhase(def, currentPhase, 'in_progress');
-  if (state === IssueState.PhaseWaiting) return statusesAtPhase(def, currentPhase, 'gate_waiting');
-  if (state === IssueState.Failed) return statusesAtPhase(def, currentPhase, 'failed');
-  if (state === IssueState.PhaseDone || state === IssueState.PhaseApproved) return statusesAtPhase(def, currentPhase, 'completed');
-  return allPending(def);
-}
-
-export function collectLegacyStateLabels(def: PipelineDef): Map<string, string> {
-  const labels = new Map<string, string>([
-    [IssueState.Pending, t('state.pending')],
-    [IssueState.Skipped, t('state.skipped')],
-    [IssueState.BranchCreated, t('state.branchCreated')],
-    [IssueState.Completed, t('state.completed')],
-    [IssueState.Delivering, '正在交付'],
-    [IssueState.Cancelled, '已取消'],
-    [IssueState.Failed, t('state.failed')],
-    [IssueState.Paused, t('state.paused')],
-  ]);
-  for (const phase of def.phases) {
-    const label = t(`pipeline.phase.${phase.name}`);
-    if (phase.kind === 'gate') {
-      labels.set(`phase_waiting:${phase.name}`, t('state.phaseWaiting', { label }));
-      labels.set(`phase_approved:${phase.name}`, t('state.phaseApproved', { label }));
-    } else {
-      labels.set(`phase_running:${phase.name}`, t('state.phaseDoing', { label }));
-      labels.set(`phase_done:${phase.name}`, t('state.phaseDone', { label }));
-    }
-  }
-  return labels;
 }

@@ -4,8 +4,9 @@ import path from "node:path";
 import os from "node:os";
 import { DraftService } from "../../src/demand/DraftService.js";
 import { summarizeTasks } from "../../src/analytics/TaskAnalytics.js";
-import { IssueState, type IssueRecord } from "../../src/tracker/IssueState.js";
-import { lifecycleFromLegacyProjection } from "../../src/tracker/IssueLifecycle.js";
+import type { IssueRecord } from "../../src/tracker/IssueRecord.js";
+import type { IssueLifecycle } from "../../src/tracker/IssueLifecycle.js";
+import { newIssueRun } from "../../src/dag/contracts.js";
 import {
   validateUatReport,
   executeUat,
@@ -81,28 +82,28 @@ describe('单需求草稿创建与核对', () => {
 });
 describe("本工具任务统计", () => {
   const record = (
-    state: IssueState,
+    lifecycle: IssueLifecycle,
     extra: Partial<IssueRecord> = {},
   ): IssueRecord => {
-    const value = {
-      state,
-      attempts: 0,
+    return {
+      lifecycle,
       branchName: "demo",
       createdAt: "2026-09-08T00:00:00Z",
       updatedAt: "2026-09-08T00:01:00Z",
+      demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' }, title: '任务', description: '', createdAt: '2026-09-08T00:00:00Z' },
+      run: newIssueRun(),
+      phaseHistory: [],
       ...extra,
-    } as IssueRecord;
-    value.lifecycle = extra.lifecycle ?? lifecycleFromLegacyProjection(value);
-    return value;
+    };
   };
   it("排除进行中、审核和取消；重试成功只计一个成功任务", () => {
     const data = summarizeTasks(
       [
-        record(IssueState.Completed, { retryCount: 2 }),
-        record(IssueState.Failed),
-        record(IssueState.PhaseWaiting),
-        record(IssueState.Cancelled),
-        record(IssueState.PhaseRunning),
+        record({ kind: 'completed' }, { run: { ...newIssueRun(), retryUsed: { build: 2 } } }),
+        record({ kind: 'failed', retry: 'manual', error: { message: '失败', retryable: 'hard-no-auto' } }),
+        record({ kind: 'waiting', phase: 'review' }),
+        record({ kind: 'cancelled' }),
+        record({ kind: 'running', phase: 'build' }),
       ],
       "all",
     );
@@ -115,7 +116,7 @@ describe("本工具任务统计", () => {
   it("无终态样本返回 null，实际阶段耗时排除人工等待", () => {
     const data = summarizeTasks(
       [
-        record(IssueState.PhaseWaiting, {
+        record({ kind: 'waiting', phase: 'review' }, {
           phaseHistory: [
             {
               phaseId: "plan",
@@ -144,7 +145,7 @@ describe("本工具任务统计", () => {
   it("时间筛选按创建日期", () => {
     expect(
       summarizeTasks(
-        [record(IssueState.Completed)],
+        [record({ kind: 'completed' })],
         "7d",
         Date.parse("2026-09-30"),
       ).total,

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleFailure } from '../../src/orchestrator/steps/FailureHandler.js';
-import { IssueState } from '../../src/tracker/IssueState.js';
 import {
   createMockOrchestratorDeps,
   createTestIssue,
@@ -29,8 +28,6 @@ describe('handleFailure', () => {
   it('marks failed when resetGeneration matches (normal failure, not a concurrent reset)', async () => {
     (deps.tracker.get as ReturnType<typeof vi.fn>).mockReturnValue({
       lifecycle: { kind: 'running', phase: 'build' },
-      state: IssueState.PhaseRunning,
-      attempts: 1,
       resetGeneration: 1,
     });
 
@@ -42,7 +39,6 @@ describe('handleFailure', () => {
     expect(deps.tracker.markFailed).toHaveBeenCalledWith(
       issue.number,
       'setup failed',
-      IssueState.PhaseRunning,
       true,
     );
   });
@@ -50,8 +46,6 @@ describe('handleFailure', () => {
   it('skips markFailed when resetGeneration differs (concurrent reset)', async () => {
     (deps.tracker.get as ReturnType<typeof vi.fn>).mockReturnValue({
       lifecycle: { kind: 'pending' },
-      state: IssueState.Pending,
-      attempts: 0,
       resetGeneration: 2,
     });
 
@@ -65,14 +59,12 @@ describe('handleFailure', () => {
 
   it('marks failed after resetFull when processing starts AFTER reset (the bug scenario)', async () => {
     // This is the core bug scenario:
-    // restartIssue() resets state to Pending+attempts=0, generation becomes 1
+    // restartIssue() 将生命周期重置为 pending，generation 变为 1
     // NEW processIssue starts, snapshots generation=1
     // setup fails → handleFailure with startResetGeneration=1
     // tracker still has generation=1 → wasReset=false → should markFailed
     (deps.tracker.get as ReturnType<typeof vi.fn>).mockReturnValue({
       lifecycle: { kind: 'pending' },
-      state: IssueState.Pending,
-      attempts: 0,
       resetGeneration: 1,
     });
 
@@ -84,17 +76,14 @@ describe('handleFailure', () => {
     expect(deps.tracker.markFailed).toHaveBeenCalledWith(
       issue.number,
       'worktree failed',
-      IssueState.Pending,
       true,
     );
   });
 
   it('尚未重置的任务按初始代数处理失败', async () => {
-    // Old records have no resetGeneration field
+    // 首轮任务尚未设置 resetGeneration。
     (deps.tracker.get as ReturnType<typeof vi.fn>).mockReturnValue({
       lifecycle: { kind: 'running', phase: 'build' },
-      state: IssueState.PhaseRunning,
-      attempts: 1,
       // no resetGeneration → defaults to 0
     });
 
@@ -109,9 +98,7 @@ describe('handleFailure', () => {
 
   it('does not mark failed when already in Failed state', async () => {
     (deps.tracker.get as ReturnType<typeof vi.fn>).mockReturnValue({
-      lifecycle: { kind: 'failed', retry: 'manual', error: { message: '已有失败' } },
-      state: IssueState.Failed,
-      attempts: 2,
+      lifecycle: { kind: 'failed', retry: 'manual', error: { message: '已有失败', retryable: 'hard-no-auto' } },
       resetGeneration: 0,
     });
 
@@ -119,7 +106,7 @@ describe('handleFailure', () => {
       handleFailure(new Error('retry failed'), issue, wtCtx, deps, 0),
     ).rejects.toThrow('retry failed');
 
-    // failedAtState === Failed → condition is false → skip markFailed
+    // 已经是失败生命周期时不重复覆盖。
     expect(deps.tracker.markFailed).not.toHaveBeenCalled();
   });
 });

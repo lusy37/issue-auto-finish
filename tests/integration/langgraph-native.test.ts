@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IssueWorkflow, type WorkflowOptions } from '../../src/orchestrator/IssueWorkflow.js';
-import { IssueState } from '../../src/tracker/IssueState.js';
+import { applyIssueLifecycleEvent } from '../../src/tracker/IssueLifecycle.js';
 import { newTracker } from '../helpers/dag-repository.js';
 import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { buildPlanModePipeline } from '../../src/pipeline/PipelineMetadata.js';
@@ -17,7 +17,7 @@ afterEach(() => { vi.restoreAllMocks(); fs.rmSync(directory, { recursive: true, 
 function fixture(e2eEnabled = true) {
   let tracker = newTracker(directory);
   const demand = { demandId: 'gh-1', sourceRef: { source: 'github-issue' as const, externalId: '1', displayId: '1' }, title: '需求', description: '实施需求', createdAt: new Date().toISOString() };
-  tracker.create({ state: IssueState.Pending, demandSpec: demand, branchName: 'iaf-1' });
+  tracker.create({ lifecycle: { kind: 'pending' }, demandSpec: demand, branchName: 'iaf-1' });
   tracker.initPhaseProgress(1, buildPlanModePipeline({ e2eEnabled }));
   const calls: string[] = [];
   const runner: WorkflowOptions['runner'] = { run: async spec => {
@@ -26,7 +26,13 @@ function fixture(e2eEnabled = true) {
     return { kind: 'completed', output: spec.id };
   } };
   const options = (): WorkflowOptions => ({ tracker, number: 1, runner, context: { issueIid: 1, demand, branchName: 'iaf-1', workDir: directory }, maxRetries: 1, maxRepairs: 2,
-    deliver: async () => { calls.push('deliver'); tracker.updateState(1, IssueState.Completed, { deliveryPending: false }); },
+    deliver: async () => {
+      calls.push('deliver');
+      tracker.transaction(1, record => {
+        applyIssueLifecycleEvent(record, { type: 'delivery-confirmed' });
+        record.deliveryPending = false;
+      });
+    },
   });
   return { calls, runner, options, workflow: () => new IssueWorkflow(options()), tracker: () => tracker,
     restart: () => { tracker = newTracker(directory); return new IssueWorkflow(options()); },
@@ -37,16 +43,17 @@ async function projectBuildRetryWindow(f: ReturnType<typeof fixture>, retryUsed:
   await f.workflow().drive();
   await f.workflow().resumeReview({ action: 'approve', planRevision: 1 });
   f.tracker().transaction(1, record => {
-    record.state = IssueState.Failed;
-    record.currentPhase = 'build';
-    record.failedAtState = IssueState.PhaseRunning;
-    record.lastError = '模拟已落盘失败';
-    record.lastErrorRetryable = true;
+    applyIssueLifecycleEvent(record, { type: 'phase-started', phase: 'build' });
+    applyIssueLifecycleEvent(record, {
+      type: 'phase-failed',
+      phase: 'build',
+      retry: 'auto',
+      error: { message: '模拟已落盘失败', retryable: 'hard' },
+    });
     record.run!.retryUsed.build = retryUsed;
     // 已执行次数包含首次执行；retryUsed === phaseExecutions 表示下一次重试已预留、尚未开始。
     record.run!.phaseExecutions.build = completedRetries + 1;
-    record.orchestrationState = { kind: 'pipeline-failed', failedAt: 'build', retryable: 'auto', error: { message: record.lastError, retryable: 'hard' } };
-    record.phaseProgress!.build = { status: 'failed', error: record.lastError };
+    record.phaseProgress!.build = { status: 'failed', error: '模拟已落盘失败' };
   });
 }
 
@@ -55,7 +62,7 @@ describe('LangGraph 原生持久化和人工介入', () => {
     const f = fixture();
     await f.workflow().drive();
     expect(f.calls).toEqual(['plan']);
-    expect(f.tracker().get(1)?.state).toBe(IssueState.PhaseWaiting);
+    expect(f.tracker().get(1)?.lifecycle).toEqual({ kind: 'waiting', phase: 'review', planRevision: 1 });
     const resumed = f.restart();
     const waiting = await resumed.getState();
     expect(waiting.tasks.flatMap(task => task.interrupts ?? [])).toContainEqual(expect.objectContaining({ value: expect.objectContaining({ kind: 'review', planRevision: 1 }) }));
@@ -64,7 +71,7 @@ describe('LangGraph 原生持久化和人工介入', () => {
     expect(f.tracker().get(1)?.run?.review?.decision).toBe('approved');
     await f.restart().drive();
     expect(f.calls).toEqual(['plan', 'build', 'verify', 'uat', 'deliver']);
-    expect(f.tracker().get(1)?.state).toBe(IssueState.Completed);
+    expect(f.tracker().get(1)?.lifecycle).toEqual({ kind: 'completed' });
     expect(f.tracker().get(1)?.phaseHistory?.every(entry => Number.isInteger(entry.attemptId) && entry.attemptId > 0)).toBe(true);
     const states = [];
     for await (const state of f.workflow().getStateHistory()) states.push(state);
@@ -79,7 +86,7 @@ describe('LangGraph 原生持久化和人工介入', () => {
     await f.restart().drive();
     expect(f.calls).toEqual(['plan', 'plan']);
     expect(f.tracker().get(1)?.run?.planRevision).toBe(2);
-    expect(f.tracker().get(1)?.state).toBe(IssueState.PhaseWaiting);
+    expect(f.tracker().get(1)?.lifecycle).toEqual({ kind: 'waiting', phase: 'review', planRevision: 2 });
     await expect(f.workflow().resumeReview({ action: 'approve', planRevision: 1 })).rejects.toThrow('版本');
   });
 
@@ -96,7 +103,7 @@ describe('LangGraph 原生持久化和人工介入', () => {
     const run = vi.spyOn(f.runner, 'run').mockResolvedValue({ kind: 'failed', error: { message: '暂时不可用', retryable: 'hard' } });
     await f.workflow().drive();
     expect(run).toHaveBeenCalledTimes(2);
-    expect(f.tracker().get(1)?.state).toBe(IssueState.Failed);
+    expect(f.tracker().get(1)?.lifecycle).toMatchObject({ kind: 'failed', retry: 'manual' });
     expect(f.tracker().get(1)?.run?.retryUsed.plan).toBe(1);
     f.restart();
     f.tracker().resetForRetry(1);
@@ -112,7 +119,7 @@ describe('LangGraph 原生持久化和人工介入', () => {
     await f.restart().drive();
     expect(f.calls).toEqual(['plan', 'build', 'verify', 'uat', 'deliver']);
     expect(f.tracker().get(1)?.run?.retryUsed.build).toBe(1);
-    expect(f.tracker().get(1)?.state).toBe(IssueState.Completed);
+    expect(f.tracker().get(1)?.lifecycle).toEqual({ kind: 'completed' });
   });
 
   it('retryPolicy 已预留最后一次预算但尚未执行时，重启可驱动且不重复扣减', async () => {
@@ -122,7 +129,7 @@ describe('LangGraph 原生持久化和人工介入', () => {
     await f.restart().drive();
     expect(f.calls).toEqual(['plan', 'build', 'verify', 'uat', 'deliver']);
     expect(f.tracker().get(1)?.run?.retryUsed.build).toBe(1);
-    expect(f.tracker().get(1)?.state).toBe(IssueState.Completed);
+    expect(f.tracker().get(1)?.lifecycle).toEqual({ kind: 'completed' });
   });
 
   it('阶段成功后检查点写入失败，重启复用已提交结果，不重复调用 AI', async () => {
@@ -138,7 +145,7 @@ describe('LangGraph 原生持久化和人工介入', () => {
     await f.restart().drive();
     expect(f.calls).toEqual(['plan']);
     expect(f.tracker().get(1)?.phaseHistory?.filter(entry => entry.phaseId === 'plan' && entry.outcome === 'completed')).toHaveLength(1);
-    expect(f.tracker().get(1)?.state).toBe(IssueState.PhaseWaiting);
+    expect(f.tracker().get(1)?.lifecycle).toEqual({ kind: 'waiting', phase: 'review', planRevision: 1 });
   });
 
   it('拒绝读取旧聚合格式，不自动迁移或改写原文件', () => {
@@ -182,10 +189,13 @@ describe('LangGraph 原生持久化和人工介入', () => {
     const driving = new IssueWorkflow({ ...f.options(), signal: controller.signal }).drive();
     const stopped = expect(driving).rejects.toThrow();
     await started;
-    f.tracker().transaction(1, record => { record.run!.stopIntent = { kind: 'pause', requestedAt: new Date().toISOString() }; record.state = IssueState.Paused; record.pausedAtPhase = 'build'; });
+    f.tracker().transaction(1, record => {
+      record.run!.stopIntent = { kind: 'pause', requestedAt: new Date().toISOString() };
+      applyIssueLifecycleEvent(record, { type: 'pause-requested', phase: 'build' });
+    });
     controller.abort();
     await stopped;
-    expect(f.tracker().get(1)?.state).toBe(IssueState.Paused);
+    expect(f.tracker().get(1)?.lifecycle).toEqual({ kind: 'paused', phase: 'build' });
     run.mockImplementation(original);
     f.restart();
     f.tracker().resumeFromPause(1);
@@ -194,7 +204,7 @@ describe('LangGraph 原生持久化和人工介入', () => {
     await f.workflow().drive();
     expect(f.calls).toEqual(['plan', 'build', 'build', 'verify', 'uat', 'deliver']);
     expect(f.tracker().get(1)?.run?.workflow.generation).toBe(0);
-    expect(f.tracker().get(1)?.state).toBe(IssueState.Completed);
+    expect(f.tracker().get(1)?.lifecycle).toEqual({ kind: 'completed' });
   });
 
   it('修复额度耗尽进入人工失败状态，不滞留运行中或重新循环', async () => {
@@ -206,7 +216,12 @@ describe('LangGraph 原生持久化和人工介入', () => {
       ? Promise.resolve({ kind: 'requestRetryFrom', targetPhaseId: 'build', reason: '验证失败' })
       : original(spec, context));
     await new IssueWorkflow({ ...f.options(), maxRepairs: 0 }).drive();
-    expect(f.tracker().get(1)).toMatchObject({ state: IssueState.Failed, currentPhase: 'verify', lastErrorRetryable: false });
+    expect(f.tracker().get(1)?.lifecycle).toMatchObject({
+      kind: 'failed',
+      phase: 'verify',
+      retry: 'manual',
+      error: { retryable: 'hard-no-auto' },
+    });
     expect(f.tracker().get(1)?.phaseHistory?.at(-1)?.outcome).toBe('failed');
   });
 
@@ -226,7 +241,7 @@ describe('LangGraph 原生持久化和人工介入', () => {
     expect(f.tracker().get(1)?.phaseHistory?.filter(entry => entry.outcome === 'gate-approved')).toHaveLength(1);
   });
 
-  it.each([false, true])('审核中断保存前退出，启动可恢复；旧等待投影=%s', async oldProjection => {
+  it('审核中断保存前退出，启动从运行中生命周期恢复', async () => {
     const f = fixture();
     const workflow = f.workflow();
     const original = workflow.checkpointer.putWrites.bind(workflow.checkpointer);
@@ -235,35 +250,34 @@ describe('LangGraph 原生持久化和人工介入', () => {
       return original(...args);
     });
     await expect(workflow.drive()).rejects.toThrow('中断保存前退出');
-    expect(f.tracker().get(1)?.state).toBe(IssueState.PhaseRunning);
-    if (oldProjection) f.tracker().updateState(1, IssueState.PhaseWaiting);
+    expect(f.tracker().get(1)?.lifecycle).toEqual({ kind: 'running', phase: 'review' });
     const resumed = f.restart();
     expect(f.tracker().recoverInterruptedIssues()).toBe(1);
     expect(f.tracker().getDrivableIssues(1)).toHaveLength(1);
     expect((await resumed.getState()).tasks.flatMap(task => task.interrupts ?? [])).toHaveLength(0);
     await resumed.drive();
-    expect(f.tracker().get(1)?.state).toBe(IssueState.PhaseWaiting);
+    expect(f.tracker().get(1)?.lifecycle).toEqual({ kind: 'waiting', phase: 'review', planRevision: 1 });
     expect(f.calls).toEqual(['plan']);
     await resumed.resumeReview({ action: 'approve', planRevision: 1 });
     await resumed.drive();
     expect(f.calls).toEqual(['plan', 'build', 'verify', 'uat', 'deliver']);
   });
 
-  it('中断已保存但等待投影写入失败，重启仍可继续审核', async () => {
+  it('中断已保存但等待生命周期写入失败，重启仍可继续审核', async () => {
     const f = fixture();
     const transaction = f.tracker().transaction.bind(f.tracker());
     vi.spyOn(f.tracker(), 'transaction').mockImplementation((number, update) => transaction(number, record => {
-      const before = record.state;
+      const before = record.lifecycle.kind;
       update(record);
-      if (before !== IssueState.PhaseWaiting && record.state === IssueState.PhaseWaiting) throw new Error('模拟等待投影写入失败');
+      if (before !== 'waiting' && record.lifecycle.kind === 'waiting') throw new Error('模拟等待生命周期写入失败');
     }));
-    await expect(f.workflow().drive()).rejects.toThrow('等待投影写入失败');
+    await expect(f.workflow().drive()).rejects.toThrow('等待生命周期写入失败');
     f.restart();
     const resumed = new IssueWorkflow({ ...f.options(), autoReview: () => 'configuration' });
     expect(f.tracker().recoverInterruptedIssues()).toBe(1);
     expect((await resumed.getState()).tasks.flatMap(task => task.interrupts ?? [])).toHaveLength(1);
     await resumed.drive();
-    expect(f.tracker().get(1)?.state).toBe(IssueState.PhaseWaiting);
+    expect(f.tracker().get(1)?.lifecycle).toEqual({ kind: 'waiting', phase: 'review', planRevision: 1 });
     expect(f.calls).toEqual(['plan']);
     await resumed.resumeReview({ action: 'approve', planRevision: 1 });
     await resumed.drive();
@@ -278,7 +292,11 @@ describe('LangGraph 原生持久化和人工介入', () => {
     const run = vi.spyOn(f.runner, 'run').mockResolvedValue({ kind: 'failed', error: { message: '模拟失败', retryable: 'hard-no-auto' } });
     await f.workflow().drive();
     expect(run).toHaveBeenCalledTimes(1);
-    expect(f.tracker().get(1)).toMatchObject({ state: IssueState.Failed, lastErrorRetryable: false });
+    expect(f.tracker().get(1)?.lifecycle).toMatchObject({
+      kind: 'failed',
+      retry: 'manual',
+      error: { retryable: 'hard-no-auto' },
+    });
     expect(f.tracker().get(1)?.run?.retryUsed.build).toBeUndefined();
     f.tracker().resetForRetry(1);
     expect(f.tracker().getDrivableIssues(1)).toHaveLength(1);

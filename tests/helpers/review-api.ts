@@ -6,7 +6,6 @@ import path from 'node:path';
 import type { Server } from 'node:http';
 import { createApiRouter } from '../../src/web/routes/api.js';
 import { IssueService } from '../../src/orchestrator/IssueService.js';
-import { IssueState } from '../../src/tracker/IssueState.js';
 import { PlanPersistence } from '../../src/persistence/PlanPersistence.js';
 import { newTracker } from './dag-repository.js';
 import { createTestConfig, createMockGitOperations, createMockGitHubClient, createMockAIRunner } from './mock-factories.js';
@@ -23,11 +22,13 @@ export async function reviewApi(subdir = '') {
   Object.assign(config.project, { workDir: directory, gitRootDir: directory, worktreeBaseDir: path.join(directory, 'worktrees'), projectSubDir: subdir });
   const github = createMockGitHubClient();
   const orchestrator = new IssueService(config, github as never, createMockGitOperations() as never, createMockAIRunner(), tracker);
-  tracker.create({ state: IssueState.PhaseWaiting, currentPhase: 'review', branchName: 'iaf-42', pipelineMode: 'plan-mode',
+  tracker.create({ lifecycle: { kind: 'waiting', phase: 'review', planRevision: 1 }, branchName: 'iaf-42', pipelineMode: 'plan-mode',
     demandSpec: { demandId: 'gh-42', sourceRef: { source: 'github-issue', externalId: '42', displayId: '42' }, title: '实现页面', description: '父需求快照', createdAt: new Date().toISOString() } });
   const newPlan = async (description = '补充页面、错误处理和边界测试') => {
     const plan = tracker.store.savePlan(42, JSON.parse(structuredPlanOutput(description)), tracker.get(42)!.run!.version);
-    tracker.updateState(42, IssueState.PhaseWaiting, { currentPhase: 'review' });
+    tracker.transaction(42, record => {
+      record.lifecycle = { kind: 'waiting', phase: 'review', planRevision: record.run.planRevision };
+    });
     await suspendAtReview(tracker, 42);
     return plan;
   };

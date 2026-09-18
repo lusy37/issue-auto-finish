@@ -12,8 +12,8 @@ import { GitHubClient, GitHubIssue } from '../clients/GitHubClient.js';
 import { GitOperations } from '../git/GitOperations.js';
 import type { AIRunner } from '../ai-runner/index.js';
 import { IssueTracker } from '../tracker/IssueTracker.js';
-import { IssueState, type IssueRecord } from '../tracker/IssueState.js';
-import { applyIssueLifecycleEvent, readIssueLifecycle } from '../tracker/IssueLifecycle.js';
+import { lifecyclePhase, type IssueRecord } from '../tracker/IssueRecord.js';
+import { applyIssueLifecycleEvent } from '../tracker/IssueLifecycle.js';
 import { isNoteSyncEnabledForIssue } from '../notesync/NoteSyncSettings.js';
 import type { WorktreeContext } from '../git/WorktreeContext.js';
 import { getLocalIP } from '../utils/network.js';
@@ -170,9 +170,9 @@ export class IssueService {
       if (record.ports) {
         const number = getIssueNumber(record);
         logger.info('Clearing stale port allocation after restart', { number, ports: record.ports });
-        this.tracker.updateState(number, record.state, {
-          ports: undefined,
-          previewStartedAt: undefined,
+        this.tracker.transaction(number, current => {
+          current.ports = undefined;
+          current.previewStartedAt = undefined;
         });
       }
     }
@@ -297,7 +297,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
   private async stopIssue(issueIid: number, kind: 'pause' | 'cancel' | 'redo'): Promise<void> {
     this.tracker.transaction(issueIid, record => {
       record.run!.stopIntent = { kind, requestedAt: new Date().toISOString() };
-      const lifecycle = readIssueLifecycle(record);
+      const lifecycle = record.lifecycle;
       const phase = lifecycle.kind === 'running' || lifecycle.kind === 'waiting' || lifecycle.kind === 'paused'
         ? lifecycle.phase
         : lifecycle.kind === 'failed' ? lifecycle.phase ?? 'plan' : 'plan';
@@ -316,7 +316,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
 
   private async recoverExecution(issueIid: number): Promise<void> {
     const record = this.tracker.get(issueIid)!;
-    if (record.run!.stopIntent || ['paused', 'cancelled', 'failed'].includes(readIssueLifecycle(record).kind)) throw new Error('停止或人工处理状态不自动恢复');
+    if (record.run!.stopIntent || ['paused', 'cancelled', 'failed'].includes(record.lifecycle.kind)) throw new Error('停止或人工处理状态不自动恢复');
     for (const call of Object.values(record.run!.calls)) {
       if (call.status === 'exited') continue;
       if (call.pid) {
@@ -333,7 +333,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       const run = current.run!;
       const uncertain = Object.values(run.tasks).some(task => task.status === 'running' && !task.success) || (Object.values(run.calls).some(call => call.identity.dispatchId === run.dispatchId && call.identity.taskId.startsWith('$phase') && call.status !== 'exited'));
       if (uncertain) {
-        const phase = current.currentPhase ?? 'build';
+        const phase = lifecyclePhase(current.lifecycle) ?? 'build';
         if ((run.retryUsed[phase] ?? 0) >= this.config.poll.maxRetries) throw new Error('恢复未知执行所需的自动重试额度已用完');
         run.retryUsed[phase] = (run.retryUsed[phase] ?? 0) + 1;
       }
@@ -408,7 +408,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
   retryIssue(issueIid: number): boolean {
     if (this.executions.has(issueIid)) throw new InvalidStateError('running', '旧执行尚未退出，请稍后重试');
     const record = this.tracker.get(issueIid);
-    if (!record || readIssueLifecycle(record).kind !== 'failed') return false;
+    if (!record || record.lifecycle.kind !== 'failed') return false;
     this.confirmStoppedCalls(issueIid);
     return this.tracker.resetForRetry(issueIid);
   }
@@ -444,8 +444,8 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     if (this.executions.has(issueIid)) throw new Error('停止仍在进行，请等待进程退出');
     const record = this.tracker.get(issueIid);
     if (!record) throw new IssueNotFoundError(issueIid);
-    if (readIssueLifecycle(record).kind !== 'paused') {
-      throw new InvalidStateError(record.state, `Issue #${issueIid} not in paused state`);
+    if (record.lifecycle.kind !== 'paused') {
+      throw new InvalidStateError(record.lifecycle.kind, `Issue #${issueIid} not in paused state`);
     }
 
     this.confirmStoppedCalls(issueIid);
@@ -456,7 +456,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
   async redoPhase(issueIid: number): Promise<void> {
     const record = this.tracker.get(issueIid);
     if (!record) throw new IssueNotFoundError(issueIid);
-    const phase = record.pausedAtPhase ?? record.currentPhase ?? 'plan';
+    const phase = lifecyclePhase(record.lifecycle) ?? 'plan';
     if (phase === 'plan' && Object.values(record.run!.tasks).some(task => task.attemptNo > 0)) throw new Error('任务图已执行，请使用完整重做重新规划');
     await this.stopIssue(issueIid, 'pause');
     this.tracker.resetToPhase(issueIid, phase, this.getIssueSpecificPipelineDef(issueIid));
@@ -484,14 +484,15 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     this.controllers.set(issue.number, controller);
     const running = Promise.resolve().then(async () => {
       const current = this.tracker.get(issue.number);
-      if (current && ['cancelled', 'completed'].includes(readIssueLifecycle(current).kind)) return;
+      if (current && ['cancelled', 'completed'].includes(current.lifecycle.kind)) return;
       await runWithIssueContext(issue.number, () => this._processIssueImpl(issue), controller.signal, {
         processStarted: (pid, workDir) => {
           const callId = randomUUID();
           this.tracker.transaction(issue.number, record => {
             const run = record.run!;
             if (run.stopIntent) throw new Error('停止后不再启动命令');
-            run.calls[callId] = { identity: { issueNumber: issue.number, planRevision: run.planRevision, buildGeneration: run.buildGeneration, dispatchId: run.dispatchId!, taskId: '$process', attemptNo: run.phaseExecutions[record.currentPhase ?? 'setup'] ?? 1, callId }, pid, workDir, status: 'running', startedAt: new Date().toISOString() };
+            const phase = lifecyclePhase(record.lifecycle) ?? 'setup';
+            run.calls[callId] = { identity: { issueNumber: issue.number, planRevision: run.planRevision, buildGeneration: run.buildGeneration, dispatchId: run.dispatchId!, taskId: '$process', attemptNo: run.phaseExecutions[phase] ?? 1, callId }, pid, workDir, status: 'running', startedAt: new Date().toISOString() };
           });
           return callId;
         },
@@ -542,15 +543,15 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     const supplement = this.supplementStore?.get(issue.number);
     const existingDemand = this.tracker.get(issue.number);
     const approvedDemand = existingDemand?.run?.review?.decision === 'approved' ? this.tracker.store.readPlan(issue.number, existingDemand.run.planRevision, existingDemand.run.planDigest).demand : undefined;
-    const demand = approvedDemand ?? (existingDemand?.run?.review?.decision !== 'rejected' && existingDemand && readIssueLifecycle(existingDemand).kind !== 'pending' && existingDemand.demandSpec ? existingDemand.demandSpec : githubIssueToDemandSpec(issue, supplement));
+    const demand = approvedDemand ?? (existingDemand?.run?.review?.decision !== 'rejected' && existingDemand && existingDemand.lifecycle.kind !== 'pending' ? existingDemand.demandSpec : githubIssueToDemandSpec(issue, supplement));
 
     let record = this.tracker.get(issue.number);
-    const isRetry = !!record && readIssueLifecycle(record).kind === 'failed';
+    const isRetry = !!record && record.lifecycle.kind === 'failed';
     const startResetGeneration = record?.resetGeneration ?? 0;
 
     if (!record) {
       record = this.tracker.create({
-        state: IssueState.Pending,
+        lifecycle: { kind: 'pending' },
         branchName,
         pipelineMode: this.pipelineDef.mode,
         demandSpec: demand,
@@ -558,13 +559,13 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     }
 
     if (!record.pipelineMode) {
-      this.tracker.updateState(issue.number, record.state, { pipelineMode: this.pipelineDef.mode });
+      this.tracker.transaction(issue.number, current => { current.pipelineMode = this.pipelineDef.mode; });
       record.pipelineMode = this.pipelineDef.mode;
     }
 
     if (record.run!.recoveryRequired) {
       try { await this.recoverExecution(issue.number); }
-      catch (error) { this.tracker.markFailed(issue.number, (error as Error).message, record.state, false); return; }
+      catch (error) { this.tracker.markFailed(issue.number, (error as Error).message, false); return; }
     }
     this.tracker.transaction(issue.number, current => {
       if (current.run!.stopIntent) throw new Error('任务已停止');
@@ -628,9 +629,9 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       const ports = await this.portAllocator.allocate(issue.number);
       wtCtx.ports = ports;
 
-      this.tracker.updateState(issue.number, this.tracker.get(issue.number)!.state, {
-        ports,
-        previewStartedAt: new Date().toISOString(),
+      this.tracker.transaction(issue.number, current => {
+        current.ports = ports;
+        current.previewStartedAt = new Date().toISOString();
       });
 
       await this.devServerManager.startServers(wtCtx, ports);
@@ -675,9 +676,9 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     this.portAllocator.release(issueIid);
     const record = this.tracker.get(issueIid);
     if (record?.ports) {
-      this.tracker.updateState(issueIid, record.state, {
-        ports: undefined,
-        previewStartedAt: undefined,
+      this.tracker.transaction(issueIid, current => {
+        current.ports = undefined;
+        current.previewStartedAt = undefined;
       });
     }
   }
@@ -708,7 +709,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
         if (workspace.cleanedAt || Date.now() - Date.parse(workspace.createdAt) < retentionMs) continue;
         await this.mainGitMutex.runExclusive(async () => {
           const current = this.tracker.get(number)!;
-          if (current.run!.recoveryRequired || readIssueLifecycle(current).kind === 'paused' || Object.values(current.run!.tasks).some(task => task.workDir === workspace.directory) || Object.values(current.run!.calls).some(call => call.status !== 'exited' && (call.workDir === workspace.directory || isInside(workspace.directory, call.workDir)))) return;
+          if (current.run!.recoveryRequired || current.lifecycle.kind === 'paused' || Object.values(current.run!.tasks).some(task => task.workDir === workspace.directory) || Object.values(current.run!.calls).some(call => call.status !== 'exited' && (call.workDir === workspace.directory || isInside(workspace.directory, call.workDir)))) return;
           assertOwnedDirectory(this.config.project.worktreeBaseDir, workspace.directory);
           if (fsSync.existsSync(workspace.directory)) await this.mainGit.worktreeRemove(workspace.directory, true);
           if (await this.mainGit.branchExists(workspace.branch)) await this.mainGit.deleteBranch(workspace.branch);
@@ -722,7 +723,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     const record = this.tracker.get(issueIid);
     if (!record) return;
 
-    if (readIssueLifecycle(record).kind !== 'completed' || record.run?.recoveryRequired || this.executions.has(issueIid) || Object.values(record.run?.calls ?? {}).some(call => call.status !== 'exited')) throw new Error('任务仍需要工作目录，不能清理');
+    if (record.lifecycle.kind !== 'completed' || record.run.recoveryRequired || this.executions.has(issueIid) || Object.values(record.run.calls).some(call => call.status !== 'exited')) throw new Error('任务仍需要工作目录，不能清理');
     for (const workspace of record.run?.workspaces ?? []) {
       if (workspace.cleanedAt) continue;
       assertOwnedDirectory(this.config.project.worktreeBaseDir, workspace.directory);
@@ -740,9 +741,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       await this.cleanupWorkspaceRoot(issueIid);
     });
 
-    this.tracker.updateState(issueIid, record.state, {
-      worktreeCleanedAt: new Date().toISOString(),
-    });
+    this.tracker.transaction(issueIid, current => { current.worktreeCleanedAt = new Date().toISOString(); });
     logger.info('Completed worktree reaped', { number: issueIid, dir: wtCtx.gitRootDir });
   }
 
@@ -752,7 +751,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
 
     const wtCtx = this.computeWorktreeContext(issueIid, record.branchName);
     if (!fsSync.existsSync(wtCtx.workDir)) {
-      throw new InvalidStateError(record.state, 'Worktree no longer exists');
+      throw new InvalidStateError(record.lifecycle.kind, 'Worktree no longer exists');
     }
 
     await this.stopPreviewServers(issueIid);
@@ -761,16 +760,16 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     wtCtx.ports = ports;
 
     try {
-      this.tracker.updateState(issueIid, record.state, {
-        ports,
-        previewStartedAt: new Date().toISOString(),
+      this.tracker.transaction(issueIid, current => {
+        current.ports = ports;
+        current.previewStartedAt = new Date().toISOString();
       });
       await this.devServerManager.startServers(wtCtx, ports);
     } catch (err) {
       this.portAllocator.release(issueIid);
-      this.tracker.updateState(issueIid, record.state, {
-        ports: undefined,
-        previewStartedAt: undefined,
+      this.tracker.transaction(issueIid, current => {
+        current.ports = undefined;
+        current.previewStartedAt = undefined;
       });
       throw err;
     }
@@ -807,9 +806,9 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       await this.ensureWorktree(wtCtx);
     });
 
-    this.tracker.updateState(issueIid, record.state, {
-      worktreeCleanedAt: undefined,
-      completedAt: new Date().toISOString(),
+    this.tracker.transaction(issueIid, current => {
+      current.worktreeCleanedAt = undefined;
+      current.completedAt = new Date().toISOString();
     });
     logger.info('Worktree rebuilt', { issueIid, dir: wtCtx.gitRootDir });
   }
@@ -864,7 +863,6 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       current.completedAt = undefined;
       current.uatRunId = undefined;
       applyIssueLifecycleEvent(current, { type: 'conflict-repair-started' });
-      current.currentPhase = 'build';
     });
   }
 

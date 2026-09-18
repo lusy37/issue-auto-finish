@@ -10,7 +10,7 @@ import type { PhaseContext } from '../../src/phases/BasePhase.js';
 import type { DemandSpec } from '../../src/demand/DemandSpec.js';
 import type { RunResult } from '../../src/ai-runner/index.js';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
-import { IssueState, type PhaseProgress } from '../../src/tracker/IssueState.js';
+import type { PhaseProgress } from '../../src/tracker/IssueRecord.js';
 import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 import {
   createMockAIRunner,
@@ -32,7 +32,7 @@ function createTestDemand(overrides?: Partial<DemandSpec>): DemandSpec {
 function createTracker(dataDir: string): IssueTracker {
   const tracker = new IssueTracker(dataDir, new Map([['plan-mode', PLAN_MODE_PIPELINE]]));
   tracker.create({
-    state: IssueState.Pending,
+    lifecycle: { kind: 'pending' },
     pipelineMode: 'plan-mode',
     demandSpec: createTestDemand(),
     branchName: 'feat/issue-42',

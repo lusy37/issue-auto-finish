@@ -4,11 +4,9 @@ import { newIssueRun } from '../../src/dag/contracts.js';
 vi.mock('../../src/orchestrator/DagPhaseRunner.js', () => ({ DagPhaseRunner: isolatedPhaseRunner((...args) => mockPhaseRun(...args)) }));
 import { isolatedPhaseRunner } from '../helpers/isolated-phase-runner.js';
 // 本组验证核心调度；真实 Git、UAT 及交付门禁由 mini-workflow 集成测试覆盖。
-vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.updateState(ctx.issue.number, 'completed', {prUrl:pr.html_url,deliveryPending:false,completedAt:new Date().toISOString()}); } }));
+vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.transaction(ctx.issue.number, (record: any) => { record.lifecycle = { kind: 'completed' }; record.prUrl = pr.html_url; record.deliveryPending = false; record.completedAt = new Date().toISOString(); }); } }));
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { IssueState } from '../../src/tracker/IssueState.js';
-import { lifecycleFromLegacyProjection } from '../../src/tracker/IssueLifecycle.js';
 import { eventBus, type EventPayload } from '../../src/events/EventBus.js';
 import { GateActionError } from '../../src/orchestration/index.js';
 import {
@@ -116,39 +114,29 @@ describe('IssueService', () => {
   function attachStatefulTracker(seed?: any): void {
     if (seed) {
       seed.run ??= newIssueRun();
-      seed.lifecycle ??= lifecycleFromLegacyProjection(seed);
+      seed.phaseHistory ??= [];
       trackerStore.set(seed.issueIid ?? Number(seed.demandSpec?.sourceRef?.displayId ?? 42), seed);
     }
     mockTracker.create.mockImplementation((record: any) => {
       const r = {
         ...record,
-        lifecycle: record.lifecycle ?? { kind: 'pending' },
+        lifecycle: record.lifecycle,
         run: newIssueRun(),
-        attempts: 0,
+        phaseHistory: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
       trackerStore.set(Number(record.demandSpec?.sourceRef?.displayId ?? record.issueIid), r);
       return r;
     });
-    mockTracker.updateState.mockImplementation((number: number, state: any, extra?: any) => {
-      const cur = trackerStore.get(number) ?? { issueIid: number, attempts: 0 };
-      const next = { ...cur, ...extra, state, updatedAt: new Date().toISOString() };
-      next.lifecycle = lifecycleFromLegacyProjection(next);
-      trackerStore.set(number, next);
-    });
-    mockTracker.markFailed.mockImplementation((number: number, error: any, opts?: any) => {
-      const cur = trackerStore.get(number) ?? { issueIid: number, attempts: 0 };
-      const next = {
-        ...cur,
-        ...opts,
-        state: IssueState.Failed,
-        lastError: String(error?.message ?? error),
-        attempts: (cur.attempts ?? 0) + 1,
-        updatedAt: new Date().toISOString(),
+    mockTracker.markFailed.mockImplementation((number: number, error: any, retryable = true) => {
+      const current = trackerStore.get(number);
+      const phase = current?.lifecycle && 'phase' in current.lifecycle ? current.lifecycle.phase : undefined;
+      current.lifecycle = {
+        kind: 'failed', phase, retry: retryable ? 'auto' : 'manual',
+        error: { message: String(error?.message ?? error), retryable: retryable ? 'hard' : 'hard-no-auto' },
       };
-      next.lifecycle = lifecycleFromLegacyProjection(next);
-      trackerStore.set(number, next);
+      current.updatedAt = new Date().toISOString();
     });
     mockTracker.initPhaseProgress.mockImplementation((number: number, def: any) => {
       const cur = trackerStore.get(number);
@@ -289,9 +277,7 @@ describe('IssueService', () => {
 
       expect(mockPhaseRun).toHaveBeenCalledTimes(1);
       const finalRecord = mockTracker.get(issue.number);
-      expect(finalRecord?.state).toBe(IssueState.PhaseWaiting);
-      expect(finalRecord?.currentPhase).toBe('review');
-      expect(finalRecord?.orchestrationState?.kind).toBe('gate-waiting');
+      expect(finalRecord?.lifecycle).toMatchObject({ kind: 'waiting', phase: 'review' });
     });
 
     it('preserves worktree on failure', async () => {
@@ -309,7 +295,7 @@ describe('IssueService', () => {
       await orchestrator.processIssue(issue);
 
       const finalRecord = mockTracker.get(issue.number);
-      expect(finalRecord?.state).toBe(IssueState.Failed);
+      expect(finalRecord?.lifecycle.kind).toBe('failed');
       expect(mockMainGit.worktreeRemove).not.toHaveBeenCalled();
     });
 
@@ -329,7 +315,7 @@ describe('IssueService', () => {
 
       expect(mockPhaseRun).toHaveBeenCalledTimes(4);
       const finalRecord = mockTracker.get(issue.number);
-      expect(finalRecord?.state).toBe(IssueState.Completed);
+      expect(finalRecord?.lifecycle.kind).toBe('completed');
       expect(finalRecord?.prUrl).toEqual(expect.any(String));
     });
 
@@ -348,8 +334,7 @@ describe('IssueService', () => {
 
       expect(mockPhaseRun).toHaveBeenCalledTimes(1);
       const finalRecord = mockTracker.get(issue.number);
-      expect(finalRecord?.state).toBe(IssueState.PhaseWaiting);
-      expect(finalRecord?.currentPhase).toBe('review');
+      expect(finalRecord?.lifecycle).toMatchObject({ kind: 'waiting', phase: 'review' });
     });
 
     it('resumes after PhaseApproved from build phase', async () => {
@@ -358,11 +343,8 @@ describe('IssueService', () => {
       attachStatefulTracker({
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.PhaseApproved,
-        currentPhase: 'review',
-        orchestrationState: { kind: 'gate-approved', phaseId: 'review' },
+        lifecycle: { kind: 'ready' },
         pipelineMode: 'plan-mode',
-        attempts: 0,
       });
       mockMainGit.worktreeList.mockResolvedValue([]);
       mockMainGit.branchExists.mockResolvedValue(false);
@@ -376,7 +358,7 @@ describe('IssueService', () => {
 
       expect(mockPhaseRun).toHaveBeenCalledTimes(3);
       const finalRecord = mockTracker.get(issue.number);
-      expect(finalRecord?.state).toBe(IssueState.Completed);
+      expect(finalRecord?.lifecycle.kind).toBe('completed');
       expect(finalRecord?.prUrl).toEqual(expect.any(String));
     });
   });
@@ -424,7 +406,6 @@ describe('IssueService', () => {
         run: newIssueRun(),
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.Failed,
         lifecycle: { kind: 'failed', retry: 'manual', error: { message: '失败', retryable: 'hard-no-auto' } },
       });
       mockTracker.resetFull.mockReturnValue(true);
@@ -450,7 +431,7 @@ describe('IssueService', () => {
         run: newIssueRun(),
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.PhaseRunning,
+        lifecycle: { kind: 'running', phase: 'build' },
         pipelineMode: 'plan-mode',
       });
       mockTracker.resetToPhase.mockReturnValue(true);
@@ -464,7 +445,7 @@ describe('IssueService', () => {
         run: newIssueRun(),
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.PhaseRunning,
+        lifecycle: { kind: 'running', phase: 'build' },
         pipelineMode: 'plan-mode',
       });
       const orchestrator = createOrchestrator();
@@ -480,13 +461,11 @@ describe('IssueService', () => {
       return events;
     }
 
-    it('synchronizes orchestrationState / phaseProgress / phaseHistory and emits unified gate:approved event', async () => {
+    it('同步 lifecycle、phaseProgress、phaseHistory 并发出统一 gate:approved 事件', async () => {
       attachStatefulTracker({
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.PhaseWaiting,
-        currentPhase: 'review',
-        orchestrationState: { kind: 'gate-waiting', phaseId: 'review', reason: 'human-review' },
+        lifecycle: { kind: 'waiting', phase: 'review', planRevision: 1 },
         phaseProgress: {
           plan: { status: 'completed' },
           review: { status: 'gate_waiting' },
@@ -494,7 +473,6 @@ describe('IssueService', () => {
           verify: { status: 'pending' },
         },
         pipelineMode: 'plan-mode',
-        attempts: 0,
       });
       const gateEvents = captureEvent('gate:approved');
 
@@ -504,8 +482,7 @@ describe('IssueService', () => {
       await orchestrator.applyGateAction(42, { action: 'approve' }, 1);
 
       const record = mockTracker.get(42);
-      expect(record?.state).toBe(IssueState.PhaseApproved);
-      expect(record?.orchestrationState).toEqual({ kind: 'gate-approved', phaseId: 'review' });
+      expect(record?.lifecycle).toEqual({ kind: 'ready' });
 
       expect(record?.phaseProgress?.review?.status).toBe('completed');
       expect(record?.phaseHistory).toContainEqual(expect.objectContaining({ phaseId: 'review', outcome: 'gate-approved' }));
@@ -518,11 +495,8 @@ describe('IssueService', () => {
       attachStatefulTracker({
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.PhaseRunning,
-        currentPhase: 'plan',
-        orchestrationState: { kind: 'running', phaseId: 'plan' },
+        lifecycle: { kind: 'running', phase: 'plan' },
         pipelineMode: 'plan-mode',
-        attempts: 0,
       });
 
       const orchestrator = createOrchestrator();
@@ -535,11 +509,8 @@ describe('IssueService', () => {
       attachStatefulTracker({
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.PhaseWaiting,
-        currentPhase: 'release',
-        orchestrationState: { kind: 'gate-waiting', phaseId: 'release', reason: 'release-confirm' },
+        lifecycle: { kind: 'waiting', phase: 'uat' },
         pipelineMode: 'plan-mode',
-        attempts: 0,
       });
       const cfg = createTestConfig({ release: { enabled: true } });
 
@@ -553,9 +524,7 @@ describe('IssueService', () => {
       attachStatefulTracker({
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.PhaseWaiting,
-        currentPhase: 'review',
-        orchestrationState: { kind: 'gate-waiting', phaseId: 'review', reason: 'human-review' },
+        lifecycle: { kind: 'waiting', phase: 'review', planRevision: 1 },
         phaseProgress: {
           plan: { status: 'completed' },
           review: { status: 'gate_waiting' },
@@ -563,7 +532,6 @@ describe('IssueService', () => {
           verify: { status: 'pending' },
         },
         pipelineMode: 'plan-mode',
-        attempts: 0,
       });
       const rejectEvents = captureEvent('gate:rejected');
 
@@ -573,9 +541,7 @@ describe('IssueService', () => {
       await orchestrator.applyGateAction(42, { action: 'reject', feedback: '需要补充错误处理' }, 1);
 
       const record = mockTracker.get(42);
-      expect(record?.state).toBe(IssueState.Pending);
-      expect(record?.currentPhase).toBeUndefined();
-      expect(record?.orchestrationState).toEqual({ kind: 'queued' });
+      expect(record?.lifecycle).toEqual({ kind: 'pending' });
 
       expect(record?.phaseHistory).toContainEqual(expect.objectContaining({ phaseId: 'review', outcome: 'gate-rejected' }));
       expect(Object.values(record?.phaseProgress ?? {}).every((progress: any) => progress.status === 'pending')).toBe(true);

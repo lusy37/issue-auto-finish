@@ -6,7 +6,6 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { envSchema, transformEnvToConfig } from "../../src/config-schema.js";
 import { IssueTracker } from "../../src/tracker/IssueTracker.js";
-import { IssueState } from "../../src/tracker/IssueState.js";
 import {
   buildPlanModePipeline,
   registerPipeline,
@@ -204,14 +203,14 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
         orchestrator.processIssue(issue),
       ]);
       expect(calls.length).toBe(1);
-      expect(tracker.get(1)?.state).toBe(IssueState.PhaseWaiting);
+      expect(tracker.get(1)?.lifecycle).toMatchObject({ kind: 'waiting', phase: 'review' });
       await orchestrator.applyGateAction(1, {
         action: "reject",
         feedback: "增加错误处理和边界测试",
       }, tracker.get(1)!.run!.planRevision);
       await orchestrator.processIssue(issue);
       expect(calls.at(-1)?.prompt).toContain("增加错误处理");
-      expect(tracker.get(1)?.state).toBe(IssueState.PhaseWaiting);
+      expect(tracker.get(1)?.lifecycle).toMatchObject({ kind: 'waiting', phase: 'review' });
       await orchestrator.applyGateAction(1, { action: "approve" }, tracker.get(1)!.run!.planRevision);
       await expect(orchestrator.processIssue(issue)).rejects.toThrow(
         "模拟 PR 已创建但响应丢失",
@@ -227,7 +226,7 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
       tracker.resetForRetry(1);
       await orchestrator.processIssue(issue);
       expect(calls.length).toBe(callsBeforeRetry);
-      expect(tracker.get(1)?.state).toBe(IssueState.Completed);
+      expect(tracker.get(1)?.lifecycle.kind).toBe('completed');
       expect(createPr).toHaveBeenCalledTimes(1);
       expect(notes.some((n) => n.body.includes("iaf-delivery:1:"))).toBe(true);
       await collector.collectDiary(1, "completed");

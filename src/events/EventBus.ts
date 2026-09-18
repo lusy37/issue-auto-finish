@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 
 export type EventType =
   | 'issue:created'
-  | 'issue:stateChanged'
+  | 'issue:updated'
   | 'issue:failed'
   | 'issue:deleted'
   | 'issue:resetForRetry'

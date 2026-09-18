@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import type { IssueState, ReviewRound } from '@/types';
+import type { IssueLifecycle, ReviewRound } from '@/types';
 import { computeReviewGateStatus } from '@/utils/reviewGateStatus';
 
 const props = defineProps<{
   reviewSubmitting: boolean;
   reviewHistory: ReviewRound[];
-  issueState?: IssueState;
-  currentPhase?: string;
+  lifecycle?: IssueLifecycle;
   reviewDecision?: 'waiting' | 'approved' | 'rejected';
   /** 流水线中 kind='gate' 阶段名，默认 'review'（plan-mode）。 */
   gatePhaseName?: string;
@@ -44,8 +43,7 @@ const planDiffLines = computed<DiffLine[]>(() => {
 
 const reviewStatus = computed(() =>
   computeReviewGateStatus(
-    props.issueState,
-    props.currentPhase,
+    props.lifecycle,
     props.gatePhaseName ?? 'review',
     props.reviewHistory.length,
     props.reviewDecision,

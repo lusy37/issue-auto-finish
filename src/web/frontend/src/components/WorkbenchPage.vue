@@ -228,7 +228,6 @@ onUnmounted(() => {
     <DetailModal
       v-if="detail.selectedIssue.value"
       :issue="detail.selectedIssue.value"
-      :progress="detail.detailProgress.value"
       :system-status="systemStatus"
       :verify-fix-loop="currentVerifyFixLoop"
       :agent-logs="logs.filteredLogs.value"

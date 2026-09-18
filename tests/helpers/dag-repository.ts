@@ -3,7 +3,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
-import { IssueState } from '../../src/tracker/IssueState.js';
 import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 import type { PipelineDef } from '../../src/pipeline/PipelineMetadata.js';
 import type { TaskDefinition } from '../../src/dag/contracts.js';
@@ -33,7 +32,7 @@ export function graphFixture(
   const integration = path.join(worktrees, 'issue-1');
   git(repo, 'worktree', 'add', '-b', 'iaf-1', integration, 'main');
   const tracker = new IssueTracker(data, new Map([[pipeline.mode, pipeline]]));
-  tracker.create({ state: IssueState.PhaseRunning, currentPhase: 'build', branchName: 'iaf-1', demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' }, title: '需求', description: '实现任务图', createdAt: new Date().toISOString() } });
+  tracker.create({ lifecycle: { kind: 'running', phase: 'build' }, branchName: 'iaf-1', demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' }, title: '需求', description: '实现任务图', createdAt: new Date().toISOString() } });
   tracker.store.savePlan(1, { title: '需求', description: '实施', acceptanceCriteria: ['全部通过'], tasks }, tracker.get(1)!.run!.version);
   tracker.transaction(1, record => { record.run!.dispatchId = 'first'; record.run!.review!.decision = 'approved'; });
   return { directory, repo, data, worktrees, integration, tracker };

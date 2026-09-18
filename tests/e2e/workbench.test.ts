@@ -5,7 +5,6 @@ import { chromium, expect as browserExpect, type Request } from "@playwright/tes
 import fs from "node:fs";
 import path from "node:path";
 import { envSchema, transformEnvToConfig } from "../../src/config-schema.js";
-import { IssueState } from "../../src/tracker/IssueState.js";
 import { IssueTracker } from "../../src/tracker/IssueTracker.js";
 import {
   buildPlanModePipeline,
@@ -52,8 +51,7 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
     new Map([[pipeline.mode, pipeline]]),
   );
   tracker.create({
-    state: IssueState.PhaseWaiting,
-    currentPhase: "review",
+    lifecycle: { kind: "waiting", phase: "review", planRevision: 1 },
     branchName: "feat/issue-1",
     pipelineMode: "plan-mode",
     demandSpec: {
@@ -304,9 +302,10 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
     });
     expect(result.passed).toBe(true);
     expect(result.screenshots?.length).toBeGreaterThan(0);
-    tracker.updateState(1, IssueState.Completed, {
-      completedAt: new Date().toISOString(),
-      uatRunId: result.runId,
+    tracker.transaction(1, record => {
+      record.lifecycle = { kind: 'completed' };
+      record.completedAt = new Date().toISOString();
+      record.uatRunId = result.runId;
     });
     tracker.updatePhaseProgress(1, "uat", { status: "completed" });
     await page.getByRole("button", { name: "E2E", exact: true }).click();

@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { reviewApi } from '../helpers/review-api.js';
 import { newTracker } from '../helpers/dag-repository.js';
-import { IssueState } from '../../src/tracker/IssueState.js';
 import { GitHubClient } from '../../src/clients/GitHubClient.js';
 let f: Awaited<ReturnType<typeof reviewApi>>;
 beforeEach(async () => { f = await reviewApi(); });
@@ -10,11 +9,11 @@ describe('持久化停止与继续', () => {
   it('先保存取消状态和停止意图，再操作平台标签', async () => {
     f.github.removeLabelsWithPrefix.mockImplementation(async () => { expect(newTracker(f.data).get(42)!.run!.stopIntent!.kind).toBe('cancel'); });
     await f.orchestrator.cancelIssue(42);
-    expect(f.tracker.get(42)!.state).toBe(IssueState.Cancelled);
+    expect(f.tracker.get(42)!.lifecycle).toEqual({ kind: 'cancelled' });
     expect(f.github.removeLabelsWithPrefix).toHaveBeenCalledWith(42, 'auto-finish');
   });
   it('未知 Issue 不能取消', async () => { await expect(f.orchestrator.cancelIssue(999)).rejects.toThrow('not found'); });
-  it('平台失败仍保留已持久化的取消状态', async () => { f.github.removeLabelsWithPrefix.mockRejectedValue(new Error('平台离线')); await expect(f.orchestrator.cancelIssue(42)).rejects.toThrow('平台离线'); expect(f.tracker.get(42)!.state).toBe(IssueState.Cancelled); });
+  it('平台失败仍保留已持久化的取消状态', async () => { f.github.removeLabelsWithPrefix.mockRejectedValue(new Error('平台离线')); await expect(f.orchestrator.cancelIssue(42)).rejects.toThrow('平台离线'); expect(f.tracker.get(42)!.lifecycle).toEqual({ kind: 'cancelled' }); });
   it('取消不丢失交付身份或删除远端分支', async () => {
     f.tracker.transaction(42, record => { record.run!.delivery = { repository: 'test/project', issueNumber: 42, sourceBranch: 'iaf-42', targetBranch: 'master', marker: 'marker', creation: 'confirmed', prNumber: 8 }; });
     await f.orchestrator.cancelIssue(42); expect(f.tracker.get(42)!.run!.delivery!.prNumber).toBe(8);
@@ -25,7 +24,7 @@ describe('持久化停止与继续', () => {
     f.tracker.transaction(42, record => { record.run!.calls.alive = { identity: { issueNumber: 42, planRevision: 1, buildGeneration: 0, dispatchId: 'old', taskId: '$phase:plan', attemptNo: 1, callId: 'alive' }, workDir: f.directory, status: 'running', pid: process.pid }; });
     await expect(f.orchestrator.abortIssue(42)).rejects.toThrow('尚未退出'); expect(f.tracker.get(42)!.run!.stopIntent!.kind).toBe('pause'); expect(() => f.orchestrator.continueIssue(42)).toThrow('尚未退出');
   });
-  it('单次重做先等待停止，且保留构建重试预算', async () => { f.tracker.updateState(42, IssueState.PhaseRunning, { currentPhase: 'build' }); f.tracker.transaction(42, record => { record.run!.retryUsed.build = 1; }); await f.orchestrator.redoPhase(42); expect(f.tracker.get(42)!.run!.retryUsed.build).toBe(1); expect(f.tracker.get(42)!.run!.stopIntent).toBeUndefined(); });
+  it('单次重做先等待停止，且保留构建重试预算', async () => { f.tracker.transaction(42, record => { record.lifecycle = { kind: 'running', phase: 'build' }; record.run.retryUsed.build = 1; }); await f.orchestrator.redoPhase(42); expect(f.tracker.get(42)!.run.retryUsed.build).toBe(1); expect(f.tracker.get(42)!.run.stopIntent).toBeUndefined(); });
 });
 
 describe('GitHubClient.removeLabelsWithPrefix', () => {

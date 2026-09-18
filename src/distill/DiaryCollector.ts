@@ -1,7 +1,7 @@
 /**
  * DiaryCollector — Layer 1: 自动采集 Issue 经验日记。
  *
- * 监听 EventBus 的 issue:stateChanged 事件，当 Issue 进入 Completed 或 Failed
+ * 监听 EventBus 的 issue:updated 事件，当 Issue 进入 completed 或 failed
  * 状态时，采集 tracker + plan persistence 数据写入 DiaryStore。
  *
  * fire-and-forget：不阻塞主流程，失败只打日志。
@@ -11,7 +11,7 @@ import { eventBus, type EventPayload } from '../events/EventBus.js';
 import { logger as rootLogger } from '../logger.js';
 import type { IssueTracker } from '../tracker/IssueTracker.js';
 import type { PlanPersistence, ReviewRound } from '../persistence/PlanPersistence.js';
-import { IssueState, type PhaseProgress } from '../tracker/IssueState.js';
+import { retryAttempts, type IssueRecord, type PhaseProgress } from '../tracker/IssueRecord.js';
 import type { DiaryStore } from './DiaryStore.js';
 import type { DiaryEntry, DiaryPhaseTiming, DiaryHumanIntervention } from './types.js';
 
@@ -62,7 +62,7 @@ export class DiaryCollector {
       });
     };
 
-    eventBus.on('issue:stateChanged', this.stateChangedHandler);
+    eventBus.on('issue:updated', this.stateChangedHandler);
     eventBus.on('issue:failed', this.failedHandler);
 
     logger.info('DiaryCollector started');
@@ -71,7 +71,7 @@ export class DiaryCollector {
   /** 停止监听事件 */
   stop(): void {
     if (this.stateChangedHandler) {
-      eventBus.off('issue:stateChanged', this.stateChangedHandler);
+      eventBus.off('issue:updated', this.stateChangedHandler);
       this.stateChangedHandler = null;
     }
     if (this.failedHandler) {
@@ -81,13 +81,13 @@ export class DiaryCollector {
     logger.info('DiaryCollector stopped');
   }
 
-  /** 处理 issue:stateChanged 事件 */
+  /** 处理 issue:updated 事件 */
   private async handleStateChanged(payload: EventPayload): Promise<void> {
     const data = payload.data as Record<string, unknown>;
-    const state = data.state as string | undefined;
+    const lifecycle = data.lifecycle as { kind?: string } | undefined;
 
     // 只在进入 Completed 时触发日记采集
-    if (state !== IssueState.Completed) return;
+    if (lifecycle?.kind !== 'completed') return;
 
     const issueIid = data.issueIid as number | undefined;
     if (!issueIid) return;
@@ -119,7 +119,7 @@ export class DiaryCollector {
       const progress = record.phaseProgress;
       const reviewHistory = plan?.readReviewHistory() ?? [];
 
-      const executionKey = [issueIid, record.resetGeneration ?? 0, record.attempts, outcome, record.phaseHistory?.length ?? 0].join(':');
+      const executionKey = [issueIid, record.resetGeneration ?? 0, retryAttempts(record), outcome, record.phaseHistory.length].join(':');
       if (this.diaryStore.getByIssueIid(issueIid).some(d => d.executionKey === executionKey)) return null;
       const timing = this.buildTiming(record, progress);
       const failure = outcome === 'failed' ? this.buildFailure(record) : undefined;
@@ -129,7 +129,7 @@ export class DiaryCollector {
         id: randomUUID(),
         executionKey,
         issueIid,
-        issueTitle: record.demandSpec?.title ?? `Issue #${issueIid}`,
+        issueTitle: record.demandSpec.title,
         branchName: record.branchName,
         pipelineMode: record.pipelineMode ?? 'unknown',
         outcome,
@@ -190,12 +190,13 @@ export class DiaryCollector {
 
   /** 构建失败信息 */
   private buildFailure(
-    record: { lastError?: string; failedAtState?: IssueState; attempts: number; currentPhase?: string },
+    record: IssueRecord,
   ): DiaryEntry['failure'] {
+    const failed = record.lifecycle.kind === 'failed' ? record.lifecycle : undefined;
     return {
-      failedAtPhase: record.currentPhase ?? record.failedAtState ?? 'unknown',
-      error: record.lastError ?? 'Unknown error',
-      attempts: record.attempts,
+      failedAtPhase: failed?.phase ?? 'unknown',
+      error: failed?.error.message ?? 'Unknown error',
+      attempts: retryAttempts(record),
     };
   }
 
@@ -209,16 +210,17 @@ export class DiaryCollector {
    * 让 AI 能从"被驳回的方案模式 + 驳回原因"中蒸馏出 rejection-pattern。
    */
   private buildInterventions(
-    record: { attempts: number },
+    record: IssueRecord,
     progress: Record<string, PhaseProgress> | undefined,
     reviewHistory: ReviewRound[],
   ): DiaryHumanIntervention[] {
     const interventions: DiaryHumanIntervention[] = [];
 
-    if (record.attempts > 1) {
+    const attempts = retryAttempts(record);
+    if (attempts > 1) {
       interventions.push({
         type: 'retry',
-        detail: `Issue 经过 ${record.attempts} 次尝试`,
+        detail: `Issue 经过 ${attempts} 次尝试`,
         timestamp: new Date().toISOString(),
       });
     }

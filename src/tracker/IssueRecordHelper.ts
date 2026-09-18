@@ -1,4 +1,4 @@
-import type { IssueRecord } from './IssueState.js';
+import type { IssueRecord } from './IssueRecord.js';
 
 /**
  * IssueRecord 身份字段辅助函数。
@@ -8,10 +8,10 @@ import type { IssueRecord } from './IssueState.js';
 
 /** 获取显示 IID（GitHub Issue IID） */
 export function getIssueNumber(record: IssueRecord): number {
-  return Number(record.demandSpec!.sourceRef.displayId);
+  return Number(record.demandSpec.sourceRef.displayId);
 }
 
 /** 获取标题 */
 export function getTitle(record: IssueRecord): string {
-  return record.demandSpec!.title;
+  return record.demandSpec.title;
 }

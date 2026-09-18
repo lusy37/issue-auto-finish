@@ -1,5 +1,5 @@
-import type { IssueRecord } from '../../tracker/IssueState.js';
-import { applyIssueLifecycleEvent, readIssueLifecycle } from '../../tracker/IssueLifecycle.js';
+import type { IssueRecord } from '../../tracker/IssueRecord.js';
+import { applyIssueLifecycleEvent } from '../../tracker/IssueLifecycle.js';
 import type { IssueProcessingContext, OrchestratorDeps, WorkflowRunResult } from '../IssueProcessingContext.js';
 import { deliverIssue } from '../../dag/DeliveryService.js';
 
@@ -9,10 +9,10 @@ export async function deliverIssueStep(ctx: IssueProcessingContext, deps: Orches
   const record = deps.tracker.get(number);
   if (!record) throw new Error('任务不存在');
   const execution = record.run!;
-  const startedLifecycle = readIssueLifecycle(record);
+  const startedLifecycle = record.lifecycle;
   const assertActive = (current: IssueRecord | undefined) => {
     const run = current?.run;
-    const lifecycle = current && readIssueLifecycle(current);
+    const lifecycle = current?.lifecycle;
     if (!current || !run || !lifecycle || deps.signal?.aborted || run.stopIntent
       || ['paused', 'cancelled', 'failed'].includes(lifecycle.kind)
       || (lifecycle.kind !== startedLifecycle.kind && lifecycle.kind !== 'delivering')
@@ -29,7 +29,7 @@ export async function deliverIssueStep(ctx: IssueProcessingContext, deps: Orches
   // 外部请求返回后，在同一次落盘事务中复核停止意图与图轮次，避免迟到结果覆盖用户操作。
   deps.tracker.transaction(number, current => {
     assertActive(current);
-    Object.assign(current, { completedAt: new Date().toISOString(), worktreeCleanedAt: undefined, prUrl: url });
+    Object.assign(current, { completedAt: new Date().toISOString(), worktreeCleanedAt: undefined, prUrl: url, deliveryPending: false });
     applyIssueLifecycleEvent(current, { type: 'delivery-confirmed' });
   });
   if (!phaseResult.serversStarted || !deps.config.preview.keepAfterComplete) await deps.stopPreviewServers(number);

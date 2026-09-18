@@ -3,7 +3,7 @@ import type { DemandSpec } from '../demand/DemandSpec.js';
 import { newWorkflowStorage, type WorkflowStorage } from '../orchestration/WorkflowState.js';
 
 export const PLAN_FORMAT = 'iaf-mini/task-plan/v2' as const;
-export const RUN_FORMAT = 'iaf-mini/issue-run/v4-langgraph' as const;
+export const RUN_FORMAT = 'iaf-mini/issue-run/v5-langgraph' as const;
 export interface TaskDefinition {
   id: string;
   title: string;

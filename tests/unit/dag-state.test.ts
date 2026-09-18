@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { IssueRunStore } from '../../src/dag/IssueRunStore.js';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
-import { IssueState, type IssueRecord } from '../../src/tracker/IssueState.js';
+import type { IssueRecord } from '../../src/tracker/IssueRecord.js';
 import { type PlanContent, newIssueRun } from '../../src/dag/contracts.js';
 import { decodePlanContent } from '../../src/dag/codecs/TaskPlanCodec.js';
 import { writeJsonAtomicSync } from '../../src/utils/atomicFile.js';
@@ -16,7 +16,7 @@ import { eventBus } from '../../src/events/EventBus.js';
 let directory: string;
 beforeEach(() => { directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dag-state-')); });
 afterEach(() => { fs.rmSync(directory, { recursive: true, force: true }); vi.restoreAllMocks(); });
-const record = (number: number): IssueRecord => ({ lifecycle: { kind: 'pending' }, state: IssueState.Pending, orchestrationState: { kind: 'queued' }, branchName: `iaf-${number}`, attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), demandSpec: { demandId: `gh-${number}`, sourceRef: { source: 'github-issue', externalId: String(number), displayId: String(number) }, title: '需求', description: '实现并验收', createdAt: new Date().toISOString() }, run: newIssueRun() });
+const record = (number: number): IssueRecord => ({ lifecycle: { kind: 'pending' }, branchName: `iaf-${number}`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), demandSpec: { demandId: `gh-${number}`, sourceRef: { source: 'github-issue', externalId: String(number), displayId: String(number) }, title: '需求', description: '实现并验收', createdAt: new Date().toISOString() }, run: newIssueRun(), phaseHistory: [] });
 const content = (): PlanContent => ({ title: '计划', description: '共同完成父需求', acceptanceCriteria: ['验证通过'], tasks: [{ id: 'a', title: '接口', instructions: '实现接口', acceptanceCriteria: ['接口测试通过'], dependsOn: [] }, { id: 'b', title: '页面', instructions: '实现页面', acceptanceCriteria: ['页面可用'], dependsOn: ['a'] }] });
 const tracker = () => new IssueTracker(directory, new Map([['plan-mode', PLAN_MODE_PIPELINE]]));
 
@@ -27,19 +27,19 @@ describe('聚合事务与不可变计划', () => {
     store.insert(1, record(1));
     const previous = store.get(1)!;
     fail = true;
-    expect(() => store.transaction(1, next => { next.state = IssueState.Completed; })).toThrow('磁盘已满');
+    expect(() => store.transaction(1, next => { next.lifecycle = { kind: 'completed' }; })).toThrow('磁盘已满');
     expect(store.get(1)).toEqual(previous);
     expect(new IssueRunStore(directory).get(1)).toEqual(previous);
     expect(store.isBlocked(1)).toBe(true);
-    expect(() => store.transaction(1, next => { next.retryCount = (next.retryCount ?? 0) + 1; })).toThrow('阻断');
+    expect(() => store.transaction(1, next => { next.resetGeneration = (next.resetGeneration ?? 0) + 1; })).toThrow('阻断');
   });
   it('并发完成任务及不同父 Issue 更新均不丢失；读返回独立快照', async () => {
     const store = new IssueRunStore(directory);
     store.insert(1, record(1)); store.insert(2, record(2));
-    await Promise.all(Array.from({ length: 20 }, (_, i) => Promise.resolve().then(() => store.transaction(i % 2 + 1, next => { next.retryCount = (next.retryCount ?? 0) + 1; }))));
-    expect(store.get(1)!.retryCount).toBe(10); expect(store.get(2)!.retryCount).toBe(10);
-    const copy = store.get(1)!; copy.retryCount = 999;
-    expect(store.get(1)!.retryCount).toBe(10);
+    await Promise.all(Array.from({ length: 20 }, (_, i) => Promise.resolve().then(() => store.transaction(i % 2 + 1, next => { next.resetGeneration = (next.resetGeneration ?? 0) + 1; }))));
+    expect(store.get(1)!.resetGeneration).toBe(10); expect(store.get(2)!.resetGeneration).toBe(10);
+    const copy = store.get(1)!; copy.resetGeneration = 999;
+    expect(store.get(1)!.resetGeneration).toBe(10);
   });
   it('计划版本不可覆盖，内容篡改及缺失引用在启动时被拒绝', () => {
     const store = new IssueRunStore(directory);
@@ -53,24 +53,18 @@ describe('聚合事务与不可变计划', () => {
     fs.unlinkSync(store.planFile(1, 2));
     expect(() => new IssueRunStore(directory)).toThrow('原文件已保留');
   });
-  it('旧格式只报告位置，不覆盖或迁移', () => {
-    const file = path.join(directory, 'tracker.json');
-    fs.writeFileSync(file, '{"format":"iaf-mini/v1"}');
-    expect(() => new IssueRunStore(directory)).toThrow(file);
-    expect(fs.readFileSync(file, 'utf8')).toBe('{"format":"iaf-mini/v1"}');
-  });
   it('父状态、历史和阶段进度在同一版本提交，磁盘故障不发送事件', () => {
     const tracked = tracker(); tracked.create(record(1));
-    tracked.updateState(1, IssueState.PhaseRunning, { currentPhase: 'plan' });
+    tracked.transaction(1, record => { record.lifecycle = { kind: 'running', phase: 'plan' }; });
     const version = tracked.get(1)!.run!.version;
-    tracked.transaction(1, record => { record.state = IssueState.PhaseDone; record.phaseProgress = { plan: { status: 'completed' } }; record.phaseHistory = [{ phaseId: 'plan', attemptId: 1, startedAt: '2026-01-01T00:00:00Z', outcome: 'completed' }]; });
+    tracked.transaction(1, record => { record.lifecycle = { kind: 'ready' }; record.phaseProgress = { plan: { status: 'completed' } }; record.phaseHistory = [{ phaseId: 'plan', attemptId: 1, startedAt: '2026-01-01T00:00:00Z', outcome: 'completed' }]; });
     const current = tracked.get(1)!;
     expect(current.run!.version).toBe(version + 1);
     expect(current.phaseHistory).toHaveLength(1);
     expect(current.phaseProgress?.plan.status).toBe('completed');
     const emitted = vi.spyOn(eventBus, 'emitTyped');
     vi.spyOn(tracked.store as never, 'persist' as never).mockImplementation(() => { throw new Error('磁盘故障'); });
-    expect(() => tracked.transaction(1, next => { next.retryCount = (next.retryCount ?? 0) + 1; })).toThrow('磁盘故障');
+    expect(() => tracked.transaction(1, next => { next.resetGeneration = (next.resetGeneration ?? 0) + 1; })).toThrow('磁盘故障');
     expect(tracked.get(1)).toEqual(current);
     expect(emitted).not.toHaveBeenCalled();
   });
@@ -121,7 +115,7 @@ describe('取消与执行身份', () => {
 
 it('同一阶段发起新调用后，旧调用结果也不能被采用', async () => {
   const tracked = tracker(); tracked.create(record(1));
-  tracked.updateState(1, IssueState.PhaseRunning, { currentPhase: 'plan' });
+  tracked.transaction(1, record => { record.lifecycle = { kind: 'running', phase: 'plan' }; });
   tracked.transaction(1, next => { next.run!.dispatchId = 'dispatch'; });
   let finish!: (value: { success: boolean; output: string; exitCode: number }) => void;
   const underlying = { run: vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValue({ success: true, output: '新结果', exitCode: 0 }), killAll() {}, killByWorkDir() { return 0; } };

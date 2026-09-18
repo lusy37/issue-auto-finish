@@ -1,13 +1,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getIssueNumber } from '../tracker/IssueRecordHelper.js';
-import type { IssueRecord, LegacyIssueProjection } from '../tracker/IssueState.js';
-import { assertIssueLifecycleShape, reconcileLegacyIssueProjection, syncLegacyIssueProjection } from '../tracker/IssueLifecycle.js';
+import type { IssueRecord } from '../tracker/IssueRecord.js';
+import { assertIssueLifecycleShape } from '../tracker/IssueLifecycle.js';
 import { writeJsonAtomicSync } from '../utils/atomicFile.js';
 import { PLAN_FORMAT, RUN_FORMAT, newIssueRun, planDigest, type PlanContent, type TaskPlan } from './contracts.js';
 import { decodePlanContent } from './codecs/TaskPlanCodec.js';
 import { assertIssueRunShape } from './codecs/IssueRunCodec.js';
 import { assertIssueRunInvariants } from './invariants.js';
+
+const REMOVED_STATE_FIELDS = [
+  'state',
+  'currentPhase',
+  'pausedAtPhase',
+  'attempts',
+  'lastError',
+  'failedAtState',
+  'lastErrorRetryable',
+  'orchestrationState',
+] as const;
 
 /** 同步事务中不执行异步副作用；单实例事件循环保证计算及替换之间不能交错。 */
 export class IssueRunStore {
@@ -17,8 +28,6 @@ export class IssueRunStore {
   readonly root: string;
   constructor(readonly dataDir: string, private readonly write = writeJsonAtomicSync) {
     this.root = path.join(dataDir, 'issues');
-    const legacy = path.join(dataDir, 'tracker.json');
-    if (fs.existsSync(legacy)) this.invalid(legacy, '旧任务格式不支持');
     if (!fs.existsSync(this.root)) return;
     for (const name of fs.readdirSync(this.root)) {
       if (!/^\d+$/.test(name)) continue;
@@ -45,12 +54,11 @@ export class IssueRunStore {
     try {
       const value = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (value.format !== RUN_FORMAT || !value.record?.run || !value.record.lifecycle || value.record.demandSpec?.sourceRef?.source !== 'github-issue' || getIssueNumber(value.record) !== number) this.invalid(file, '聚合状态格式无效');
+      if (REMOVED_STATE_FIELDS.some(field => Object.hasOwn(value.record, field))) this.invalid(file, '聚合状态包含已删除字段');
       assertIssueLifecycleShape(value.record.lifecycle);
       assertIssueRunShape(value.record.run);
       assertIssueRunInvariants(value.record.run, number);
-      const record = value.record as IssueRecord;
-      syncLegacyIssueProjection(record);
-      return record;
+      return value.record as IssueRecord;
     } catch (error) { return this.invalid(file, `无法读取聚合状态：${(error as Error).message}`); }
   }
   get(number: number): IssueRecord | undefined {
@@ -70,7 +78,7 @@ export class IssueRunStore {
     record.updatedAt = new Date().toISOString();
     try {
       fs.mkdirSync(path.dirname(this.file(number)), { recursive: true });
-      this.write(this.file(number), { format: RUN_FORMAT, record: this.toPersistedRecord(record) });
+      this.write(this.file(number), { format: RUN_FORMAT, record });
     } catch (error) { this.blocked.add(number); throw error; }
     this.records.set(number, structuredClone(record));
   }
@@ -79,31 +87,14 @@ export class IssueRunStore {
     if (this.blocked.has(number)) throw new Error(`Issue #${number} 的状态写入已阻断`);
     this.locked.add(number);
     try {
-      // 磁盘是权威来源，避免以旧投影覆盖同时完成的另一个任务。
+      // 磁盘是权威来源，避免以过期内存副本覆盖同时完成的另一个任务。
       const record = this.readRecord(number);
-      const lifecycleBeforeUpdate = structuredClone(record.lifecycle);
       update(record);
-      reconcileLegacyIssueProjection(record, lifecycleBeforeUpdate);
       this.persist(number, record);
       return structuredClone(record);
     } finally { this.locked.delete(number); }
   }
 
-  /** v3 REST 兼容字段是单向投影，绝不写回 v4 聚合文件。 */
-  private toPersistedRecord(record: IssueRecord): Omit<IssueRecord, keyof LegacyIssueProjection> {
-    const {
-      state: _state,
-      currentPhase: _currentPhase,
-      attempts: _attempts,
-      lastError: _lastError,
-      failedAtState: _failedAtState,
-      lastErrorRetryable: _lastErrorRetryable,
-      pausedAtPhase: _pausedAtPhase,
-      orchestrationState: _orchestrationState,
-      ...persisted
-    } = record;
-    return persisted;
-  }
   replace(record: IssueRecord): void {
     const number = getIssueNumber(record);
     const saved = this.transaction(number, current => {

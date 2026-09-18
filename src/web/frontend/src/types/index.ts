@@ -1,6 +1,6 @@
-import type {IssueState} from '../../../../shared/workbench';
+import type {IssueLifecycle} from '../../../../shared/workbench';
 import type { PhaseHistoryEntry } from '../../../../shared/workbench';
-export type {IssueState} from '../../../../shared/workbench';
+export type {IssueLifecycle} from '../../../../shared/workbench';
 
 export type PipelineMode = string;
 
@@ -8,13 +8,9 @@ export type PhaseStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | '
 
 export interface IssueRecord {
   run?: import('../../../../shared/workbench').IssueRun;
-  state: IssueState;
-  currentPhase?: string;
+  lifecycle: IssueLifecycle;
   branchName: string;
   sessionId?: string;
-  attempts: number;
-  lastError?: string;
-  failedAtState?: IssueState;
   pipelineMode?: PipelineMode;
   prUrl?: string;
   issueNoteSyncEnabled?: boolean;
@@ -29,7 +25,6 @@ export interface IssueRecord {
   worktree?: { exists: boolean; cleanedAt?: string; path?: string };
   createdAt: string;
   updatedAt: string;
-  progress?: ProgressData;
   /** tracker 中的真实阶段进度（单一数据源） */
   phaseProgress?: Record<string, PhaseProgress>;
   phaseHistory?: PhaseHistoryEntry[];
@@ -48,15 +43,6 @@ export interface PhaseProgress {
   startedAt?: string;
   completedAt?: string;
   error?: string;
-}
-
-export interface ProgressData {
-  displayId: number;
-  title: string;
-  branchName: string;
-  pipelineMode?: PipelineMode;
-  currentPhase: string;
-  phases: Record<string, PhaseProgress>;
 }
 
 export interface AgentLogEntry {
@@ -171,9 +157,6 @@ export interface PipelineModeMeta {
 
 export interface PipelineMeta {
   modes: Record<PipelineMode, PipelineModeMeta>;
-  stateLabels: Record<string, string>;
-  phaseStatuses: Record<PipelineMode, Record<string, Record<string, PhaseStatus>>>;
-  stateCategories: Record<string, string>;
 }
 
 // ── 统一任务模型 ──
@@ -194,7 +177,7 @@ export interface ExecutableTask {
   createdAt: string;
   updatedAt: string;
   branchName?: string;
-  sourceState?: string;
+  lifecycle: IssueLifecycle;
   stateCategory?: string;
   displayLabel?: string;
   phaseProgress?: { name: string; label: string; status: PhaseStatus; startedAt?: string; completedAt?: string }[];

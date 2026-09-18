@@ -9,7 +9,7 @@ import { ServiceShutdownError } from '../../errors/index.js';
 import { deliverIssueStep } from './DeliverIssueStep.js';
 import { syncResultToIssue } from './PhaseHelpers.js';
 import { createPhase } from '../../phases/PhaseFactory.js';
-import { readIssueLifecycle, type IssueLifecycle } from '../../tracker/IssueLifecycle.js';
+import type { IssueLifecycle } from '../../tracker/IssueLifecycle.js';
 import { logger as rootLogger } from '../../logger.js';
 
 const logger = rootLogger.child('RunWorkflowStep');
@@ -85,10 +85,10 @@ export async function runWorkflow(
   await workflow.drive();
 
   const finalRecord = deps.tracker.get(issueIid);
-  const paused = finalRecord !== undefined && isPipelinePaused(readIssueLifecycle(finalRecord));
+  const paused = finalRecord !== undefined && isPipelinePaused(finalRecord.lifecycle);
 
   if (paused) {
-    logger.info('Pipeline paused', { number: issueIid, state: finalRecord?.state });
+    logger.info('Pipeline paused', { number: issueIid, lifecycle: finalRecord?.lifecycle.kind });
   }
 
   return { paused, serversStarted };

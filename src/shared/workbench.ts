@@ -1,8 +1,7 @@
 export type { IssueRun, ExecutionIdentity, TaskDefinition, TaskRun } from '../dag/contracts.js';
 /** 前后端共用的数据契约；仅包含类型，浏览器不会加载服务端执行逻辑。 */
-import type {IssueState as StoredIssueState} from '../tracker/IssueState.js';
-export type { PhaseHistoryEntry } from '../orchestration/OrchestrationState.js';
-export type IssueState = `${StoredIssueState}`;
+export type { IssueLifecycle } from '../tracker/IssueLifecycle.js';
+export type { PhaseHistoryEntry } from '../orchestration/PhaseHistory.js';
 
 export interface DemandDraft {
   format: 'iaf-mini/draft/v2';

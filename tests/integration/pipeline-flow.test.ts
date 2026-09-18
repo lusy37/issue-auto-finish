@@ -1,7 +1,7 @@
 vi.mock('../../src/orchestrator/DagPhaseRunner.js', () => ({ DagPhaseRunner: isolatedPhaseRunner((...args) => mockPhaseRun(...args)) }));
 import { isolatedPhaseRunner } from '../helpers/isolated-phase-runner.js';
 // 本组验证核心调度；真实 Git、UAT 及交付门禁由 mini-workflow 集成测试覆盖。
-vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.updateState(ctx.issue.number, 'completed', {prUrl:pr.html_url,deliveryPending:false,completedAt:new Date().toISOString()}); } }));
+vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.transaction(ctx.issue.number, (record: any) => { record.lifecycle = { kind: 'completed' }; record.prUrl=pr.html_url; record.deliveryPending=false; record.completedAt=new Date().toISOString(); }); } }));
 /**
  * 集成测试：流水线正常流程（happy path）
  *
@@ -9,7 +9,6 @@ vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssu
  * processIssue 从头到尾走完 plan-mode 流水线（含 auto-approve）。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { IssueState } from '../../src/tracker/IssueState.js';
 import {
   createHarness,
   createIntegrationTestIssue,
@@ -119,7 +118,7 @@ describe('集成测试：流水线正常流程', () => {
     // 1. 验证 tracker 状态为 Completed
     const record = harness.tracker.get(issue.number);
     expect(record).toBeDefined();
-    expect(record!.state).toBe(IssueState.Completed);
+    expect(record!.lifecycle.kind).toBe('completed');
     expect(record!.prUrl).toBeDefined();
 
     // 2. 验证开始评论被发送
@@ -156,8 +155,7 @@ describe('集成测试：流水线正常流程', () => {
     // 验证在 review gate 暂停
     const record = harness.tracker.get(issue.number);
     expect(record).toBeDefined();
-    expect(record!.state).toBe(IssueState.PhaseWaiting);
-    expect(record!.currentPhase).toBe('review');
+    expect(record!.lifecycle).toMatchObject({ kind: 'waiting', phase: 'review' });
 
     // 仅执行了 plan 阶段
     expect(mockPhaseRun).toHaveBeenCalledTimes(1);
@@ -173,8 +171,7 @@ describe('集成测试：流水线正常流程', () => {
 
     // 先创建已在 review gate 的记录
     harness.tracker.create({
-      state: IssueState.PhaseApproved,
-      currentPhase: 'review',
+      lifecycle: { kind: 'ready' },
       branchName: 'feat/issue-42',
       pipelineMode: 'plan-mode',
       demandSpec: {
@@ -202,7 +199,7 @@ describe('集成测试：流水线正常流程', () => {
     // 验证完成
     const record = harness.tracker.get(issue.number);
     expect(record).toBeDefined();
-    expect(record!.state).toBe(IssueState.Completed);
+    expect(record!.lifecycle.kind).toBe('completed');
 
     // 应该执行了 build + verify = 2 个 AI 阶段
     expect(mockPhaseRun).toHaveBeenCalledTimes(2);

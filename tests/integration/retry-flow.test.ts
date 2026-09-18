@@ -1,14 +1,14 @@
 vi.mock('../../src/orchestrator/DagPhaseRunner.js', () => ({ DagPhaseRunner: isolatedPhaseRunner((...args) => mockPhaseRun(...args)) }));
 import { isolatedPhaseRunner } from '../helpers/isolated-phase-runner.js';
 // 本组验证核心调度；真实 Git、UAT 及交付门禁由 mini-workflow 集成测试覆盖。
-vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.updateState(ctx.issue.number, 'completed', {prUrl:pr.html_url,deliveryPending:false,completedAt:new Date().toISOString()}); } }));
+vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { const pr=await deps.github.createPullRequest({sourceBranch:ctx.branchName,targetBranch:deps.config.project.baseBranch,title:ctx.issue.title}); await deps.github.updateIssueLabels(ctx.issue.id, ['auto-finish:done']); deps.tracker.transaction(ctx.issue.number, (record: any) => { record.lifecycle = { kind: 'completed' }; record.prUrl=pr.html_url; record.deliveryPending=false; record.completedAt=new Date().toISOString(); }); } }));
 /**
  * 集成测试：失败重试流程
  *
  * 验证：AI Runner 首次失败 → tracker 记录失败状态 → 重试恢复 → 最终完成。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { IssueState } from '../../src/tracker/IssueState.js';
+import { retryAttempts } from '../../src/tracker/IssueRecord.js';
 import {
   createHarness,
   createIntegrationTestIssue,
@@ -117,10 +117,8 @@ describe('集成测试：失败重试流程', () => {
     // 验证 tracker 记录了失败状态
     const record = harness.tracker.get(issue.number);
     expect(record).toBeDefined();
-    expect(record!.state).toBe(IssueState.Failed);
-    expect(record!.lastError).toContain('AI runner crashed');
-    expect(record!.failedAtState).toBeDefined();
-    expect(record!.attempts).toBe(1);
+    expect(record!.lifecycle).toMatchObject({ kind: 'failed', error: { message: expect.stringContaining('AI runner crashed') } });
+    expect(retryAttempts(record!)).toBe(1);
   });
 
   it('失败后重试 → 成功完成', async () => {
@@ -147,21 +145,20 @@ describe('集成测试：失败重试流程', () => {
     await expect(orchestrator.processIssue(issue)).rejects.toThrow('Temporary failure');
 
     const recordAfterFail = harness.tracker.get(issue.number);
-    expect(recordAfterFail!.state).toBe(IssueState.Failed);
-    expect(recordAfterFail!.attempts).toBe(1);
+    expect(recordAfterFail!.lifecycle.kind).toBe('failed');
+    expect(retryAttempts(recordAfterFail!)).toBe(1);
 
     // 重置以重试（模拟 IssuePoller 的 resetForRetry）
     harness.tracker.resetForRetry(issue.number);
 
     const recordAfterReset = harness.tracker.get(issue.number);
-    expect(recordAfterReset!.state).not.toBe(IssueState.Failed);
-    expect(recordAfterReset!.lastError).toBeUndefined();
+    expect(recordAfterReset!.lifecycle).toEqual({ kind: 'ready' });
 
     // 重试执行 → 成功（mockPhaseRun 已回到默认 resolved）
     await orchestrator.processIssue(issue);
 
     const finalRecord = harness.tracker.get(issue.number);
-    expect(finalRecord!.state).toBe(IssueState.Completed);
+    expect(finalRecord!.lifecycle.kind).toBe('completed');
   });
 
   it('canRetry 在超过 maxRetries 后返回 false', async () => {
@@ -186,7 +183,7 @@ describe('集成测试：失败重试流程', () => {
       // 如果不是第一次，需要重置
       if (attempt > 0) {
         const record = harness.tracker.get(issue.number);
-        if (record?.state === IssueState.Failed) {
+        if (record?.lifecycle.kind === 'failed') {
           harness.tracker.resetForRetry(issue.number);
         }
       }
@@ -222,17 +219,14 @@ describe('集成测试：失败重试流程', () => {
     await expect(orchestrator.processIssue(issue)).rejects.toThrow('crash');
 
     const recordAfterFail = harness.tracker.get(issue.number);
-    expect(recordAfterFail!.state).toBe(IssueState.Failed);
-    expect(recordAfterFail!.attempts).toBe(1);
+    expect(recordAfterFail!.lifecycle.kind).toBe('failed');
+    expect(retryAttempts(recordAfterFail!)).toBe(1);
 
     // 完全重置
     harness.tracker.resetFull(issue.number);
 
     const recordAfterReset = harness.tracker.get(issue.number);
-    expect(recordAfterReset!.state).toBe(IssueState.Pending);
-    expect(recordAfterReset!.attempts).toBe(0);
-    expect(recordAfterReset!.failedAtState).toBeUndefined();
-    expect(recordAfterReset!.lastError).toBeUndefined();
-    expect(recordAfterReset!.sessionId).toBeUndefined();
+    expect(recordAfterReset!.lifecycle).toEqual({ kind: 'pending' });
+    expect(retryAttempts(recordAfterReset!)).toBe(0);
   });
 });

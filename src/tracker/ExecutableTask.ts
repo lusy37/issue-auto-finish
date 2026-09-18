@@ -1,4 +1,5 @@
-import type { IssueRecord } from './IssueState.js';
+import { lifecycleError, retryAttempts, type IssueRecord } from './IssueRecord.js';
+import type { IssueLifecycle } from './IssueLifecycle.js';
 import type { PipelineDef } from '../pipeline/PipelineMetadata.js';
 import {
   projectLifecycleAction,
@@ -6,7 +7,6 @@ import {
   projectLifecyclePhaseStatuses,
 } from '../pipeline/PipelineProjection.js';
 import { getIssueNumber, getTitle } from './IssueRecordHelper.js';
-import { readIssueLifecycle } from './IssueLifecycle.js';
 
 /**
  * 工作台展示使用的任务状态，由当前 Issue 生命周期投影。
@@ -42,8 +42,8 @@ export interface ExecutableTask {
   readonly updatedAt: string;
   /** 特性分支名 */
   readonly branchName?: string;
-  /** 原始 IssueState 状态值 */
-  readonly sourceState?: string;
+  /** 当前业务生命周期。 */
+  readonly lifecycle: IssueLifecycle;
   /** 过滤分类：active/completed/failed/blocked/idle/skipped */
   readonly stateCategory?: string;
   /** 预计算的状态展示标签 */
@@ -94,7 +94,7 @@ export function issueStateToUnified(actionStatus: string): UnifiedTaskStatus {
  * 根据 Issue 生命周期计算工作台过滤分类，区分完成、失败、跳过和等待。
  */
 export function issueStateCategory(record: IssueRecord): string {
-  const lifecycle = readIssueLifecycle(record);
+  const lifecycle = record.lifecycle;
   if (lifecycle.kind === 'failed') return 'failed';
   if (lifecycle.kind === 'completed') return 'completed';
   if (lifecycle.kind === 'skipped' || lifecycle.kind === 'cancelled') return 'skipped';
@@ -109,7 +109,7 @@ export function issueToExecutableTask(
   record: IssueRecord,
   def: PipelineDef,
 ): ExecutableTask {
-  const lifecycle = readIssueLifecycle(record);
+  const lifecycle = record.lifecycle;
   const actionState = projectLifecycleAction(lifecycle);
 
   // 阶段进度快照：使用已持久化的进度；尚未初始化进度时由任务状态推导
@@ -137,12 +137,12 @@ export function issueToExecutableTask(
     taskId: String(getIssueNumber(record)),
     title: getTitle(record),
     status: issueStateToUnified(actionState.status),
-    attempts: record.attempts,
-    lastError: record.lastError,
+    attempts: retryAttempts(record),
+    lastError: lifecycleError(lifecycle),
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     branchName: record.branchName,
-    sourceState: record.state,
+    lifecycle,
     stateCategory: issueStateCategory(record),
     displayLabel: projectLifecycleLabel(lifecycle),
     phaseProgress,

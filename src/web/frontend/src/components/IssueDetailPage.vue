@@ -30,6 +30,10 @@ const currentVerifyFixLoop = computed(() => {
   const number = selectedIssueIid.value;
   return number != null ? logs.getVerifyFixLoop(number) : undefined;
 });
+const retryCount = computed(() => Object.values(detail.selectedIssue.value?.run?.retryUsed ?? {}).reduce((sum, value) => sum + value, 0));
+const issueError = computed(() => detail.selectedIssue.value?.lifecycle.kind === 'failed'
+  ? detail.selectedIssue.value.lifecycle.error.message
+  : undefined);
 
 const noteSyncDisplay = computed(() => {
   if (!detail.selectedIssue.value) return 'system';
@@ -178,8 +182,8 @@ onUnmounted(() => {
         <span class="text-gray-300">|</span>
         <h1 class="text-lg font-bold text-gray-800 truncate">Issue #{{ getIssueIid(detail.selectedIssue.value) }}</h1>
         <span class="text-gray-500 truncate hidden sm:inline">{{ getIssueTitle(detail.selectedIssue.value) }}</span>
-        <span class="px-2.5 py-0.5 rounded-full text-xs font-medium flex-shrink-0" :class="stateClass(detail.selectedIssue.value.state)">
-          {{ stateLabel(detail.selectedIssue.value.state, detail.selectedIssue.value.currentPhase) }}
+        <span class="px-2.5 py-0.5 rounded-full text-xs font-medium flex-shrink-0" :class="stateClass(detail.selectedIssue.value.lifecycle)">
+          {{ stateLabel(detail.selectedIssue.value.lifecycle) }}
         </span>
       </div>
       <div class="flex items-center gap-3 flex-shrink-0">
@@ -203,7 +207,6 @@ onUnmounted(() => {
           <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">{{ $t('pipeline.title') }}</div>
           <PipelineProgress
             :issue="detail.selectedIssue.value"
-            :progress="detail.detailProgress.value"
             :verify-fix-loop="currentVerifyFixLoop"
             vertical
             @retry-from-phase="(phase: string) => detail.doRetryFromPhase(getIssueIid(detail.selectedIssue.value!), phase, phase, refreshIssues)"
@@ -220,7 +223,7 @@ onUnmounted(() => {
             </div>
             <div class="flex justify-between">
               <span class="text-gray-400">{{ $t('detail.retries') }}</span>
-              <span>{{ detail.selectedIssue.value.attempts }}</span>
+              <span>{{ retryCount }}</span>
             </div>
             <div class="flex justify-between">
               <span class="text-gray-400">{{ $t('detail.createdAt') }}</span>
@@ -306,10 +309,10 @@ onUnmounted(() => {
         </div>
 
         <!-- Error -->
-        <div v-if="detail.selectedIssue.value.lastError" class="p-4 border-b border-gray-100">
+        <div v-if="issueError" class="p-4 border-b border-gray-100">
           <div class="bg-red-50 border border-red-200 rounded-lg p-3">
             <div class="text-xs font-semibold text-red-700 mb-1">{{ $t('detail.errorInfo') }}</div>
-            <p class="text-xs text-red-600 whitespace-pre-wrap break-words">{{ detail.selectedIssue.value.lastError }}</p>
+            <p class="text-xs text-red-600 whitespace-pre-wrap break-words">{{ issueError }}</p>
           </div>
         </div>
 
@@ -317,28 +320,28 @@ onUnmounted(() => {
         <div class="p-4">
           <div class="flex flex-wrap gap-2">
             <button
-              v-if="detail.selectedIssue.value.state === 'skipped'"
+              v-if="detail.selectedIssue.value.lifecycle.kind === 'skipped'"
               class="px-3 py-1.5 bg-green-500 text-white text-xs rounded-lg hover:bg-green-600"
               @click="detail.doStartIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.start') }}</button>
             <button
-              v-if="detail.selectedIssue.value.state === 'failed'"
+              v-if="detail.selectedIssue.value.lifecycle.kind === 'failed'"
               class="px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600"
               @click="detail.doRetryIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.retry') }}</button>
 
             <button
-              v-if="['phase_running', 'phase_done', 'phase_waiting', 'phase_approved'].includes(detail.selectedIssue.value.state)"
+              v-if="['running', 'waiting', 'ready'].includes(detail.selectedIssue.value.lifecycle.kind)"
               class="px-3 py-1.5 bg-amber-100 text-amber-700 text-xs rounded-lg hover:bg-amber-200"
               @click="detail.doAbortIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.abort') }}</button>
             <button
-              v-if="detail.selectedIssue.value.state === 'paused'"
+              v-if="detail.selectedIssue.value.lifecycle.kind === 'paused'"
               class="px-3 py-1.5 bg-green-500 text-white text-xs rounded-lg hover:bg-green-600"
               @click="detail.doContinueIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.continue') }}</button>
             <button
-              v-if="detail.selectedIssue.value.state === 'paused'"
+              v-if="detail.selectedIssue.value.lifecycle.kind === 'paused'"
               class="px-3 py-1.5 bg-orange-500 text-white text-xs rounded-lg hover:bg-orange-600"
               @click="detail.doRedoPhase(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.redo') }}</button>
@@ -348,12 +351,12 @@ onUnmounted(() => {
               @click="detail.doStopPreview(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.stopPreview') }}</button>
             <button
-              v-if="!['pending', 'skipped'].includes(detail.selectedIssue.value.state) && !detail.selectedIssue.value.preview?.running"
+              v-if="!['pending', 'skipped'].includes(detail.selectedIssue.value.lifecycle.kind) && !detail.selectedIssue.value.preview?.running"
               class="px-3 py-1.5 bg-indigo-100 text-indigo-700 text-xs rounded-lg hover:bg-indigo-200"
               @click="detail.doRestartPreview(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.restartPreview') }}</button>
             <button
-              v-if="detail.selectedIssue.value.state !== 'skipped'"
+              v-if="detail.selectedIssue.value.lifecycle.kind !== 'skipped'"
               class="px-3 py-1.5 bg-yellow-100 text-yellow-700 text-xs rounded-lg hover:bg-yellow-200"
               @click="detail.doRestartIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.restart') }}</button>
@@ -402,8 +405,7 @@ onUnmounted(() => {
               :review-feedback="detail.reviewFeedback.value"
               :review-history="detail.reviewHistory.value"
               :approval-source="getReviewApprovalSource(detail.selectedIssue.value)"
-              :issue-state="detail.selectedIssue.value.state"
-              :current-phase="detail.selectedIssue.value.currentPhase"
+              :lifecycle="detail.selectedIssue.value.lifecycle"
               :review-decision="detail.selectedIssue.value.run?.review?.decision"
               :plan-doc-content="detail.planDocContent.value"
               :plan-diff="detail.planDiff.value"
@@ -437,8 +439,7 @@ onUnmounted(() => {
           <div v-if="activeTab === 'logs'" class="flex-1 overflow-y-auto min-h-0">
             <AgentLogViewer
               :logs="logs.filteredLogs.value"
-              :issue-state="detail.selectedIssue.value.state"
-              :current-phase="detail.selectedIssue.value.currentPhase"
+              :lifecycle="detail.selectedIssue.value.lifecycle"
               :auto-scroll="logs.agentAutoScroll.value"
               :debug-mode="logs.debugMode.value"
               @update:auto-scroll="logs.agentAutoScroll.value = $event"

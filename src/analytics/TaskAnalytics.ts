@@ -1,6 +1,5 @@
 import type {TaskSummary} from '../shared/workbench.js';
-import type { IssueRecord } from "../tracker/IssueState.js";
-import { readIssueLifecycle } from '../tracker/IssueLifecycle.js';
+import { retryAttempts, type IssueRecord } from "../tracker/IssueRecord.js";
 /** 统计读取持久化记录，不依赖进程内计数器。 */
 export function summarizeTasks(
   records: IssueRecord[],
@@ -10,8 +9,8 @@ export function summarizeTasks(
   const cutoff =
     range === "all" ? 0 : now - (range === "7d" ? 7 : 30) * 86400000;
   const tasks = records.filter((r) => Date.parse(r.createdAt) >= cutoff);
-  const completed = tasks.filter((r) => readIssueLifecycle(r).kind === 'completed'),
-    failed = tasks.filter((r) => readIssueLifecycle(r).kind === 'failed');
+  const completed = tasks.filter((r) => r.lifecycle.kind === 'completed'),
+    failed = tasks.filter((r) => r.lifecycle.kind === 'failed');
   const terminal = [...completed, ...failed];
   const durations = terminal
     .map((r) =>
@@ -30,10 +29,10 @@ export function summarizeTasks(
     uatPassed = 0,
     uatFailed = 0;
   for (const task of tasks) {
-    retries += task.retryCount ?? 0;
+    retries += retryAttempts(task);
     const history = [
       ...(task.archivedPhaseHistory ?? []),
-      ...(task.phaseHistory ?? []),
+      ...task.phaseHistory,
     ];
     for (const entry of history) {
       if (

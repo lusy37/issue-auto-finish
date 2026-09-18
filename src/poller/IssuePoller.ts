@@ -1,8 +1,8 @@
 import { Config } from '../config.js';
 import { GitHubClient, GitHubIssue } from '../clients/GitHubClient.js';
 import { IssueTracker } from '../tracker/IssueTracker.js';
-import { IssueRecord, IssueState } from '../tracker/IssueState.js';
-import { readIssueLifecycle } from '../tracker/IssueLifecycle.js';
+import type { IssueRecord } from '../tracker/IssueRecord.js';
+import type { IssueLifecycle } from '../tracker/IssueLifecycle.js';
 import { getIssueNumber } from '../tracker/IssueRecordHelper.js';
 import { githubIssueToDemandSpec } from '../demand/adapters/GitHubAdapter.js';
 import { IssueService } from '../orchestrator/IssueService.js';
@@ -140,7 +140,7 @@ export class IssuePoller {
       // listIssues + 过滤成功才算「首次发现完成」：存量 issue 已被看到，标志可安全消耗。
       // 必须在用 isFirstDiscovery 计算 initialState 之后再置位。
       // 关键：若本轮抛错（如 429），标志保留，确保后续首个成功发现仍把存量 issue 标记为 skipped。
-      const initialState = this.isFirstDiscovery ? IssueState.Skipped : IssueState.Pending;
+      const initialLifecycle: IssueLifecycle = this.isFirstDiscovery ? { kind: 'skipped' } : { kind: 'pending' };
       if (this.isFirstDiscovery) {
         this.isFirstDiscovery = false;
         logger.info('First discovery completed — pre-existing issues marked as skipped');
@@ -151,11 +151,11 @@ export class IssuePoller {
         return;
       }
 
-      logger.info('Discovered new issues', { count: newIssues.length, initialState });
+      logger.info('Discovered new issues', { count: newIssues.length, initialLifecycle: initialLifecycle.kind });
       for (const issue of newIssues) {
         /** 创建新的 issue 记录 */
         this.tracker.create({
-          state: initialState,
+          lifecycle: initialLifecycle,
           branchName: `${this.config.project.branchPrefix}-${issue.number}`,
           demandSpec: githubIssueToDemandSpec(issue),
         });
@@ -241,7 +241,7 @@ export class IssuePoller {
     const waiting = this.tracker
       .getAll()
       .filter((r) => {
-        const lifecycle = readIssueLifecycle(r);
+        const lifecycle = r.lifecycle;
         return lifecycle.kind === 'waiting' && lifecycle.phase === 'review';
       });
     if (!waiting.length) return;
@@ -259,7 +259,7 @@ export class IssuePoller {
       try {
 
         // 标签自动审核只作用于 review 阶段。
-        const lifecycle = readIssueLifecycle(record);
+        const lifecycle = record.lifecycle;
         if (lifecycle.kind !== 'waiting' || lifecycle.phase !== 'review') {
           continue;
         }
@@ -275,7 +275,7 @@ export class IssuePoller {
         });
 
         // 统一更新编排状态、阶段进度与历史，并发出 review:approved 事件
-        await this.orchestrator.applyGateAction(number, { action: 'approve', source: 'label' }, record.run?.planRevision);
+        await this.orchestrator.applyGateAction(number, { action: 'approve', source: 'label' }, record.run.planRevision);
 
         try {
           await this.github.createIssueNote(

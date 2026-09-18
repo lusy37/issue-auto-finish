@@ -95,7 +95,7 @@ function getAllFiles(dir: string, exts: string[]): string[] {
 
 /**
  * 判断相对导入是否指向 src 下的指定模块目录。
- * 例如: 文件 src/phases/BasePhase.ts 中的 '../tracker/IssueState.js'
+ * 例如：文件 src/phases/Foo.ts 中的 '../tracker/Bar.js'
  *       会被解析为指向 src/tracker/ 目录。
  */
 function depResolvesToModule(
@@ -152,27 +152,13 @@ function formatViolations(violations: Violation[]): string {
 describe('Architecture Guards', () => {
   // ─── Rule 1 ──────────────────────────────────────────────────────────
   // phases/ 不应直接导入 tracker/
-  // 已知例外: BasePhase.ts 导入 IssueState 枚举用于类型标注
-  it('phases/ does not import from tracker/ (except known exceptions)', () => {
+  it('phases/ does not import from tracker/', () => {
     const phaseFiles = getTypeScriptFiles(path.join(SRC_DIR, 'phases'));
     const violations = findViolatingImports(phaseFiles, 'tracker');
 
-    // 已知例外: BasePhase.ts 导入 IssueState 枚举用于 getter 返回类型。
-    // 这是一个可接受的耦合——IssueState 是共享的枚举值对象。
-    const knownExceptions = [
-      { file: 'phases/BasePhase.ts', dep: '../tracker/IssueState.js' },
-    ];
-
-    const unexpected = violations.filter(
-      (v) =>
-        !knownExceptions.some(
-          (ex) => v.file === ex.file && v.dep === ex.dep,
-        ),
-    );
-
     expect(
-      unexpected,
-      `发现意外的 phases/ → tracker/ 导入:\n${formatViolations(unexpected)}`,
+      violations,
+      `发现 phases/ → tracker/ 导入:\n${formatViolations(violations)}`,
     ).toHaveLength(0);
   });
 

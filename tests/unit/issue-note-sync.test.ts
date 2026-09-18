@@ -10,7 +10,6 @@ import {
   createTestConfig,
   createMockIssueTracker,
 } from '../helpers/mock-factories.js';
-import { IssueState } from '../../src/tracker/IssueState.js';
 
 describe('NoteSyncSettings', () => {
   afterEach(() => {
@@ -56,7 +55,7 @@ describe('NoteSyncSettings', () => {
           description: '',
           createdAt: '2024-01-01T00:00:00Z',
         },
-        state: IssueState.PhaseRunning,
+        lifecycle: { kind: 'running', phase: 'build' },
         issueNoteSyncEnabled: undefined,
       });
       const cfg = createTestConfig({ issueNoteSync: { enabled: true, webBaseUrl: '' } });
@@ -73,7 +72,7 @@ describe('NoteSyncSettings', () => {
           description: '',
           createdAt: '2024-01-01T00:00:00Z',
         },
-        state: IssueState.PhaseRunning,
+        lifecycle: { kind: 'running', phase: 'build' },
         issueNoteSyncEnabled: true,
       });
       const cfg = createTestConfig({ issueNoteSync: { enabled: false, webBaseUrl: '' } });
@@ -90,7 +89,7 @@ describe('NoteSyncSettings', () => {
           description: '',
           createdAt: '2024-01-01T00:00:00Z',
         },
-        state: IssueState.PhaseRunning,
+        lifecycle: { kind: 'running', phase: 'build' },
         issueNoteSyncEnabled: false,
       });
       const cfg = createTestConfig({ issueNoteSync: { enabled: true, webBaseUrl: '' } });

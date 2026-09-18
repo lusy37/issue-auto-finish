@@ -3,15 +3,16 @@
 exports[`Back-to-Back: tracker state update sequences > classic issue lifecycle state sequence 1`] = `
 [
   "pending",
-  "branch_created",
-  "phase_running",
-  "branch_created",
-  "phase_waiting",
-  "branch_created",
-  "phase_running",
-  "branch_created",
-  "phase_running",
-  "branch_created",
+  "ready",
+  "running:plan",
+  "ready",
+  "running:review",
+  "waiting:review",
+  "ready",
+  "running:build",
+  "ready",
+  "running:verify",
+  "delivering",
   "completed",
 ]
 `;
@@ -19,11 +20,11 @@ exports[`Back-to-Back: tracker state update sequences > classic issue lifecycle 
 exports[`Back-to-Back: tracker state update sequences > failure and retry state sequence 1`] = `
 [
   "pending",
-  "branch_created",
-  "phase_running",
+  "ready",
+  "running:plan",
   "failed",
-  "failedAt:phase_running",
-  "branch_created",
+  "failedAt:plan",
+  "ready",
   "attempts:1",
 ]
 `;

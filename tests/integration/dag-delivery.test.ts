@@ -8,7 +8,6 @@ import { deliverIssue } from '../../src/dag/DeliveryService.js';
 import type { IssueProcessingContext } from '../../src/orchestrator/IssueProcessingContext.js';
 import type { GitHubPullRequest } from '../../src/clients/GitHubClient.js';
 import type { AIRunner } from '../../src/ai-runner/AIRunner.js';
-import { IssueState } from '../../src/tracker/IssueState.js';
 import { buildPlanModePipeline } from '../../src/pipeline/PipelineMetadata.js';
 import { IssueService } from '../../src/orchestrator/IssueService.js';
 import { GitOperations } from '../../src/git/GitOperations.js';
@@ -66,7 +65,7 @@ describe('验收提交与唯一 PR 交付', { timeout: 300_000 }, () => {
   });
   it.each([false, true])('父目录已回收=%s，完整重做从最新主分支开始并复用开放 PR', async cleaned => {
     const f = await prepared(); await f.deliver(); const oldRemote = f.tracker.get(1)!.run!.delivery!.remoteCommit;
-    f.tracker.updateState(1, IssueState.Completed);
+    f.tracker.transaction(1, record => { record.lifecycle = { kind: 'completed' }; record.deliveryPending = false; });
     if (cleaned) {
       await f.orchestrator.cleanupCompletedWorktree(1);
       expect(fs.existsSync(f.integration)).toBe(false);
@@ -82,7 +81,7 @@ describe('验收提交与唯一 PR 交付', { timeout: 300_000 }, () => {
     expect(f.tracker.get(1)!.run!.delivery!.remoteCommit).toBe(oldRemote);
     expect(git(f.repo, 'ls-remote', 'origin', 'refs/heads/iaf-1')).toContain(oldRemote);
     f.tracker.store.savePlan(1, { title: '第二轮', description: '完整重做', acceptanceCriteria: ['通过'], tasks: [task('a')] }, f.tracker.get(1)!.run!.version);
-    f.tracker.transaction(1, record => { record.state = IssueState.PhaseRunning; record.currentPhase = 'build'; record.run!.dispatchId = 'redo'; record.run!.review!.decision = 'approved'; });
+    f.tracker.transaction(1, record => { record.lifecycle = { kind: 'running', phase: 'build' }; record.run.dispatchId = 'redo'; record.run.review!.decision = 'approved'; });
     f.setContent('第二轮'); await f.accept(); await f.deliver();
     expect(f.create).toHaveBeenCalledTimes(1); expect(f.tracker.get(1)!.run!.delivery!.prNumber).toBe(8);
     expect(f.tracker.get(1)!.run!.delivery!.remoteCommit).not.toBe(oldRemote);
@@ -101,7 +100,7 @@ describe('验收提交与唯一 PR 交付', { timeout: 300_000 }, () => {
     });
     await expect(deliverIssueStep(f.ctx, f.deps, { serversStarted: false })).rejects.toThrow('交付已中止或执行身份已失效');
     expect(newTracker(f.data).get(1)).toEqual(saved);
-    expect(f.tracker.get(1)!.state).not.toBe(IssueState.Completed);
+    expect(f.tracker.get(1)!.lifecycle.kind).not.toBe('completed');
     if (action === 'pause') {
       expect(f.tracker.get(1)!.run!.stopIntent?.kind).toBe('pause');
       expect(() => f.orchestrator.continueIssue(1)).not.toThrow();
@@ -112,13 +111,12 @@ describe('验收提交与唯一 PR 交付', { timeout: 300_000 }, () => {
     f.deps.github.createIssueNote = vi.fn(async () => { await f.orchestrator.abortIssue(1); });
     await expect(deliverIssueStep(f.ctx, f.deps, { serversStarted: false })).rejects.toThrow('交付已中止或执行身份已失效');
     expect(f.deps.github.updateIssueLabels).not.toHaveBeenCalled();
-    expect(newTracker(f.data).get(1)).toMatchObject({ state: IssueState.Paused, run: { stopIntent: { kind: 'pause' } } });
+    expect(newTracker(f.data).get(1)).toMatchObject({ lifecycle: { kind: 'paused' }, run: { stopIntent: { kind: 'pause' } } });
   });
   it('交付暂停后重载检查点仅补齐交付，不重跑阶段或重复创建 PR', async () => {
     const f = await prepared();
     f.tracker.transaction(1, record => {
-      record.state = IssueState.Delivering;
-      record.currentPhase = 'uat';
+      record.lifecycle = { kind: 'delivering' };
       record.deliveryPending = true;
       record.run!.workflow.entry = 'deliver';
     });
@@ -130,13 +128,13 @@ describe('验收提交与唯一 PR 交付', { timeout: 300_000 }, () => {
     });
     f.deps.github.updateIssueLabels.mockImplementationOnce(async () => { await f.orchestrator.abortIssue(1); });
     await expect(workflow().drive()).rejects.toThrow('交付已中止或执行身份已失效');
-    expect(newTracker(f.data).get(1)?.state).toBe(IssueState.Paused);
+    expect(newTracker(f.data).get(1)?.lifecycle.kind).toBe('paused');
     expect(Object.values(f.tracker.get(1)!.run!.workflow.results).some(result => result.phase === 'deliver')).toBe(false);
     f.orchestrator.continueIssue(1);
     f.deps.tracker = newTracker(f.data);
     const resumed = workflow();
     await resumed.drive();
-    expect(newTracker(f.data).get(1)?.state).toBe(IssueState.Completed);
+    expect(newTracker(f.data).get(1)?.lifecycle.kind).toBe('completed');
     expect((await resumed.getState()).next).toEqual([]);
     expect(run).not.toHaveBeenCalled();
     expect(f.create).toHaveBeenCalledTimes(1);

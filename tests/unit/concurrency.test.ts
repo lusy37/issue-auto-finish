@@ -1,11 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AsyncMutex } from '../../src/utils/AsyncMutex.js';
-import { IssueState } from '../../src/tracker/IssueState.js';
 import {
   createMockGitOperations,
   createMockGitHubClient,
   createMockAIRunner,
-  createMockIssueTracker,
   createTestConfig,
   createTestIssue,
 } from '../helpers/mock-factories.js';
@@ -86,21 +84,19 @@ describe('Concurrency and Isolation', () => {
 
   describe('Concurrent issue processing simulation', () => {
     it('processes multiple issues in parallel without cross-contamination', async () => {
-      const tracker = createMockIssueTracker();
       const stateLog: Array<{ number: number; state: string }> = [];
-
-      tracker.updateState.mockImplementation((number: number, state: string) => {
+      const updateLifecycle = (number: number, state: string) => {
         stateLog.push({ number, state });
-      });
+      };
 
       const issueCount = 3;
       const promises = Array.from({ length: issueCount }, async (_, i) => {
         const number = i + 1;
-        tracker.updateState(number, IssueState.PhaseRunning);
+        updateLifecycle(number, 'running');
         await delay(10 + Math.random() * 20);
-        tracker.updateState(number, IssueState.PhaseDone);
+        updateLifecycle(number, 'ready');
         await delay(10 + Math.random() * 20);
-        tracker.updateState(number, IssueState.PhaseRunning);
+        updateLifecycle(number, 'running');
       });
 
       await Promise.all(promises);
@@ -110,9 +106,9 @@ describe('Concurrency and Isolation', () => {
           .filter((e) => e.number === number)
           .map((e) => e.state);
         expect(issueStates).toEqual([
-          IssueState.PhaseRunning,
-          IssueState.PhaseDone,
-          IssueState.PhaseRunning,
+          'running',
+          'ready',
+          'running',
         ]);
       }
     });

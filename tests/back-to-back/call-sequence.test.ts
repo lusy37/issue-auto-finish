@@ -12,7 +12,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
-import { IssueState } from '../../src/tracker/IssueState.js';
+import { applyIssueLifecycleEvent } from '../../src/tracker/IssueLifecycle.js';
 import {
   PLAN_MODE_PIPELINE,
 } from '../../src/pipeline/PipelineMetadata.js';
@@ -23,7 +23,7 @@ import {
 
 function createMinimalHarness() {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'b2b-'));
-  const tracker = new IssueTracker(dataDir);
+  const tracker = new IssueTracker(dataDir, new Map([['plan-mode', PLAN_MODE_PIPELINE]]));
 
   const callLog: Array<{ method: string; args: unknown[] }> = [];
 
@@ -85,45 +85,30 @@ describe('Back-to-Back: tracker state update sequences', () => {
     const { tracker } = harness;
     const stateLog: string[] = [];
 
-    // Simulate classic pipeline lifecycle
+    const transition = (event: Parameters<typeof applyIssueLifecycleEvent>[1]) => {
+      tracker.transaction(1, current => { applyIssueLifecycleEvent(current, event); });
+      const lifecycle = tracker.get(1)!.lifecycle;
+      stateLog.push('phase' in lifecycle ? `${lifecycle.kind}:${lifecycle.phase}` : lifecycle.kind);
+    };
     const record = tracker.create({
-      state: IssueState.Pending,
+      lifecycle: { kind: 'pending' },
       branchName: 'feat/issue-1',
       pipelineMode: 'plan-mode',
       demandSpec: makeDemand(1),
     });
 
-    stateLog.push(record.state);
-
-    tracker.updateState(1, IssueState.BranchCreated);
-    stateLog.push(tracker.get(1)!.state);
-
-    tracker.updateState(1, IssueState.PhaseRunning, { currentPhase: 'plan' });
-    stateLog.push(tracker.get(1)!.state);
-
-    tracker.updateState(1, IssueState.PhaseDone, { currentPhase: 'plan' });
-    stateLog.push(tracker.get(1)!.state);
-
-    tracker.updateState(1, IssueState.PhaseWaiting);
-    stateLog.push(tracker.get(1)!.state);
-
-    tracker.updateState(1, IssueState.PhaseApproved);
-    stateLog.push(tracker.get(1)!.state);
-
-    tracker.updateState(1, IssueState.PhaseRunning, { currentPhase: 'build' });
-    stateLog.push(tracker.get(1)!.state);
-
-    tracker.updateState(1, IssueState.PhaseDone, { currentPhase: 'build' });
-    stateLog.push(tracker.get(1)!.state);
-
-    tracker.updateState(1, IssueState.PhaseRunning, { currentPhase: 'verify' });
-    stateLog.push(tracker.get(1)!.state);
-
-    tracker.updateState(1, IssueState.PhaseDone, { currentPhase: 'verify' });
-    stateLog.push(tracker.get(1)!.state);
-
-    tracker.updateState(1, IssueState.Completed, { prUrl: 'https://pr/1' });
-    stateLog.push(tracker.get(1)!.state);
+    stateLog.push(record.lifecycle.kind);
+    transition({ type: 'setup-completed' });
+    transition({ type: 'phase-started', phase: 'plan' });
+    transition({ type: 'phase-completed', phase: 'plan' });
+    transition({ type: 'phase-started', phase: 'review' });
+    transition({ type: 'gate-interrupted', phase: 'review' });
+    transition({ type: 'gate-resolved', phase: 'review', action: 'approve' });
+    transition({ type: 'phase-started', phase: 'build' });
+    transition({ type: 'phase-completed', phase: 'build' });
+    transition({ type: 'phase-started', phase: 'verify' });
+    transition({ type: 'delivery-started' });
+    transition({ type: 'delivery-confirmed' });
 
     expect(stateLog).toMatchSnapshot();
   });
@@ -133,28 +118,26 @@ describe('Back-to-Back: tracker state update sequences', () => {
     const stateLog: string[] = [];
 
     tracker.create({
-      state: IssueState.Pending,
+      lifecycle: { kind: 'pending' },
       branchName: 'feat/issue-2',
       pipelineMode: 'plan-mode',
       demandSpec: makeDemand(2),
     });
-    stateLog.push(tracker.get(2)!.state);
-
-    tracker.updateState(2, IssueState.BranchCreated);
-    stateLog.push(tracker.get(2)!.state);
-
-    tracker.updateState(2, IssueState.PhaseRunning, { currentPhase: 'plan' });
-    stateLog.push(tracker.get(2)!.state);
+    stateLog.push(tracker.get(2)!.lifecycle.kind);
+    tracker.transaction(2, record => { applyIssueLifecycleEvent(record, { type: 'setup-completed' }); });
+    stateLog.push(tracker.get(2)!.lifecycle.kind);
+    tracker.transaction(2, record => { applyIssueLifecycleEvent(record, { type: 'phase-started', phase: 'plan' }); });
+    stateLog.push(`${tracker.get(2)!.lifecycle.kind}:plan`);
 
     // Failure
-    tracker.markFailed(2, 'AI timeout', IssueState.PhaseRunning);
-    stateLog.push(tracker.get(2)!.state);
-    stateLog.push(`failedAt:${tracker.get(2)!.failedAtState}`);
+    tracker.markFailed(2, 'AI timeout');
+    stateLog.push(tracker.get(2)!.lifecycle.kind);
+    stateLog.push(`failedAt:${tracker.get(2)!.lifecycle.kind === 'failed' ? tracker.get(2)!.lifecycle.phase : undefined}`);
 
     // Retry (reset for retry)
     tracker.resetForRetry(2);
-    stateLog.push(tracker.get(2)!.state);
-    stateLog.push(`attempts:${tracker.get(2)!.attempts}`);
+    stateLog.push(tracker.get(2)!.lifecycle.kind);
+    stateLog.push(`attempts:${tracker.get(2)!.run.retryUsed.plan ?? 0}`);
 
     expect(stateLog).toMatchSnapshot();
   });

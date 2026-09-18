@@ -1,6 +1,6 @@
 import type { GitHubIssue, GitHubClient } from '../clients/GitHubClient.js';
 import type { WorktreeContext } from '../git/WorktreeContext.js';
-import type { IssueRecord } from '../tracker/IssueState.js';
+import type { IssueRecord } from '../tracker/IssueRecord.js';
 import type { PhaseContext } from '../phases/BasePhase.js';
 import type { PipelineDef } from '../pipeline/PipelineMetadata.js';
 import type { DemandSpec } from '../demand/DemandSpec.js';

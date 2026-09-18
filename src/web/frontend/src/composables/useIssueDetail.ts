@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue';
-import type { IssueRecord, ProgressData, SupplementInfo, AgentLogEntry, ReviewRound, ExecutableTask } from '@/types';
+import type { IssueRecord, SupplementInfo, AgentLogEntry, ReviewRound, ExecutableTask } from '@/types';
 import { getIssueIid } from '@/types';
 import * as api from '@/api/client';
 import { t } from '@/i18n/index';
@@ -13,7 +13,6 @@ function emptySupplementForm(): SupplementInfo {
 
 export function useIssueDetail() {
   const selectedIssue = ref<IssueRecord | null>(null);
-  const detailProgress = ref<ProgressData | null>(null);
   const detailVersion = ref(0);
 
   const detailSupplement = ref<SupplementInfo>(emptySupplementForm());
@@ -45,7 +44,6 @@ export function useIssueDetail() {
         api.fetchIssueLogs(getIssueIid(issue)),
       ]);
       selectedIssue.value = detail;
-      detailProgress.value = detail.progress ?? null;
       agentLogs.value = logs.reverse();
     } catch (e) {
       console.error('Fetch detail failed', e);
@@ -63,7 +61,6 @@ export function useIssueDetail() {
     try {
       const fresh = await api.fetchIssueDetail(number);
       selectedIssue.value = fresh;
-      detailProgress.value = fresh.progress ?? null;
       detailVersion.value++;
     } catch (e) {
       console.error('Refresh detail failed', e);
@@ -165,14 +162,13 @@ export function useIssueDetail() {
     if (!confirm(t('confirm.restart', { number }))) return;
     try {
       await api.restartIssue(number);
-      detailProgress.value = null;
       // 乐观更新：立即重置列表中对应 task 的进度，消除时序差
       if (tasks?.value) {
         tasks.value = tasks.value.map(task =>
           task.taskId === String(number)
             ? {
                 ...task,
-                sourceState: 'pending',
+                lifecycle: { kind: 'pending' },
                 stateCategory: 'idle',
                 status: 'idle' as const,
                 attempts: 0,
@@ -298,7 +294,6 @@ export function useIssueDetail() {
 
   return {
     selectedIssue,
-    detailProgress,
     detailVersion,
     detailSupplement,
     detailSupplementForm,

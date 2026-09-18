@@ -1,11 +1,9 @@
 // 本组隔离交付；真实浏览器凭证和平台幂等交付由 mini-workflow / dag-delivery 验证。
-vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { deps.tracker.updateState(ctx.issue.number, 'completed', { deliveryPending: false }); } }));
+vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { deps.tracker.transaction(ctx.issue.number, (record: any) => { record.lifecycle = { kind: 'completed' }; record.deliveryPending = false; }); } }));
 import { newIssueRun } from '../../src/dag/contracts.js';
 vi.mock('../../src/orchestrator/DagPhaseRunner.js', () => ({ DagPhaseRunner: isolatedPhaseRunner((...args) => mockPhaseRun(...args)) }));
 import { isolatedPhaseRunner } from '../helpers/isolated-phase-runner.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { IssueState } from '../../src/tracker/IssueState.js';
-import { lifecycleFromLegacyProjection } from '../../src/tracker/IssueLifecycle.js';
 import { buildPlanModePipeline } from '../../src/pipeline/PipelineMetadata.js';
 import type { IssueProcessingContext, OrchestratorDeps } from '../../src/orchestrator/IssueProcessingContext.js';
 import type { PhaseContext } from '../../src/phases/BasePhase.js';
@@ -78,13 +76,10 @@ describe('Preview port restore on retry', () => {
 
   function bindTrackerToRecord(ctx: IssueProcessingContext): void {
     ctx.record.run ??= newIssueRun();
-    ctx.record.lifecycle ??= ctx.record.currentPhase
-      ? { kind: 'ready' }
-      : lifecycleFromLegacyProjection(ctx.record);
     ctx.record.run.workflow.definition ??= {
       phaseIds: ctx.pipelineDef.phases.map(phase => phase.name),
     };
-    ctx.record.run.workflow.entry = (ctx.record.currentPhase ?? 'plan') as any;
+    ctx.record.run.workflow.entry = (ctx.isRetry ? 'uat' : 'plan') as any;
     mockTracker.get.mockImplementation(() => ctx.record as any);
   }
 
@@ -109,11 +104,8 @@ describe('Preview port restore on retry', () => {
       record: {
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.PhaseRunning,
-        failedAtState: IssueState.PhaseRunning,
-        currentPhase: 'uat',
+        lifecycle: { kind: 'ready' },
         pipelineMode: 'plan-mode',
-        attempts: 1,
       } as any,
       isRetry: true,
       pipelineDef,
@@ -151,11 +143,8 @@ describe('Preview port restore on retry', () => {
       record: {
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.PhaseRunning,
-        failedAtState: IssueState.PhaseRunning,
-        currentPhase: 'uat',
+        lifecycle: { kind: 'ready' },
         pipelineMode: 'plan-mode',
-        attempts: 1,
       } as any,
       isRetry: true,
       pipelineDef,
@@ -191,11 +180,8 @@ describe('Preview port restore on retry', () => {
       record: {
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.PhaseRunning,
-        failedAtState: IssueState.PhaseRunning,
-        currentPhase: 'uat',
+        lifecycle: { kind: 'ready' },
         pipelineMode: 'plan-mode',
-        attempts: 1,
       } as any,
       isRetry: true,
       pipelineDef,
@@ -229,9 +215,8 @@ describe('Preview port restore on retry', () => {
       record: {
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.Pending,
+        lifecycle: { kind: 'pending' },
         pipelineMode: 'plan-mode',
-        attempts: 0,
       } as any,
       isRetry: false,
       pipelineDef,
@@ -269,11 +254,8 @@ describe('Preview port restore on retry', () => {
       record: {
         issueIid: 42,
         branchName: 'feat/issue-42',
-        state: IssueState.PhaseRunning,
-        failedAtState: IssueState.PhaseRunning,
-        currentPhase: 'uat',
+        lifecycle: { kind: 'ready' },
         pipelineMode: 'plan-mode',
-        attempts: 1,
       } as any,
       isRetry: true,
       pipelineDef,

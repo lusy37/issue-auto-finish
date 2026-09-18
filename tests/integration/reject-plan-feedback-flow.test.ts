@@ -11,7 +11,7 @@ describe('驳回反馈与不可变计划同事务保存', () => {
     const snapshot = renderPlan(f.tracker.store.readPlan(42, 1));
     expect((await f.decide()).status).toBe(200);
     const record = newTracker(f.data).get(42)!;
-    expect(record.orchestrationState?.kind).toBe('queued');
+    expect(record.lifecycle).toEqual({ kind: 'pending' });
     expect(record.run!.review).toMatchObject({ revision: 1, decision: 'rejected', feedback: '补充错误处理' });
     expect(record.run!.reviewHistory![0]).toMatchObject({ revision: 1, planSnapshot: snapshot });
     expect(record.phaseHistory?.at(-1)?.outcome).toBe('gate-rejected');

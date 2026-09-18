@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import type { ExecutableTask, IssueState, PhaseStatus, SystemStatus } from '@/types';
+import type { ExecutableTask, PhaseStatus, SystemStatus } from '@/types';
 import { usePipeline } from '@/composables/usePipeline';
 import { getTaskFilterOptions } from '@/composables/useTasks';
 import { formatTime } from '@/utils/formatters';
 import { t } from '@/i18n/index';
 
-type SortField = 'taskId' | 'sourceState' | 'attempts' | 'updatedAt';
+type SortField = 'taskId' | 'lifecycle' | 'attempts' | 'updatedAt';
 type SortDirection = 'asc' | 'desc';
 
 const props = defineProps<{
@@ -36,7 +36,7 @@ function segmentClass(status: PhaseStatus): string {
   return 'bg-gray-200';
 }
 
-function currentPhaseLabel(task: ExecutableTask): string {
+function activePhaseLabel(task: ExecutableTask): string {
   if (!task.phaseProgress) return '';
   const active = task.phaseProgress.find(p => p.status === 'in_progress' || p.status === 'gate_waiting');
   if (active) return active.label;
@@ -66,7 +66,7 @@ const sortedIssues = computed(() => {
     if (field === 'attempts') {
       return dir * (a.attempts - b.attempts);
     }
-    return dir * (a.sourceState ?? '').localeCompare(b.sourceState ?? '');
+    return dir * a.lifecycle.kind.localeCompare(b.lifecycle.kind);
   });
 });
 
@@ -101,8 +101,8 @@ function toggleSort(field: SortField) {
               IID <span v-if="sortField === 'taskId'">{{ sortDirection === 'asc' ? '&#9650;' : '&#9660;' }}</span>
             </th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ $t('table.title') }}</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none hover:text-gray-700" @click="toggleSort('sourceState')">
-              {{ $t('table.state') }} <span v-if="sortField === 'sourceState'">{{ sortDirection === 'asc' ? '&#9650;' : '&#9660;' }}</span>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none hover:text-gray-700" @click="toggleSort('lifecycle')">
+              {{ $t('table.state') }} <span v-if="sortField === 'lifecycle'">{{ sortDirection === 'asc' ? '&#9650;' : '&#9660;' }}</span>
             </th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ $t('table.progress') }}</th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none hover:text-gray-700" @click="toggleSort('attempts')">
@@ -137,7 +137,7 @@ function toggleSort(field: SortField) {
             </td>
             <td class="px-4 py-3 text-sm text-gray-800 max-w-xs truncate">{{ task.title }}</td>
             <td class="px-4 py-3">
-              <span class="px-2 py-1 rounded-full text-xs font-medium" :class="stateClass((task.sourceState ?? 'pending') as IssueState)">{{ task.displayLabel ?? stateLabel((task.sourceState ?? 'pending') as IssueState) }}</span>
+              <span class="px-2 py-1 rounded-full text-xs font-medium" :class="stateClass(task.lifecycle)">{{ task.displayLabel ?? stateLabel(task.lifecycle) }}</span>
             </td>
             <td class="px-4 py-3">
               <div v-if="task.phaseProgress" class="flex items-center gap-2 min-w-[140px]" :title="progressTooltip(task)">
@@ -149,7 +149,7 @@ function toggleSort(field: SortField) {
                     :class="segmentClass(phase.status)"
                   />
                 </div>
-                <span class="text-xs text-gray-500 truncate max-w-[80px]">{{ currentPhaseLabel(task) }}</span>
+                <span class="text-xs text-gray-500 truncate max-w-[80px]">{{ activePhaseLabel(task) }}</span>
               </div>
             </td>
             <td class="px-4 py-3 text-sm text-gray-600">{{ task.attempts }}</td>
@@ -157,17 +157,17 @@ function toggleSort(field: SortField) {
             <td class="px-4 py-3">
               <div class="flex space-x-2" @click.stop>
                 <button
-                  v-if="task.sourceState === 'skipped'"
+                  v-if="task.lifecycle.kind === 'skipped'"
                   class="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
                   @click="emit('start', Number(task.taskId))"
                 >{{ $t('table.start') }}</button>
                 <button
-                  v-if="task.sourceState === 'failed'"
+                  v-if="task.lifecycle.kind === 'failed'"
                   class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
                   @click="emit('retry', Number(task.taskId))"
                 >{{ $t('table.retry') }}</button>
                 <button
-                  v-if="task.sourceState !== 'skipped'"
+                  v-if="task.lifecycle.kind !== 'skipped'"
                   class="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded hover:bg-yellow-200"
                   @click="emit('restart', Number(task.taskId))"
                 >{{ $t('table.restart') }}</button>

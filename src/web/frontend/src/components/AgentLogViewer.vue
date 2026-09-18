@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import type { AgentLogEntry, IssueState } from '@/types';
+import type { AgentLogEntry, IssueLifecycle } from '@/types';
 import { usePipeline } from '@/composables/usePipeline';
 import { useAgentLogs } from '@/composables/useAgentLogs';
 import { formatLogTime } from '@/utils/formatters';
 
 const props = defineProps<{
   logs: AgentLogEntry[];
-  issueState?: IssueState;
-  currentPhase?: string;
+  lifecycle?: IssueLifecycle;
 }>();
 
 const emit = defineEmits<{
@@ -53,13 +52,13 @@ const filteredLogs = computed(() => props.logs.filter(log => (!taskFilter.value 
       v-if="logs.length === 0"
       class="border border-gray-200 rounded-lg p-6 text-center text-gray-400 text-sm"
     >
-      <template v-if="issueState && isTerminalState(issueState)">
+      <template v-if="lifecycle && isTerminalState(lifecycle)">
         <svg class="h-5 w-5 mx-auto mb-2 text-gray-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-3-3v6m-7 4h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
         </svg>
         <div>{{ $t('agentLog.ended') }}</div>
         <div class="text-xs mt-1">
-          {{ $t('agentLog.finalState') }} <span :class="issueState === 'completed' ? 'text-green-500' : 'text-red-500'">{{ stateLabel(issueState, currentPhase) }}</span>
+          {{ $t('agentLog.finalState') }} <span :class="lifecycle.kind === 'completed' ? 'text-green-500' : 'text-red-500'">{{ stateLabel(lifecycle) }}</span>
         </div>
       </template>
       <template v-else>
@@ -68,7 +67,7 @@ const filteredLogs = computed(() => props.logs.filter(log => (!taskFilter.value 
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
         <div>{{ $t('agentLog.waiting') }}</div>
-        <div v-if="issueState" class="text-xs mt-1">{{ $t('agentLog.currentState') }} {{ stateLabel(issueState, currentPhase) }}</div>
+        <div v-if="lifecycle" class="text-xs mt-1">{{ $t('agentLog.currentState') }} {{ stateLabel(lifecycle) }}</div>
       </template>
     </div>
 

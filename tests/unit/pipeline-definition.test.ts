@@ -9,9 +9,8 @@ import {
   PLAN_MODE_PIPELINE,
   buildPlanModePipeline,
 } from '../../src/pipeline/PipelineMetadata.js';
-import { IssueState } from '../../src/tracker/IssueState.js';
 import { getPlanModePhases } from '../../src/orchestration/Phases.js';
-import { collectLegacyStateLabels, projectLegacyPhaseStatuses } from '../../src/pipeline/PipelineProjection.js';
+import { projectLifecyclePhaseStatuses } from '../../src/pipeline/PipelineProjection.js';
 
 describe('PipelineDefinition', () => {
   beforeEach(() => {
@@ -143,48 +142,28 @@ describe('PipelineDefinition', () => {
     });
   });
 
-  describe('collectStateLabels', () => {
-    it('includes Pending and Failed for plan-mode pipeline', () => {
-      const labels = collectLegacyStateLabels(PLAN_MODE_PIPELINE);
-      expect(labels.get(IssueState.Pending)).toBe('待处理');
-      expect(labels.get(IssueState.Failed)).toBe('失败');
-      expect(labels.get(IssueState.Completed)).toBe('已完成');
-    });
-
-    it('generates labels from phase definitions', () => {
-      const labels = collectLegacyStateLabels(PLAN_MODE_PIPELINE);
-      expect(labels.get('phase_running:plan')).toBe('规划中');
-      expect(labels.get('phase_done:plan')).toBe('规划完成');
-    });
-
-    it('includes review approved compatibility label for plan-mode', () => {
-      const labels = collectLegacyStateLabels(PLAN_MODE_PIPELINE);
-      expect(labels.get('phase_approved:review')).toBe('审核通过');
-    });
-  });
-
-  describe('derivePhaseStatuses', () => {
-    it('marks current phase as in_progress', () => {
-      const statuses = projectLegacyPhaseStatuses(PLAN_MODE_PIPELINE, IssueState.PhaseRunning, 'build');
+  describe('projectLifecyclePhaseStatuses', () => {
+    it('将当前执行阶段标记为进行中', () => {
+      const statuses = projectLifecyclePhaseStatuses(PLAN_MODE_PIPELINE, { kind: 'running', phase: 'build' });
       expect(statuses.plan).toBe('completed');
       expect(statuses.review).toBe('completed');
       expect(statuses.build).toBe('in_progress');
       expect(statuses.verify).toBe('pending');
     });
 
-    it('marks all phases as completed when state is Completed', () => {
-      const statuses = projectLegacyPhaseStatuses(PLAN_MODE_PIPELINE, IssueState.Completed);
+    it('任务完成时所有阶段均为完成', () => {
+      const statuses = projectLifecyclePhaseStatuses(PLAN_MODE_PIPELINE, { kind: 'completed' });
       expect(statuses.plan).toBe('completed');
       expect(statuses.review).toBe('completed');
       expect(statuses.build).toBe('completed');
       expect(statuses.verify).toBe('completed');
     });
 
-    it('handles plan-mode gate phase', () => {
-      const statuses = projectLegacyPhaseStatuses(PLAN_MODE_PIPELINE, IssueState.PhaseRunning, 'build');
+    it('审核 gate 使用等待状态', () => {
+      const statuses = projectLifecyclePhaseStatuses(PLAN_MODE_PIPELINE, { kind: 'waiting', phase: 'review' });
       expect(statuses.plan).toBe('completed');
-      expect(statuses.review).toBe('completed');
-      expect(statuses.build).toBe('in_progress');
+      expect(statuses.review).toBe('gate_waiting');
+      expect(statuses.build).toBe('pending');
       expect(statuses.verify).toBe('pending');
     });
   });

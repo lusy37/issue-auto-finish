@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 export type SSEHandler = (eventName: string, data: unknown) => void;
 
 const SSE_EVENTS = [
-  'issue:stateChanged', 'issue:created', 'issue:failed',
+  'issue:updated', 'issue:created', 'issue:failed',
   'issue:deleted', 'issue:resetForRetry', 'issue:restarted',
   'issue:retryFromPhase',
 

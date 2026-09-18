@@ -15,7 +15,6 @@ import {
 } from "../../helpers/mock-factories.js";
 import type { AIRunner, RunOptions } from "../../../src/ai-runner/AIRunner.js";
 import { IssueTracker } from "../../../src/tracker/IssueTracker.js";
-import { IssueState } from "../../../src/tracker/IssueState.js";
 import { PLAN_MODE_PIPELINE } from "../../../src/pipeline/PipelineMetadata.js";
 
 it("非法蒸馏不消费日记；手动重试、规则启用、版本及执行记录可跨重启读取", async () => {
@@ -134,7 +133,7 @@ it("非法蒸馏不消费日记；手动重试、规则启用、版本及执行�
     }
     const tracker = new IssueTracker(dir, new Map([["plan-mode", PLAN_MODE_PIPELINE]]));
     tracker.create({
-      state: IssueState.Pending,
+      lifecycle: { kind: "pending" },
       pipelineMode: "plan-mode",
       demandSpec: {
         demandId: "gh-1",

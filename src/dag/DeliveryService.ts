@@ -26,6 +26,12 @@ export async function deliverIssue(ctx: IssueProcessingContext, deps: Orchestrat
     if (await git.head() !== run.candidateCommit || await git.hasChanges()) throw new Error('验收后的 HEAD 或工作目录已改变，禁止交付');
   };
   await check();
+  deps.tracker.transaction(number, record => {
+    if (record.lifecycle.kind !== 'delivering') {
+      applyIssueLifecycleEvent(record, { type: 'delivery-started' });
+    }
+    record.deliveryPending = true;
+  });
   const commit = state().candidateCommit!;
   if (!state().delivery) deps.tracker.transaction(number, record => {
     record.run!.delivery = { repository: deps.config.github.repository, issueNumber: number, sourceBranch: ctx.branchName, targetBranch: deps.config.project.baseBranch, marker: `<!-- iaf-pr:${deps.config.github.repository}:${number} -->`, creation: 'unstarted' };
@@ -52,7 +58,6 @@ export async function deliverIssue(ctx: IssueProcessingContext, deps: Orchestrat
   if (remote !== commit) {
     deps.tracker.transaction(number, record => {
       record.run!.delivery!.pushIntent = { commit, lease: remote };
-      if (record.deliveryPending !== true) applyIssueLifecycleEvent(record, { type: 'delivery-started' });
     });
     await check();
     await git.pushAccepted(identity.sourceBranch, commit, remote);

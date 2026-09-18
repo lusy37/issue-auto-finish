@@ -9,7 +9,7 @@ import { createApiRouter } from '../../src/web/routes/api.js';
 import { createMockIssueTracker, createMockGitOperations, createTestConfig } from '../helpers/mock-factories.js';
 import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 import { newIssueRun } from '../../src/dag/contracts.js';
-import type { IssueRecord } from '../../src/tracker/IssueState.js';
+import type { IssueRecord } from '../../src/tracker/IssueRecord.js';
 
 function createTestRecord(overrides?: Partial<IssueRecord>): IssueRecord {
   return {
@@ -21,12 +21,11 @@ function createTestRecord(overrides?: Partial<IssueRecord>): IssueRecord {
       description: '',
       createdAt: '2024-01-01T00:00:00Z',
     },
-    state: 'pending' as IssueRecord['state'],
-    orchestrationState: { kind: 'queued' },
     branchName: 'feat/issue-42',
-    attempts: 0,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
+    run: newIssueRun(),
+    phaseHistory: [],
     ...overrides,
   };
 }
@@ -446,29 +445,22 @@ describe('API Routes — 聚合状态与数据目录中的展示内容', () => {
   });
 
   it('详情读取聚合进度', async () => {
-    const progress = {
-      displayId: 100,
-      title: 'Test',
-      branchName: 'feat/issue-42',
-      currentPhase: 'build',
-      phases: {
-        plan: { status: 'completed' },
-        review: { status: 'completed' },
-        build: { status: 'in_progress' },
-        verify: { status: 'pending' },
-      },
+    const phases = {
+      plan: { status: 'completed' as const },
+      review: { status: 'completed' as const },
+      build: { status: 'in_progress' as const },
+      verify: { status: 'pending' as const },
     };
-    const record = createTestRecord({ branchName: 'feat/issue-42', state: 'phase_running' as any, attempts: 1 });
+    const record = createTestRecord({ branchName: 'feat/issue-42', lifecycle: { kind: 'running', phase: 'build' } });
     fbTracker.get.mockReturnValue(record);
-    Object.assign(record, { currentPhase: progress.currentPhase, phaseProgress: progress.phases });
-    fbMockGit.showFile.mockResolvedValue(JSON.stringify(progress));
+    record.phaseProgress = phases;
 
     const res = await fbReq('GET', '/api/issues/42');
 
     expect(res.status).toBe(200);
     const body = res.body as Record<string, unknown>;
     expect((body as any).demandSpec.sourceRef.displayId).toBe('42');
-    expect(body.progress).toBeTruthy();
-    expect((body.progress as Record<string, unknown>).currentPhase).toBe('build');
+    expect(body.phaseProgress).toEqual(phases);
+    expect(body).not.toHaveProperty('progress');
   });
 });

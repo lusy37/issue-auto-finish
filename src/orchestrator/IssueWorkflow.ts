@@ -2,18 +2,18 @@ import { Command, END, START, StateGraph, StateSchema, interrupt, type LangGraph
 import { z } from 'zod';
 import type { PhaseRunner, PhaseRunnerContext } from '../orchestration/PhaseRunner.js';
 import type { PhaseError } from '../orchestration/PhaseResult.js';
-import type { PhaseHistoryEntry } from '../orchestration/OrchestrationState.js';
+import type { PhaseHistoryEntry } from '../orchestration/PhaseHistory.js';
 import { PHASE_IDS, requiresWorkflowPhase, type PhaseId, type PhaseResultSummary, type ReviewDecision, type WorkflowNode } from '../orchestration/WorkflowState.js';
 import { decodeReviewDecision } from '../orchestration/codecs/WorkflowCodec.js';
 import { getPlanModePhases } from '../orchestration/Phases.js';
-import type { IssueRecord } from '../tracker/IssueState.js';
+import type { IssueRecord } from '../tracker/IssueRecord.js';
 import type { IssueTracker } from '../tracker/IssueTracker.js';
 import { renderPlan } from '../dag/contracts.js';
 import { AsyncMutex } from '../utils/AsyncMutex.js';
 import { IssueCheckpointer, workflowThreadId } from './IssueCheckpointer.js';
 import { logger } from '../logger.js';
 import { eventBus, type EventBus } from '../events/EventBus.js';
-import { applyIssueLifecycleEvent, readIssueLifecycle } from '../tracker/IssueLifecycle.js';
+import { applyIssueLifecycleEvent } from '../tracker/IssueLifecycle.js';
 
 const State = new StateSchema({
   entry: z.enum([...PHASE_IDS, 'deliver']).default('plan'),
@@ -104,7 +104,7 @@ export class IssueWorkflow {
     await this.lock.runExclusive(async () => {
       this.check();
       const record = this.record();
-      const lifecycle = readIssueLifecycle(record);
+      const lifecycle = record.lifecycle;
       if (['completed', 'cancelled', 'paused'].includes(lifecycle.kind)) return;
       if (lifecycle.kind === 'failed' && lifecycle.retry === 'manual') return;
       if (lifecycle.kind === 'failed') {
@@ -112,7 +112,7 @@ export class IssueWorkflow {
         if (!phase || phase === 'review' || !PHASE_IDS.includes(phase as PhaseId)
           || !this.reserveRetry(phase as Exclude<PhaseId, 'review'>, true)) {
           this.update(current => {
-            const failed = readIssueLifecycle(current);
+            const failed = current.lifecycle;
             if (failed.kind !== 'failed') return;
             applyIssueLifecycleEvent(current, {
               type: 'phase-failed',
@@ -202,7 +202,6 @@ export class IssueWorkflow {
       record.phaseProgress[phase] = { ...record.phaseProgress[phase], status: 'in_progress', startedAt, error: undefined, completedAt: undefined, sessionId: record.phaseProgress[phase]?.status === 'completed' ? undefined : record.phaseProgress[phase]?.sessionId };
       const executions = record.run!.phaseExecutions[phase] ?? 0;
       record.run!.phaseExecutions[phase] = executions + 1;
-      if (executions) record.retryCount = (record.retryCount ?? 0) + 1;
     });
     const run = this.record().run!;
     // 保存新计划会重置新版本预算，历史仍需引用当前这次实际执行。
@@ -254,6 +253,7 @@ export class IssueWorkflow {
       record.run!.workflow.results[operation] = result;
       if (result.next === 'deliver' && result.outcome === 'completed') {
         applyIssueLifecycleEvent(record, { type: 'delivery-started' });
+        record.deliveryPending = true;
       } else {
         applyIssueLifecycleEvent(record, { type: 'phase-completed', phase });
       }
@@ -287,11 +287,11 @@ export class IssueWorkflow {
     const revision = record.run!.planRevision;
     if (!revision || record.run!.review?.decision !== 'waiting') throw new ReviewConflictError('没有可审核的完整计划');
     const plan = this.options.tracker.store.readPlan(this.options.number, revision, record.run!.planDigest);
-    const lifecycle = readIssueLifecycle(record);
+    const lifecycle = record.lifecycle;
     const wasWaiting = lifecycle.kind === 'waiting' && lifecycle.phase === 'review';
     const enteredReview = lifecycle.kind === 'running' && lifecycle.phase === 'review' && !!record.phaseProgress?.review?.startedAt;
     if (!enteredReview) this.update(current => {
-      const currentLifecycle = readIssueLifecycle(current);
+      const currentLifecycle = current.lifecycle;
       const alreadyWaiting = currentLifecycle.kind === 'waiting' && currentLifecycle.phase === 'review';
       if (!alreadyWaiting && (currentLifecycle.kind !== 'running' || currentLifecycle.phase !== 'review')) {
         applyIssueLifecycleEvent(current, { type: 'phase-started', phase: 'review' });

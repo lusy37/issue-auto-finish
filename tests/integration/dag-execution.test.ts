@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { IssueState } from '../../src/tracker/IssueState.js';
 import { GitOperations } from '../../src/git/GitOperations.js';
 import { AsyncMutex } from '../../src/utils/AsyncMutex.js';
 import { TaskGraphExecutor } from '../../src/dag/TaskGraphExecutor.js';
@@ -87,7 +86,7 @@ it('同仓两个父 Issue 真正并行，暂停一个不取消另一个的任务
   const integration2 = path.join(f.worktrees, 'issue-2');
   git(f.repo, 'worktree', 'add', '-b', 'iaf-2', integration2, 'main');
   const first = f.tracker.get(1)!;
-  f.tracker.create({ state: IssueState.PhaseRunning, currentPhase: 'build', branchName: 'iaf-2', demandSpec: { ...first.demandSpec!, demandId: 'gh-2', sourceRef: { source: 'github-issue', externalId: '2', displayId: '2' } } });
+  f.tracker.create({ lifecycle: { kind: 'running', phase: 'build' }, branchName: 'iaf-2', demandSpec: { ...first.demandSpec!, demandId: 'gh-2', sourceRef: { source: 'github-issue', externalId: '2', displayId: '2' } } });
   f.tracker.store.savePlan(2, { title: '第二个需求', description: '独立执行', acceptanceCriteria: ['通过'], tasks: [task('a')] }, f.tracker.get(2)!.run!.version);
   f.tracker.transaction(2, record => { record.run!.dispatchId = 'second'; record.run!.review!.decision = 'approved'; });
   let started = 0;
@@ -109,7 +108,7 @@ it('同仓两个父 Issue 真正并行，暂停一个不取消另一个的任务
   const stopped = expect(one).rejects.toThrow();
   const two = new TaskGraphExecutor(graphDeps(f, ai, { number: 2, integration: new GitOperations(integration2), repositoryMutex: mutex })).execute();
   await both;
-  f.tracker.transaction(1, record => { record.run!.stopIntent = { kind: 'pause', requestedAt: new Date().toISOString() }; record.state = IssueState.Paused; });
+  f.tracker.transaction(1, record => { record.run.stopIntent = { kind: 'pause', requestedAt: new Date().toISOString() }; record.lifecycle = { kind: 'paused', phase: 'build' }; });
   cancel.abort();
   await Promise.all([stopped, two]);
   expect(f.tracker.get(1)!.run!.tasks.a.success).toBeUndefined();

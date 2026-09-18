@@ -9,8 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { marked } from 'marked';
 import { createPatch } from 'diff';
 import { IssueTracker } from '../../tracker/IssueTracker.js';
-import { IssueState, type IssueRecord } from '../../tracker/IssueState.js';
-import { readIssueLifecycle } from '../../tracker/IssueLifecycle.js';
+import type { IssueRecord } from '../../tracker/IssueRecord.js';
 import { issueStateCategory } from '../../tracker/ExecutableTask.js';
 import type { DemandSpec } from '../../demand/DemandSpec.js';
 import { getIssueNumber, getTitle } from '../../tracker/IssueRecordHelper.js';
@@ -22,14 +21,7 @@ import { GitHubClient } from '../../clients/GitHubClient.js';
 import { SupplementStore } from '../../supplement/SupplementStore.js';
 import { buildPlanModePipeline, getPipelineDef, getAllPipelineDefs } from '../../pipeline/PipelineMetadata.js';
 import type { PipelineDef } from '../../pipeline/PipelineMetadata.js';
-import {
-  collectLegacyStateLabels,
-  collectPipelineArtifacts,
-  getGatePhase,
-  getRetryablePhases,
-  projectLegacyPhaseStatuses,
-  projectLegacyStateAction,
-} from '../../pipeline/PipelineProjection.js';
+import { collectPipelineArtifacts, getGatePhase, getRetryablePhases } from '../../pipeline/PipelineProjection.js';
 import { eventBus, EventPayload } from '../../events/EventBus.js';
 import { GateActionError } from '../../orchestration/index.js';
 import { getNoteSyncEnabled, setNoteSyncOverride } from '../../notesync/NoteSyncSettings.js';
@@ -113,7 +105,6 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     const allDefs = getAllPipelineDefs();
 
     const modes: Record<string, unknown> = {};
-    const phaseStatuses: Record<string, Record<string, Record<string, string>>> = {};
     for (const def of allDefs) {
       modes[def.mode] = {
         phases: def.phases.map(p => ({ name: p.name, label: p.label, kind: p.kind })),
@@ -122,17 +113,9 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
         })),
         retryablePhases: getRetryablePhases(def),
       };
-      phaseStatuses[def.mode] = buildPhaseStatusMap(def);
     }
 
-    res.json({
-      modes,
-      stateLabels: Object.fromEntries(new Map(
-        allDefs.flatMap(def => [...collectLegacyStateLabels(def)]),
-      )),
-      phaseStatuses,
-      stateCategories: buildStateCategoryMap(),
-    });
+    res.json({ modes });
   });
 
   router.get('/api/e2e-test-route', (_req: Request, res: Response) => {
@@ -158,12 +141,9 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       return;
     }
 
-    const progress = record.phaseProgress
-      ? { phases: record.phaseProgress, currentPhase: record.currentPhase }
-      : null;
     const preview = buildPreviewInfo(number, orch);
     const worktree = orch.getWorktreeStatus(number);
-    res.json({ ...record, progress, preview, worktree, planDocs: getIssuePlanDocs(number, record) });
+    res.json({ ...record, preview, worktree, planDocs: getIssuePlanDocs(number, record) });
   });
 
   function getIssuePipelineDef(number: number, record: IssueRecord | undefined = tracker.get(number)): PipelineDef {
@@ -224,7 +204,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
   const persistedControl = (number: number) => {
     const record = tracker.get(number);
-    return record && { state: record.state, version: record.run?.version, stopIntent: record.run?.stopIntent ?? null, planRevision: record.run?.planRevision, buildGeneration: record.run?.buildGeneration };
+    return record && { lifecycle: record.lifecycle, version: record.run.version, stopIntent: record.run.stopIntent ?? null, planRevision: record.run.planRevision, buildGeneration: record.run.buildGeneration };
   };
 
   router.post('/api/issues/:number/retry', (req: Request, res: Response) => {
@@ -483,7 +463,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
       const branchName = `${cfg.project.branchPrefix}-${body.issueIid}`;
       const record = tracker.create({
-        state: IssueState.Pending,
+        lifecycle: { kind: 'pending' },
         branchName,
         demandSpec,
       });
@@ -516,9 +496,9 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(404).json({ error: 'Issue not found' });
       return;
     }
-    const lifecycle = readIssueLifecycle(record);
+    const lifecycle = record.lifecycle;
     if (lifecycle.kind !== 'waiting') {
-      res.status(400).json({ error: `Issue is not waiting for review (current state: ${record.state})` });
+      res.status(400).json({ error: `Issue is not waiting for review (current lifecycle: ${lifecycle.kind})` });
       return;
     }
 
@@ -531,7 +511,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     }
     if (lifecycle.phase !== gateSpec.name) {
       res.status(400).json({
-        error: `approve-plan only applies to the ${gateSpec.name} gate phase, but issue is currently at ${record.currentPhase ?? 'unknown'} gate. Use phase-specific approval instead.`,
+        error: `approve-plan only applies to the ${gateSpec.name} gate phase, but issue is currently at ${lifecycle.phase} gate. Use phase-specific approval instead.`,
       });
       return;
     }
@@ -562,9 +542,9 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(404).json({ error: 'Issue not found' });
       return;
     }
-    const lifecycle = readIssueLifecycle(record);
+    const lifecycle = record.lifecycle;
     if (lifecycle.kind !== 'waiting') {
-      res.status(400).json({ error: `Issue is not waiting for review (current state: ${record.state})` });
+      res.status(400).json({ error: `Issue is not waiting for review (current lifecycle: ${lifecycle.kind})` });
       return;
     }
     const { feedback } = req.body as { feedback?: string };
@@ -572,7 +552,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(400).json({ error: 'Feedback is required' });
       return;
     }
-    // 严格校验 currentPhase 与 gate phase 一致：reject 语义只对 review gate 有意义（驳回后重新规划）。
+    // 严格校验 lifecycle.phase 与 gate phase 一致：reject 语义只对 review gate 有意义。
 
     // 抛 GateActionError('reject-not-allowed')，这里翻译为 409。
     const def = getIssuePipelineDef(number);
@@ -583,7 +563,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     }
     if (lifecycle.phase !== gateSpec.name) {
       res.status(400).json({
-        error: `reject-plan only applies to the ${gateSpec.name} gate phase, but issue is currently at ${record.currentPhase ?? 'unknown'} gate.`,
+        error: `reject-plan only applies to the ${gateSpec.name} gate phase, but issue is currently at ${lifecycle.phase} gate.`,
       });
       return;
     }
@@ -614,12 +594,12 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(404).json({ error: 'Issue not found' });
       return;
     }
-    const lifecycle = readIssueLifecycle(record);
+    const lifecycle = record.lifecycle;
     if (lifecycle.kind !== 'waiting') {
-      res.status(400).json({ error: `Issue is not waiting for review (current state: ${record.state})` });
+      res.status(400).json({ error: `Issue is not waiting for review (current lifecycle: ${lifecycle.kind})` });
       return;
     }
-    // skip-review 与 approve-plan 等价（都是把 gate 标记为通过），同样严格校验 currentPhase。
+    // skip-review 与 approve-plan 等价，同样严格校验 lifecycle.phase。
     const def = getIssuePipelineDef(number);
     const gateSpec = getGatePhase(def);
     if (!gateSpec) {
@@ -628,7 +608,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     }
     if (lifecycle.phase !== gateSpec.name) {
       res.status(400).json({
-        error: `skip-review only applies to the ${gateSpec.name} gate phase, but issue is currently at ${record.currentPhase ?? 'unknown'} gate.`,
+        error: `skip-review only applies to the ${gateSpec.name} gate phase, but issue is currently at ${lifecycle.phase} gate.`,
       });
       return;
     }
@@ -730,7 +710,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     }
     const { enabled } = req.body as { enabled?: boolean | null };
     const value = enabled === null ? undefined : enabled;
-    tracker.updateState(number, record.state, { issueNoteSyncEnabled: value });
+    tracker.transaction(number, current => { current.issueNoteSyncEnabled = value; });
     logger.info('Issue note-sync toggled', { number, enabled: value });
     res.json({ success: true, issueNoteSyncEnabled: value ?? null });
   });
@@ -833,7 +813,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   router.get('/api/system/status', (_req: Request, res: Response) => {
     const runningPreviews = orch.getDevServerManager().getRunningIssues();
     const allIssues = tracker.getAll();
-    const failedCount = allIssues.filter(r => readIssueLifecycle(r).kind === 'failed').length;
+    const failedCount = allIssues.filter(r => r.lifecycle.kind === 'failed').length;
     res.json({
       uptime: Date.now() - startTime,
       startedAt: new Date(startTime).toISOString(),
@@ -1036,27 +1016,4 @@ async function readPlanFile(
     }
   }
   return readImmutablePlan(issueIid, filename, config, tracker, mainGit);
-}
-
-/** 为 v3 前端生成旧枚举对应的只读阶段展示映射。 */
-function buildPhaseStatusMap(def: PipelineDef): Record<string, Record<string, string>> {
-  const result: Record<string, Record<string, string>> = {};
-  for (const state of Object.values(IssueState)) {
-    result[state] = projectLegacyPhaseStatuses(def, state);
-  }
-  for (const phase of def.phases) {
-    const activeState = phase.kind === 'gate' ? IssueState.PhaseWaiting : IssueState.PhaseRunning;
-    const doneState = phase.kind === 'gate' ? IssueState.PhaseApproved : IssueState.PhaseDone;
-    result[`${activeState}:${phase.name}`] = projectLegacyPhaseStatuses(def, activeState, phase.name);
-    result[`${doneState}:${phase.name}`] = projectLegacyPhaseStatuses(def, doneState, phase.name);
-    result[`failed:${phase.name}`] = projectLegacyPhaseStatuses(def, IssueState.Failed, phase.name);
-    result[`paused:${phase.name}`] = projectLegacyPhaseStatuses(def, IssueState.Paused, phase.name);
-  }
-  return result;
-}
-
-function buildStateCategoryMap(): Record<string, string> {
-  return Object.fromEntries(
-    Object.values(IssueState).map(state => [state, projectLegacyStateAction(state).status]),
-  );
 }

@@ -1,27 +1,24 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
+  issueStateCategory,
   issueStateToUnified,
   issueToExecutableTask,
-  issueStateCategory,
   type UnifiedTaskStatus,
 } from '../../src/tracker/ExecutableTask.js';
-import { IssueState, type IssueRecord } from '../../src/tracker/IssueState.js';
+import type { IssueRecord } from '../../src/tracker/IssueRecord.js';
+import type { IssueLifecycle } from '../../src/tracker/IssueLifecycle.js';
 import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 import { newIssueRun } from '../../src/dag/contracts.js';
 
-const planModeDef = PLAN_MODE_PIPELINE;
-
-function makeIssueRecord(overrides?: Partial<IssueRecord>): IssueRecord {
+function makeIssueRecord(lifecycle: IssueLifecycle = { kind: 'pending' }): IssueRecord {
   const now = new Date().toISOString();
   return {
-    lifecycle: { kind: 'pending' },
-    state: IssueState.Pending,
-    orchestrationState: { kind: 'queued' },
+    lifecycle,
     branchName: 'feat/issue-1',
-    attempts: 0,
     createdAt: now,
     updatedAt: now,
     run: newIssueRun(),
+    phaseHistory: [],
     demandSpec: {
       demandId: 'gh-1',
       sourceRef: { source: 'github-issue', externalId: '100', displayId: '1' },
@@ -29,128 +26,62 @@ function makeIssueRecord(overrides?: Partial<IssueRecord>): IssueRecord {
       description: '',
       createdAt: now,
     },
-    ...overrides,
   };
 }
 
 describe('issueStateToUnified', () => {
-  it('maps idle → idle', () => {
-    expect(issueStateToUnified('idle')).toBe('idle');
+  it.each([
+    ['idle', 'idle'], ['skipped', 'idle'], ['ready', 'preparing'],
+    ['running', 'running'], ['waiting', 'waiting'], ['done', 'completed'],
+    ['failed', 'failed'], ['unknown', 'idle'],
+  ] as const)('%s → %s', (input, expected) => {
+    expect(issueStateToUnified(input)).toBe(expected);
   });
 
-  it('maps skipped → idle', () => {
-    expect(issueStateToUnified('skipped')).toBe('idle');
-  });
-
-  it('maps ready → preparing', () => {
-    expect(issueStateToUnified('ready')).toBe('preparing');
-  });
-
-  it('maps running → running', () => {
-    expect(issueStateToUnified('running')).toBe('running');
-  });
-
-  it('maps waiting → waiting', () => {
-    expect(issueStateToUnified('waiting')).toBe('waiting');
-  });
-
-  it('maps done → completed', () => {
-    expect(issueStateToUnified('done')).toBe('completed');
-  });
-
-  it('maps failed → failed', () => {
-    expect(issueStateToUnified('failed')).toBe('failed');
-  });
-
-  it('maps unknown → idle', () => {
-    expect(issueStateToUnified('something_else')).toBe('idle');
+  it('所有统一状态均可由页面动作投影得到', () => {
+    const statuses = ['idle', 'skipped', 'ready', 'running', 'waiting', 'done', 'failed'];
+    const actual = new Set(statuses.map(issueStateToUnified));
+    const expected: UnifiedTaskStatus[] = ['idle', 'preparing', 'running', 'waiting', 'completed', 'failed'];
+    for (const status of expected) expect(actual.has(status)).toBe(true);
   });
 });
 
 describe('issueToExecutableTask', () => {
-  it('projects a pending IssueRecord correctly', () => {
-    const record = makeIssueRecord();
-    const task = issueToExecutableTask(record, planModeDef);
-
-    expect(task.kind).toBe('issue');
-    expect(task.taskId).toBe('1');
-    expect(task.title).toBe('Test Issue');
-    expect(task.status).toBe('idle');
-    expect(task.attempts).toBe(0);
-    expect(task.createdAt).toBe(record.createdAt);
-    expect(task.updatedAt).toBe(record.updatedAt);
-    expect(task.branchName).toBe('feat/issue-1');
-    expect(task.sourceState).toBe(IssueState.Pending);
-    expect(task.stateCategory).toBe('active');
+  it.each([
+    [{ kind: 'pending' }, 'idle', 'active'],
+    [{ kind: 'running', phase: 'plan' }, 'running', 'active'],
+    [{ kind: 'completed' }, 'completed', 'completed'],
+    [{ kind: 'skipped' }, 'idle', 'skipped'],
+  ] as const)('直接投影生命周期 %#', (lifecycle, status, category) => {
+    const task = issueToExecutableTask(makeIssueRecord(lifecycle), PLAN_MODE_PIPELINE);
+    expect(task.lifecycle).toEqual(lifecycle);
+    expect(task.status).toBe(status);
+    expect(task.stateCategory).toBe(category);
+    expect(task).not.toHaveProperty('sourceState');
   });
 
-  it('projects a running IssueRecord correctly', () => {
-    const record = makeIssueRecord({ lifecycle: { kind: 'running', phase: 'plan' }, state: IssueState.PhaseRunning, currentPhase: 'plan' });
-    const task = issueToExecutableTask(record, planModeDef);
-    expect(task.status).toBe('running');
-    expect(task.sourceState).toBe(IssueState.PhaseRunning);
-    expect(task.stateCategory).toBe('active');
-  });
-
-  it('projects a completed IssueRecord correctly', () => {
-    const record = makeIssueRecord({ lifecycle: { kind: 'completed' }, state: IssueState.Completed });
-    const task = issueToExecutableTask(record, planModeDef);
-    expect(task.status).toBe('completed');
-    expect(task.sourceState).toBe(IssueState.Completed);
-    expect(task.stateCategory).toBe('completed');
-  });
-
-  it('projects a failed IssueRecord correctly', () => {
+  it('失败信息和重试次数来自 lifecycle 与运行预算', () => {
     const record = makeIssueRecord({
-      state: IssueState.Failed,
-      lifecycle: { kind: 'failed', phase: 'plan', retry: 'auto', error: { message: 'some error', retryable: 'hard' } },
-      attempts: 2,
-      lastError: 'some error',
+      kind: 'failed', phase: 'plan', retry: 'auto',
+      error: { message: 'some error', retryable: 'hard' },
     });
-    const task = issueToExecutableTask(record, planModeDef);
+    record.run.retryUsed = { plan: 2 };
+    const task = issueToExecutableTask(record, PLAN_MODE_PIPELINE);
     expect(task.status).toBe('failed');
     expect(task.attempts).toBe(2);
     expect(task.lastError).toBe('some error');
-    expect(task.sourceState).toBe(IssueState.Failed);
     expect(task.stateCategory).toBe('failed');
-  });
-
-  it('projects a skipped IssueRecord correctly', () => {
-    const record = makeIssueRecord({ lifecycle: { kind: 'skipped' }, state: IssueState.Skipped });
-    const task = issueToExecutableTask(record, planModeDef);
-    expect(task.stateCategory).toBe('skipped');
-  });
-});
-
-describe('UnifiedTaskStatus completeness', () => {
-  it('all UnifiedTaskStatus values are reachable from issueStateToUnified', () => {
-    const actionStatuses = ['idle', 'skipped', 'ready', 'running', 'waiting', 'done', 'failed'];
-    const results = new Set(actionStatuses.map(issueStateToUnified));
-    const expected: UnifiedTaskStatus[] = ['idle', 'preparing', 'running', 'waiting', 'completed', 'failed'];
-    for (const s of expected) {
-      expect(results.has(s), `${s} should be reachable`).toBe(true);
-    }
   });
 });
 
 describe('issueStateCategory', () => {
-  it('returns active for running states', () => {
-    const record = makeIssueRecord({ lifecycle: { kind: 'running', phase: 'plan' }, state: IssueState.PhaseRunning, currentPhase: 'plan' });
-    expect(issueStateCategory(record)).toBe('active');
-  });
-
-  it('returns completed for completed state', () => {
-    const record = makeIssueRecord({ lifecycle: { kind: 'completed' }, state: IssueState.Completed });
-    expect(issueStateCategory(record)).toBe('completed');
-  });
-
-  it('returns failed for failed state', () => {
-    const record = makeIssueRecord({ lifecycle: { kind: 'failed', retry: 'manual', error: { message: 'error', retryable: 'hard-no-auto' } }, state: IssueState.Failed });
-    expect(issueStateCategory(record)).toBe('failed');
-  });
-
-  it('returns skipped for skipped state', () => {
-    const record = makeIssueRecord({ lifecycle: { kind: 'skipped' }, state: IssueState.Skipped });
-    expect(issueStateCategory(record)).toBe('skipped');
+  it.each([
+    [{ kind: 'running', phase: 'plan' }, 'active'],
+    [{ kind: 'completed' }, 'completed'],
+    [{ kind: 'failed', retry: 'manual', error: { message: 'error', retryable: 'hard-no-auto' } }, 'failed'],
+    [{ kind: 'skipped' }, 'skipped'],
+    [{ kind: 'paused', phase: 'build' }, 'blocked'],
+  ] as const)('按生命周期分类 %#', (lifecycle, category) => {
+    expect(issueStateCategory(makeIssueRecord(lifecycle))).toBe(category);
   });
 });

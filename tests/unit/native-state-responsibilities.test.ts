@@ -1,18 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { IssueState, deriveOrchestrationState, type IssueRecord } from '../../src/tracker/IssueState.js';
+import type { IssueRecord } from '../../src/tracker/IssueRecord.js';
 import { newIssueRun } from '../../src/dag/contracts.js';
 import { isLifecycleSchedulable, type IssueLifecycle } from '../../src/tracker/IssueLifecycle.js';
 
-const record = (lifecycle: IssueLifecycle, state: IssueState, currentPhase?: string): IssueRecord => ({
+const record = (lifecycle: IssueLifecycle): IssueRecord => ({
   lifecycle,
-  state,
-  currentPhase,
-  orchestrationState: deriveOrchestrationState({ state, currentPhase }),
   branchName: 'iaf-1',
-  attempts: 0,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+  demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' }, title: '需求', description: '', createdAt: '2026-01-01T00:00:00.000Z' },
   run: newIssueRun(),
+  phaseHistory: [],
 });
 
 describe('Native 状态职责特征', () => {
@@ -21,22 +19,15 @@ describe('Native 状态职责特征', () => {
   });
 
   it('审核等待同时保留阶段和计划版本事实', () => {
-    const value = record({ kind: 'waiting', phase: 'review', planRevision: 3 }, IssueState.PhaseWaiting, 'review');
+    const value = record({ kind: 'waiting', phase: 'review', planRevision: 3 });
     value.run!.planRevision = 3;
     value.run!.review = { revision: 3, decision: 'waiting' };
-    value.orchestrationState = {
-      kind: 'gate-waiting',
-      phaseId: 'review',
-      reason: 'human-review',
-      payload: { planRevision: 3 },
-    };
-
-    expect(value.currentPhase).toBe('review');
+    expect(value.lifecycle).toEqual({ kind: 'waiting', phase: 'review', planRevision: 3 });
     expect(value.run!.review).toEqual({ revision: 3, decision: 'waiting' });
   });
 
   it('阶段列表、任务、调用、合并和交付分别保存独立业务事实', () => {
-    const value = record({ kind: 'running', phase: 'build' }, IssueState.PhaseRunning, 'build');
+    const value = record({ kind: 'running', phase: 'build' });
     value.phaseProgress = {
       plan: { status: 'completed' },
       review: { status: 'completed' },

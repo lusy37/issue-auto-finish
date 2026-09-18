@@ -1,11 +1,9 @@
-import { IssueState } from '../../tracker/IssueState.js';
 import type { GitHubIssue } from '../../clients/GitHubClient.js';
 import type { WorktreeContext } from '../../git/WorktreeContext.js';
 import type { OrchestratorDeps } from '../IssueProcessingContext.js';
 import { AIExecutionError } from '../../errors/index.js';
 import { logger as rootLogger } from '../../logger.js';
 import { t } from '../../i18n/index.js';
-import { readIssueLifecycle } from '../../tracker/IssueLifecycle.js';
 
 const logger = rootLogger.child('FailureHandler');
 
@@ -22,8 +20,7 @@ export async function handleFailure(
   logger.error('Issue processing failed', { number: issue.number, error: errorMsg, isRetryable, wasActiveAtTimeout });
 
   const currentRecord = deps.tracker.get(issue.number);
-  const currentLifecycle = currentRecord && readIssueLifecycle(currentRecord);
-  const failedAtState = currentRecord?.state || IssueState.Pending;
+  const currentLifecycle = currentRecord?.lifecycle;
   // 通过 resetGeneration 精确检测并发重置：
   // 处理启动时快照 generation，若中途 restartIssue 调用 resetFull 使其递增，
   // 快照值将与当前值不同 → 说明是并发重置，应跳过 markFailed 防止覆盖新状态。
@@ -33,9 +30,9 @@ export async function handleFailure(
 
   if (currentLifecycle?.kind !== 'failed' && !wasReset) {
     if (wasActiveAtTimeout) {
-      deps.tracker.markFailedSoft(issue.number, errorMsg.slice(0, 500), failedAtState);
+      deps.tracker.markFailedSoft(issue.number, errorMsg.slice(0, 500));
     } else {
-      deps.tracker.markFailed(issue.number, errorMsg.slice(0, 500), failedAtState, isRetryable);
+      deps.tracker.markFailed(issue.number, errorMsg.slice(0, 500), isRetryable);
     }
   }
 

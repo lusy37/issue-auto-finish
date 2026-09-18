@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import TaskGraphPanel from "./TaskGraphPanel.vue";
 import { ref, computed } from 'vue';
-import type { IssueRecord, ProgressData, SupplementInfo, AgentLogEntry, SystemStatus, ReviewRound } from '@/types';
+import type { IssueRecord, SupplementInfo, AgentLogEntry, SystemStatus, ReviewRound } from '@/types';
 import type { VerifyFixLoopState } from '@/composables/useAgentLogs';
 import { getIssueIid, getIssueTitle, getReviewApprovalSource } from '@/types';
 import { usePipeline } from '@/composables/usePipeline';
@@ -16,7 +16,6 @@ import E2eArtifactsViewer from './E2eArtifactsViewer.vue';
 
 const props = defineProps<{
   issue: IssueRecord;
-  progress: ProgressData | null;
   systemStatus: SystemStatus | null;
   verifyFixLoop?: VerifyFixLoopState;
   agentLogs: AgentLogEntry[];
@@ -69,6 +68,8 @@ const emit = defineEmits<{
 }>();
 
 const { stateLabel, stateClass, getPlanDocs, isEditableDoc } = usePipeline();
+const retryCount = computed(() => Object.values(props.issue.run?.retryUsed ?? {}).reduce((sum, value) => sum + value, 0));
+const issueError = computed(() => props.issue.lifecycle.kind === 'failed' ? props.issue.lifecycle.error.message : undefined);
 
 function issueUrl(): string {
   if (!props.systemStatus) return '#';
@@ -140,10 +141,10 @@ function openDetailPage() {
               <div><span class="text-gray-500">{{ $t('detail.branch') }}</span> <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">{{ issue.branchName }}</code></div>
               <div>
                 <span class="text-gray-500">{{ $t('detail.state') }}</span>
-                <span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="stateClass(issue.state)">{{ stateLabel(issue.state, issue.currentPhase) }}</span>
+                <span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="stateClass(issue.lifecycle)">{{ stateLabel(issue.lifecycle) }}</span>
               </div>
               <div><span class="text-gray-500">{{ $t('detail.createdAt') }}</span> {{ formatTime(issue.createdAt) }}</div>
-              <div><span class="text-gray-500">{{ $t('detail.retries') }}</span> {{ issue.attempts }}</div>
+              <div><span class="text-gray-500">{{ $t('detail.retries') }}</span> {{ retryCount }}</div>
               <div><span class="text-gray-500">{{ $t('detail.updatedAt') }}</span> {{ formatTime(issue.updatedAt) }}</div>
             </div>
           </div>
@@ -198,28 +199,26 @@ function openDetailPage() {
 
 
           <!-- Error -->
-          <div v-if="issue.lastError" class="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div v-if="issueError" class="bg-red-50 border border-red-200 rounded-lg p-4">
             <h3 class="text-sm font-semibold text-red-700 mb-1">{{ $t('detail.errorInfo') }}</h3>
-            <p class="text-sm text-red-600 whitespace-pre-wrap break-words">{{ issue.lastError }}</p>
+            <p class="text-sm text-red-600 whitespace-pre-wrap break-words">{{ issueError }}</p>
           </div>
 
           <!-- Pipeline -->
           <PipelineProgress
             :issue="issue"
-            :progress="progress"
             :verify-fix-loop="verifyFixLoop"
             @retry-from-phase="(phase: string) => emit('retryFromPhase', getIssueIid(issue), phase)"
           />
 
           <!-- Review Gate -->
           <ReviewGatePanel
-            v-if="issue.state === 'phase_waiting' || issue.run?.review || reviewHistory.length > 0 || getReviewApprovalSource(issue)"
+            v-if="issue.lifecycle.kind === 'waiting' || issue.run?.review || reviewHistory.length > 0 || getReviewApprovalSource(issue)"
             :review-submitting="reviewSubmitting"
             :review-feedback="reviewFeedback"
             :review-history="reviewHistory"
             :approval-source="getReviewApprovalSource(issue)"
-            :issue-state="issue.state"
-            :current-phase="issue.currentPhase"
+            :lifecycle="issue.lifecycle"
             :review-decision="issue.run?.review?.decision"
             :plan-doc-content="planDocContent"
             @update:review-feedback="emit('update:reviewFeedback', $event)"
@@ -261,8 +260,7 @@ function openDetailPage() {
           <!-- Agent Logs -->
           <AgentLogViewer
             :logs="agentLogs"
-            :issue-state="issue.state"
-            :current-phase="issue.currentPhase"
+            :lifecycle="issue.lifecycle"
             :auto-scroll="agentAutoScroll"
             :debug-mode="agentDebugMode"
             @update:auto-scroll="emit('update:agentAutoScroll', $event)"
@@ -273,28 +271,28 @@ function openDetailPage() {
           <!-- Actions -->
           <div class="flex flex-wrap gap-3 pt-2 border-t border-gray-200">
             <button
-              v-if="issue.state === 'skipped'"
+              v-if="issue.lifecycle.kind === 'skipped'"
               class="px-4 py-2 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600"
               @click="emit('start', getIssueIid(issue))"
             >{{ $t('detail.start') }}</button>
             <button
-              v-if="issue.state === 'failed'"
+              v-if="issue.lifecycle.kind === 'failed'"
               class="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600"
               @click="emit('retry', getIssueIid(issue))"
             >{{ $t('detail.retry') }}</button>
 
             <button
-              v-if="['phase_running', 'phase_done', 'phase_waiting', 'phase_approved'].includes(issue.state)"
+              v-if="['running', 'waiting', 'ready'].includes(issue.lifecycle.kind)"
               class="px-4 py-2 bg-amber-100 text-amber-700 text-sm rounded-lg hover:bg-amber-200"
               @click="emit('abort', getIssueIid(issue))"
             >{{ $t('detail.abort') }}</button>
             <button
-              v-if="issue.state === 'paused'"
+              v-if="issue.lifecycle.kind === 'paused'"
               class="px-4 py-2 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600"
               @click="emit('continue', getIssueIid(issue))"
             >{{ $t('detail.continue') }}</button>
             <button
-              v-if="issue.state === 'paused'"
+              v-if="issue.lifecycle.kind === 'paused'"
               class="px-4 py-2 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600"
               @click="emit('redo', getIssueIid(issue))"
             >{{ $t('detail.redo') }}</button>
@@ -304,12 +302,12 @@ function openDetailPage() {
               @click="emit('stopPreview', getIssueIid(issue))"
             >{{ $t('detail.stopPreview') }}</button>
             <button
-              v-if="!['pending', 'skipped'].includes(issue.state) && !issue.preview?.running"
+              v-if="!['pending', 'skipped'].includes(issue.lifecycle.kind) && !issue.preview?.running"
               class="px-4 py-2 bg-indigo-100 text-indigo-700 text-sm rounded-lg hover:bg-indigo-200"
               @click="emit('restartPreview', getIssueIid(issue))"
             >{{ $t('detail.restartPreview') }}</button>
             <button
-              v-if="issue.state !== 'skipped'"
+              v-if="issue.lifecycle.kind !== 'skipped'"
               class="px-4 py-2 bg-yellow-100 text-yellow-700 text-sm rounded-lg hover:bg-yellow-200"
               @click="emit('restart', getIssueIid(issue))"
             >{{ $t('detail.restart') }}</button>

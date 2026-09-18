@@ -1,5 +1,5 @@
 // 本组隔离交付；真实浏览器凭证和平台幂等交付由 mini-workflow / dag-delivery 验证。
-vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { deps.tracker.updateState(ctx.issue.number, 'completed', { deliveryPending: false }); } }));
+vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { deps.tracker.transaction(ctx.issue.number, (record: any) => { record.lifecycle = { kind: 'completed' }; record.deliveryPending = false; }); } }));
 import { AsyncMutex } from '../../src/utils/AsyncMutex.js';
 import { graphFixture, git as realGit } from '../helpers/dag-repository.js';
 import { GitOperations } from '../../src/git/GitOperations.js';
@@ -9,7 +9,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { runWorkflow } from '../../src/orchestrator/steps/RunWorkflowStep.js';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
-import { IssueState } from '../../src/tracker/IssueState.js';
 import { PlanPersistence } from '../../src/persistence/PlanPersistence.js';
 import { buildPlanModePipeline } from '../../src/pipeline/PipelineMetadata.js';
 import { resetKnowledgeCache } from '../../src/knowledge/KnowledgeLoader.js';
@@ -68,7 +67,7 @@ function fixture(options: { e2e?: boolean; review?: boolean; label?: boolean; ma
     demandId: 'gh-1', sourceRef: { source: 'github-issue' as const, externalId: '1', displayId: '1' },
     title: '流程配置验证', description: '验证配置驱动的真实阶段循环', createdAt: new Date().toISOString(),
   };
-  const record = tracker.create({ state: IssueState.Pending, pipelineMode: 'plan-mode', demandSpec: demand, branchName: 'feat/issue-1' });
+  const record = tracker.create({ lifecycle: { kind: 'pending' }, pipelineMode: 'plan-mode', demandSpec: demand, branchName: 'feat/issue-1' });
   tracker.initPhaseProgress(1, pipelineDef);
   tracker.transaction(1, record => { record.run!.dispatchId = 'configuration-drive'; });
   const plan = new PlanPersistence(repository.integration, 1, dir, tracker);
@@ -101,7 +100,7 @@ describe('配置进入实际阶段循环', { timeout: 300_000 }, () => {
     f.deps.startPreviewServers = vi.fn().mockResolvedValue(null);
     expect(await f.drive()).toMatchObject({ paused: true });
     expect(f.deps.tracker.get(1)!.run!.uat).toBeUndefined();
-    expect(f.deps.tracker.get(1)!.state).toBe(IssueState.Failed);
+    expect(f.deps.tracker.get(1)!.lifecycle.kind).toBe('failed');
   });
 
   it('等待旧预览退出期间被中止，不再启动替代进程或执行 UAT', async () => {
@@ -124,7 +123,7 @@ describe('配置进入实际阶段循环', { timeout: 300_000 }, () => {
     expect(await f.drive()).toMatchObject({ paused: false });
     expect(f.plan.isArtifactReady('01-plan.md')).toBe(true);
     const restored = new IssueTracker(dir, f.managers).get(1)!;
-    expect(restored.orchestrationState?.kind).toBe('pipeline-completed');
+    expect(restored.lifecycle.kind).toBe('completed');
     expect(restored.phaseHistory).toContainEqual(expect.objectContaining({ phaseId: 'review', outcome: 'gate-approved', approvalSource: options.source }));
     expect(f.calls.map(c => c.phaseName)).toEqual(['plan', 'build', 'verify']);
   });
@@ -132,12 +131,12 @@ describe('配置进入实际阶段循环', { timeout: 300_000 }, () => {
   it('关闭审核后重启不会自动批准已在等待的计划', async () => {
     const f = fixture({ review: true });
     expect(await f.drive()).toMatchObject({ paused: true });
-    expect(f.deps.tracker.get(1)?.orchestrationState?.kind).toBe('gate-waiting');
+    expect(f.deps.tracker.get(1)?.lifecycle).toMatchObject({ kind: 'waiting', phase: 'review' });
     f.config.review.enabled = false;
     f.deps.tracker = new IssueTracker(dir, f.managers);
     await f.drive();
     expect(f.calls.map(c => c.phaseName)).toEqual(['plan']);
-    expect(f.deps.tracker.get(1)?.orchestrationState?.kind).toBe('gate-waiting');
+    expect(f.deps.tracker.get(1)?.lifecycle).toMatchObject({ kind: 'waiting', phase: 'review' });
   });
 
   it('完整计划保存失败时不能进入构建', async () => {
@@ -155,7 +154,7 @@ describe('配置进入实际阶段循环', { timeout: 300_000 }, () => {
     expect(f.calls.filter(c => c.phaseName === 'build')).toHaveLength(max + 1);
     expect(f.calls.filter(c => c.phaseName === 'verify')).toHaveLength(max + 1);
     const record = f.deps.tracker.get(1)!;
-    expect(record.orchestrationState).toMatchObject({ kind: 'pipeline-failed', failedAt: 'verify', retryable: 'manual' });
+    expect(record.lifecycle).toMatchObject({ kind: 'failed', phase: 'verify', retry: 'manual' });
     expect(record.phaseHistory?.filter(h => h.outcome === 'retried-from')).toHaveLength(max);
     expect(record.phaseHistory?.some(h => h.phaseId === 'uat')).toBe(false);
   });
@@ -164,7 +163,7 @@ describe('配置进入实际阶段循环', { timeout: 300_000 }, () => {
     const f = fixture({ loop: false, failVerify: true });
     expect(await f.drive()).toMatchObject({ paused: true });
     expect(f.calls.map(c => c.phaseName)).toEqual(['plan', 'build', 'verify']);
-    expect(f.deps.tracker.get(1)?.orchestrationState).toMatchObject({ kind: 'pipeline-failed', failedAt: 'verify', retryable: 'manual' });
+    expect(f.deps.tracker.get(1)?.lifecycle).toMatchObject({ kind: 'failed', phase: 'verify', retry: 'manual' });
     expect(f.deps.tracker.get(1)?.phaseHistory?.some(h => h.phaseId === 'uat')).toBe(false);
   });
 
@@ -198,7 +197,7 @@ it('有效 UAT 断言失败实际进入集成修复且受共享轮次上限约�
   expect(f.calls.filter(call => call.prompt.includes('按已批准的计划修复集成代码'))).toHaveLength(1);
   expect(f.calls.filter(call => call.phaseName === 'verify')).toHaveLength(2);
   expect(Object.values(state.run!.tasks).every(task => task.status === 'merged')).toBe(true);
-  expect(state.orchestrationState?.kind).toBe('pipeline-failed');
+  expect(state.lifecycle.kind).toBe('failed');
 }, 300_000);
 
 it('关闭 E2E 后无需 Playwright 配置，仍完成真实计划、任务图和 verify', async () => {
@@ -216,6 +215,6 @@ it('关闭 E2E 后无需 Playwright 配置，仍完成真实计划、任务图�
 it('关闭 E2E 后 verify 失败仍阻止交付', async () => {
   const f = fixture({ e2e: false, failVerify: true, loop: false });
   expect(await f.drive()).toMatchObject({ paused: true });
-  expect(f.deps.tracker.get(1)?.state).toBe(IssueState.Failed);
+  expect(f.deps.tracker.get(1)?.lifecycle.kind).toBe('failed');
   expect(f.deps.tracker.get(1)?.run?.verify).toBeUndefined();
 });

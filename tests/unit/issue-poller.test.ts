@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { IssuePoller } from '../../src/poller/IssuePoller.js';
-import { IssueState } from '../../src/tracker/IssueState.js';
 import {
   createMockGitHubClient,
   createMockIssueTracker,
@@ -86,7 +85,7 @@ describe('IssuePoller', () => {
             demandId: 'gh-42',
             sourceRef: { source: 'github-issue', externalId: '42', displayId: '42' },
           }),
-          state: IssueState.Pending,
+          lifecycle: { kind: 'pending' },
         }),
       );
     });
@@ -94,7 +93,7 @@ describe('IssuePoller', () => {
     it('skips issues already tracked', async () => {
       const issue = createTestIssue({ id: 100, number: 42 });
       github.listIssues.mockResolvedValue([issue]);
-      tracker.get.mockReturnValue({ state: IssueState.PhaseRunning });
+      tracker.get.mockReturnValue({ lifecycle: { kind: 'running', phase: 'build' } });
       tracker.getDrivableIssues.mockReturnValue([]);
 
       poller.start();
@@ -145,7 +144,7 @@ describe('IssuePoller', () => {
       await vi.advanceTimersByTimeAsync(60_000);
 
       expect(tracker.create).toHaveBeenCalledWith(
-        expect.objectContaining({ state: IssueState.Skipped }),
+        expect.objectContaining({ lifecycle: { kind: 'skipped' } }),
       );
     });
 
@@ -182,9 +181,8 @@ describe('IssuePoller', () => {
           description: '',
           createdAt: '2024-01-01T00:00:00Z',
         },
-        state: IssueState.Pending,
+        lifecycle: { kind: 'pending' },
         branchName: 'feat/issue-42',
-        attempts: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -209,9 +207,8 @@ describe('IssuePoller', () => {
           description: '',
           createdAt: '2024-01-01T00:00:00Z',
         },
-        state: IssueState.Pending,
+        lifecycle: { kind: 'pending' },
         branchName: `feat/issue-${n}`,
-        attempts: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }));
@@ -243,9 +240,8 @@ describe('IssuePoller', () => {
           description: '',
           createdAt: '2024-01-01T00:00:00Z',
         },
-        state: IssueState.Pending,
+        lifecycle: { kind: 'pending' },
         branchName: 'feat/issue-42',
-        attempts: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -295,8 +291,8 @@ describe('IssuePoller', () => {
           description: '',
           createdAt: '2024-01-01T00:00:00Z',
         },
-        state: IssueState.Pending, branchName: 'feat/issue-42',
-        attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        lifecycle: { kind: 'pending' }, branchName: 'feat/issue-42',
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       };
       const record2 = {
         demandSpec: {
@@ -306,8 +302,8 @@ describe('IssuePoller', () => {
           description: '',
           createdAt: '2024-01-01T00:00:00Z',
         },
-        state: IssueState.Pending, branchName: 'feat/issue-43',
-        attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        lifecycle: { kind: 'pending' }, branchName: 'feat/issue-43',
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       };
       const issue1 = createTestIssue({ id: 100, number: 42 });
       const issue2 = createTestIssue({ id: 200, number: 43 });
@@ -337,8 +333,8 @@ describe('IssuePoller', () => {
           sourceRef: { source: 'github-issue', externalId: '42', displayId: '42' },
           title: 'Test1', description: '', createdAt: '2024-01-01T00:00:00Z',
         },
-        state: IssueState.Pending, branchName: 'feat/issue-42',
-        attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        lifecycle: { kind: 'pending' }, branchName: 'feat/issue-42',
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       };
       const record2 = {
         demandSpec: {
@@ -346,8 +342,8 @@ describe('IssuePoller', () => {
           sourceRef: { source: 'github-issue', externalId: '43', displayId: '43' },
           title: 'Test2', description: '', createdAt: '2024-01-01T00:00:00Z',
         },
-        state: IssueState.Pending, branchName: 'feat/issue-43',
-        attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        lifecycle: { kind: 'pending' }, branchName: 'feat/issue-43',
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       };
       github.listIssues.mockResolvedValue([]);
       tracker.getDrivableIssues.mockReturnValue([record1, record2]);
@@ -396,8 +392,8 @@ describe('IssuePoller', () => {
           description: '',
           createdAt: '2024-01-01T00:00:00Z',
         },
-        state: IssueState.Pending, branchName: 'feat/issue-42',
-        attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        lifecycle: { kind: 'pending' }, branchName: 'feat/issue-42',
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       };
 
       github.listIssues.mockResolvedValue([]);
@@ -427,9 +423,8 @@ describe('IssuePoller', () => {
           description: '',
           createdAt: '2024-01-01T00:00:00Z',
         },
-        // 必须显式设置 currentPhase='review'，否则 Bug 3 修复后会跳过非 review gate
-        state: IssueState.PhaseWaiting, currentPhase: 'review', branchName: 'feat/issue-42',
-        attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        branchName: 'feat/issue-42',
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       };
 
       github.listIssues.mockResolvedValue([]);
@@ -443,17 +438,13 @@ describe('IssuePoller', () => {
       p.start();
       await vi.advanceTimersByTimeAsync(5000);
 
-      // PR4 之后 IssuePoller 应通过正统的 orchestrator.applyGateAction 进行批准，
-      // 由 Reducer + TrackerStateStore 统一维护 orchestrationState/phaseProgress/phaseHistory，
-      // 而不是直接调 tracker.updateState（老路径会绕过 phaseProgress 同步，导致前端样式错误）。
+      // IssuePoller 通过 orchestrator.applyGateAction 进行批准，统一提交生命周期和审核凭证。
       if (enabled) expect(orchestrator.applyGateAction).toHaveBeenCalledWith(42, { action: 'approve', source: 'label' }, 1);
       else expect(orchestrator.applyGateAction).not.toHaveBeenCalled();
       p.stop();
     });
 
-    it('does NOT auto-approve when currentPhase is not review (Bug 3 regression — release/uat gate)', async () => {
-      // 防止 IssuePoller.autoApproveByLabels 把 release-gate 处的 PhaseWaiting
-      // 误判为 review，从而错误地把 currentPhase 覆盖为 review。
+    it('非 review gate 不自动批准', async () => {
       const cfg = createTestConfig({
         poll: { intervalMs: 60000, discoveryIntervalMs: 60000, driveIntervalMs: 15000, maxRetries: 3, maxConcurrent: 3 },
         review: { enabled: true, autoApproveLabels: ['skip-review'] },
@@ -467,10 +458,8 @@ describe('IssuePoller', () => {
           description: '',
           createdAt: '2024-01-01T00:00:00Z',
         },
-        state: IssueState.PhaseWaiting,
-        currentPhase: 'uat',
         branchName: 'feat/issue-42',
-        attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       };
 
       github.listIssues.mockResolvedValue([]);
@@ -485,8 +474,7 @@ describe('IssuePoller', () => {
       p.start();
       await vi.advanceTimersByTimeAsync(5000);
 
-      // 关键：不应当调用 updateState 把 currentPhase 改成 review
-      expect(tracker.updateState).not.toHaveBeenCalled();
+      expect(orchestrator.applyGateAction).not.toHaveBeenCalled();
       p.stop();
     });
 
@@ -505,8 +493,8 @@ describe('IssuePoller', () => {
           description: '',
           createdAt: '2024-01-01T00:00:00Z',
         },
-        state: IssueState.PhaseWaiting, branchName: 'feat/issue-42',
-        attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        branchName: 'feat/issue-42',
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       };
 
       github.listIssues.mockResolvedValue([]);
@@ -520,7 +508,7 @@ describe('IssuePoller', () => {
       p.start();
       await vi.advanceTimersByTimeAsync(5000);
 
-      expect(tracker.updateState).not.toHaveBeenCalled();
+      expect(orchestrator.applyGateAction).not.toHaveBeenCalled();
       p.stop();
     });
 
@@ -535,8 +523,8 @@ describe('IssuePoller', () => {
           description: '',
           createdAt: '2024-01-01T00:00:00Z',
         },
-        state: IssueState.PhaseWaiting, branchName: 'feat/issue-42',
-        attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        branchName: 'feat/issue-42',
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       };
 
       github.listIssues.mockResolvedValue([]);
@@ -547,7 +535,7 @@ describe('IssuePoller', () => {
       await vi.advanceTimersByTimeAsync(5000);
 
       expect(github.getIssueDetail).not.toHaveBeenCalled();
-      expect(tracker.updateState).not.toHaveBeenCalled();
+      expect(orchestrator.applyGateAction).not.toHaveBeenCalled();
     });
 
     it('throttles auto-approve checks to 30s interval', async () => {
@@ -565,8 +553,8 @@ describe('IssuePoller', () => {
           description: '',
           createdAt: '2024-01-01T00:00:00Z',
         },
-        state: IssueState.PhaseWaiting, currentPhase: 'review', branchName: 'feat/issue-42',
-        attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        branchName: 'feat/issue-42',
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       };
 
       github.listIssues.mockResolvedValue([]);
