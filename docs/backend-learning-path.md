@@ -1,6 +1,6 @@
 # 后端模块化阅读学习路径
 
-本文面向第一次系统阅读本项目后端代码的开发者。目标不是记住所有文件，而是建立一条可以反复走通的因果链：一个 GitHub Issue 如何被发现、转换为本地任务、经过计划审核、并行实现、验证、浏览器验收，最后安全地创建或更新 PR。
+本文面向第一次系统阅读本项目后端代码的开发者。目标不是记住所有文件，而是建立一条可以反复走通的因果链：一个 GitHub Issue 如何被发现、转换为本地任务、经过计划审核、并行实现、验证，并按本轮固化配置选择是否执行浏览器验收，最后安全地创建或更新 PR。
 
 项目后端是 Node.js + TypeScript + Express。运行数据使用本地 JSON，AI 执行使用官方 Codex SDK，工作流使用 LangGraph，平台访问使用 GitHub REST API。当前服务保持单用户、单实例、单仓库模型。
 
@@ -98,16 +98,18 @@
 **必须掌握的概念：**
 
 - 每个 Issue 是一个聚合，`run.json` 是该聚合的权威运行文件。
+- 当前聚合格式是 `iaf-mini/issue-run/v5-langgraph`；旧格式、缺失 `lifecycle` 或仍包含已删除状态字段的数据会被明确拒绝，不迁移、不回填，也不进入兼容读取路径。
 - `IssueRunStore.transaction()` 每次从磁盘重新读取、修改并原子替换；写入失败后该 Issue 会被阻断，避免继续调度。
 - 计划是不可变版本，计划内容通过 digest 校验；审核、任务和验证必须绑定同一计划版本。
 - `planRevision`、`buildGeneration`、`workflow.generation`、`dispatchId` 和 `callId` 共同防止旧协程的迟到结果覆盖新执行。
 - `phaseProgress` 保存阶段审计和会话恢复信息；它不是流程位置，也不再承担 UAT 配置语义。
 - 聚合文件和 API 都使用 `lifecycle`；页面展示不得反向写入或推导流程位置。
 - 每轮是否包含 UAT 由 `run.workflow.definition.phaseIds` 固化，不能被之后的全局设置改写。
+- Zod 只在持久化 JSON、HTTP/AI 等不可信输入，以及 LangGraph `StateSchema`/checkpoint 等框架边界解码字段形状；业务层使用 TypeScript 类型，跨字段关系由普通 invariant 函数校验。
 
 **建议练习：** 打开一份演示数据中的 `issues/<number>/run.json`，手工标出：需求、计划版本、审核、workflow checkpoints、任务、候选提交、verify/uat 收据、delivery 身份和调用记录。
 
-**验证：** [tests/unit/dag-state.test.ts](../tests/unit/dag-state.test.ts)；[tests/integration/langgraph-native.test.ts](../tests/integration/langgraph-native.test.ts)。运行 `npm run test:integration -- tests/integration/langgraph-native.test.ts`。
+**验证：** [tests/unit/dag-state.test.ts](../tests/unit/dag-state.test.ts)；[tests/integration/langgraph-native.test.ts](../tests/integration/langgraph-native.test.ts)。定向运行 `npm test -- tests/integration/langgraph-native.test.ts`；`npm run test:integration` 用于运行整个集成测试目录。
 
 ### 模块 3：工作区与 Git 隔离
 
@@ -156,7 +158,8 @@ flowchart LR
     D --> E[publish_build]
     E --> F[verify]
     F --> G[publish_verify]
-    G --> H[uat]
+    G -->|本轮包含 UAT| H[uat]
+    G -->|本轮不包含 UAT| J[deliver]
     H --> I[publish_uat]
     I --> J[deliver]
     F -->|验证失败且有修复额度| D
@@ -254,10 +257,10 @@ flowchart LR
 
 - 为什么 UAT 不能接受 AI 生成的“验收通过”文字？
 - verify 失败和 UAT assertion 失败为什么可以回到 build，而环境启动失败通常不能自动修复？
-- `candidateCommit`、`verify.commit` 和 `uat.commit` 不一致时，为什么必须禁止交付？
+- 为什么 `candidateCommit` 必须与 `verify.commit` 一致，并且仅在本轮包含 UAT 时才要求它与 `uat.commit` 一致？
 - 服务重启后，预览端口为什么需要重新核对或清理？
 
-**验证：** [tests/unit/verify-report-parser.test.ts](../tests/unit/verify-report-parser.test.ts)、[tests/unit/phases/verify-phase-scenarios.test.ts](../tests/unit/phases/verify-phase-scenarios.test.ts)、`tests/integration/verify-fix-context-e2e.test.ts`、`tests/integration/windows-preview.test.ts`。
+**验证：** [tests/unit/verify-report-parser.test.ts](../tests/unit/verify-report-parser.test.ts)、[tests/unit/phases/verify-phase-scenarios.test.ts](../tests/unit/phases/verify-phase-scenarios.test.ts)、[tests/unit/uat-repair.test.ts](../tests/unit/uat-repair.test.ts)、[tests/integration/configured-phase-loop.test.ts](../tests/integration/configured-phase-loop.test.ts)、[tests/integration/windows-preview.test.ts](../tests/integration/windows-preview.test.ts)。
 
 ### 模块 9：交付与外部幂等性
 
@@ -273,7 +276,7 @@ flowchart LR
 
 **重点理解：** 每个外部动作都有 intent、结果或稳定 marker。若 push、PR 创建或 Issue 评论的网络结果未知，系统宁可停止并要求核对，也不盲目重复创建或覆盖。
 
-**验证：** 搜索 `tests/integration/` 中的 `delivery`、`pr`、`failure-recovery`，并阅读 [tests/integration/failure-recovery.test.ts](../tests/integration/failure-recovery.test.ts)。
+**验证：** 阅读 [tests/integration/dag-delivery.test.ts](../tests/integration/dag-delivery.test.ts)、[tests/integration/dag-crash-recovery.test.ts](../tests/integration/dag-crash-recovery.test.ts)、[tests/integration/mini-workflow.test.ts](../tests/integration/mini-workflow.test.ts) 和 [tests/unit/failure-handler.test.ts](../tests/unit/failure-handler.test.ts)，分别核对交付幂等、崩溃恢复、完整交付链路和失败收口。
 
 ### 模块 10：Web API、SSE 与工作台投影
 
@@ -294,7 +297,7 @@ flowchart LR
 
 - 审核 API 为什么要校验 `planRevision` 和当前 interrupt？
 - 为什么 SSE 事件是状态变化的通知，而不是新的状态事实？
-- 页面展示的统一任务状态如何从 `IssueRecord` 和生命周期管理器投影出来？
+- 页面动作、文字和阶段回退展示如何由 `PipelineProjection` 从 `IssueRecord.lifecycle` 单向投影出来？
 - 配置保存为什么不立即改变正在运行的服务？
 
 **验证：** `tests/contracts/`、`tests/integration/` 中的 API 测试，以及 [tests/e2e/workbench.test.ts](../tests/e2e/workbench.test.ts)。完整浏览器检查使用 `npm run test:e2e`。
@@ -314,7 +317,7 @@ flowchart LR
 
 **设计边界：** 知识引用和经验蒸馏互相独立；蒸馏失败不能让已经交付的 Issue 失败；统计应在服务重启后从持久化数据重新计算；知识正文和索引使用原子写入，但不是跨文件的单一事务。
 
-**验证：** 搜索并运行 `tests/unit/distill/`、`tests/unit/knowledge/`、`tests/unit/analytics/`，再用 [tests/e2e/workbench.test.ts](../tests/e2e/workbench.test.ts) 观察六个工作台入口如何连接这些服务。
+**验证：** 运行 `tests/unit/distill/`、[tests/unit/knowledge-storage.test.ts](../tests/unit/knowledge-storage.test.ts)、[tests/unit/knowledge-loader.test.ts](../tests/unit/knowledge-loader.test.ts)、[tests/unit/knowledge-loader-datadir.test.ts](../tests/unit/knowledge-loader-datadir.test.ts) 和 [tests/unit/mini-features.test.ts](../tests/unit/mini-features.test.ts)，再用 [tests/integration/knowledge-feature-switches.test.ts](../tests/integration/knowledge-feature-switches.test.ts) 与 [tests/e2e/workbench.test.ts](../tests/e2e/workbench.test.ts) 观察这些服务如何接入工作台。
 
 ## 三、一次完整 Issue 的跟读路线
 
@@ -331,8 +334,8 @@ flowchart LR
 9. 批准后 `build` 进入 `TaskGraphExecutor`，内部任务在独立 worktree 执行，成功后串行 rebase 和合并。
 10. `DagPhaseRunner` 为 build 创建候选提交；`verify` 生成并解析验证报告。
 11. verify 或 UAT 失败时，`IssueWorkflow` 根据 `requestRetryFrom` 和修复额度返回 build。
-12. UAT 启动当前候选提交的预览服务，执行真实 Playwright，保存 `runId`、报告和 commit 收据。
-13. `deliverIssue()` 校验所有任务、候选提交、verify、UAT 和远程分支凭证，然后 push、复用或创建 PR，并回写 Issue。
+12. 若 `run.workflow.definition.phaseIds` 包含 `uat`，则 UAT 重新启动当前候选提交的预览服务，执行真实 Playwright，并保存 `runId`、报告和 commit 收据；否则从 `publish_verify` 直接进入交付。
+13. `deliverIssue()` 校验所有任务、候选提交、verify 和远程分支凭证；仅在本轮包含 UAT 时校验 UAT 凭证，然后 push、复用或创建 PR，并回写 Issue。
 14. `DeliverIssueStep` 在一次最终事务中写入完成态；后续由 DiaryCollector、Analytics 和 WorktreeReaper 处理附加工作。
 
 跟读时建议在纸上维护三列：
@@ -413,7 +416,7 @@ npm run test:codex
 1. 先读单元测试中的最小契约：`verify-report-parser`、`phase-factory`、`ai-runner-registry`。
 2. 再读 `dag-state`，理解事务、身份、额度和计划完整性。
 3. 再读 `langgraph-native`，理解跨重启的流程事实。
-4. 再读 `failure-recovery` 和 verify-fix 场景，理解失败不是简单抛异常。
+4. 再读 `dag-crash-recovery`、`dag-delivery` 和 `configured-phase-loop`，理解崩溃恢复、外部结果未知和 verify/UAT 修复回边不是简单抛异常。
 5. 最后读 `workbench`，确认后端投影和真实用户操作能够闭环。
 
 ### 调试建议
