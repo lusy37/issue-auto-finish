@@ -86,6 +86,8 @@ export async function main(): Promise<void> {
             config.project.projectSubDir,
           ),
           number,
+          dataDir,
+          tracker,
         ),
     });
     const memoryDistiller = new MemoryDistiller({

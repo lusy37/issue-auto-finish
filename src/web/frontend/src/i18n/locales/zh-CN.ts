@@ -295,6 +295,8 @@ export const zhCN: Record<string, string> = {
   'planFile.01-plan.md': '实施计划',
   'planFile.02-verify-report.md': '验证报告',
   'planFile.review-feedback.md': '审核反馈',
+  'planFile.03-uat-report.md': '浏览器验收报告',
+  'planFile.review-history.json': '审核历史',
 
   // Confirm/alert messages
   'confirm.supplementSaved': '补充信息已保存。是否从规划阶段重新执行？',

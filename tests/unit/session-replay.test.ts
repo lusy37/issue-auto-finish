@@ -1,3 +1,4 @@
+import { resolveIssueArtifactsDir, resolveIssueArtifactPath } from '../../src/persistence/ArtifactPaths.js';
 /**
  * 场景仿真测试 — 使用 SessionReplayer 从 tape 回放 AI 交互。
  *
@@ -10,6 +11,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { SessionReplayer } from '../helpers/session-replayer.js';
+import { SessionRecorder } from '../helpers/session-recorder.js';
+import { createMockAIRunner } from '../helpers/mock-factories.js';
 import type { SessionTape } from '../helpers/session-tape.js';
 import type { RunOptions, StreamEvent } from '../../src/ai-runner/index.js';
 
@@ -34,17 +37,36 @@ describe('SessionReplayer', () => {
 
   beforeEach(() => {
     tmpDir = mkdtempSync(path.join(tmpdir(), 'replay-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.claude-plan', 'issue-42'), { recursive: true });
   });
 
   afterEach(() => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it('录制回放只记录文件名，产物写入显式指定的数据目录', async () => {
+    const source = resolveIssueArtifactsDir(42);
+    fs.mkdirSync(source, { recursive: true });
+    fs.writeFileSync(resolveIssueArtifactPath(42, '02-verify-report.md'), '本次验证结果');
+    const tapeFile = path.join(tmpDir, 'recording.json');
+    await new SessionRecorder(createMockAIRunner(), tapeFile, 'mock', source).run(createRunOptions(tmpDir));
+    const tape = JSON.parse(fs.readFileSync(tapeFile, 'utf8')) as SessionTape;
+    expect(tape.events).toContainEqual(expect.objectContaining({ type: 'artifact-write', filename: '02-verify-report.md', content: '本次验证结果' }));
+    expect(JSON.stringify(tape)).not.toContain(source);
+    const replayer = SessionReplayer.fromTape(tape, { speedFactor: 0, artifactDirectory: resolveIssueArtifactsDir(99) });
+    await replayer.run(createRunOptions(tmpDir));
+    expect(fs.readFileSync(resolveIssueArtifactPath(99, '02-verify-report.md'), 'utf8')).toBe('本次验证结果');
+  });
+
+  it('未指定产物目录时拒绝回放文件，不降级到项目目录', async () => {
+    const replayer = new SessionReplayer(loadTape('verify-fix-loop.json'), { speedFactor: 0 });
+    await expect(replayer.run(createRunOptions(tmpDir))).rejects.toThrow('必须指定 Issue 产物目录');
+    expect(fs.readdirSync(tmpDir)).toEqual([]);
+  });
+
   describe('happy path: plan 阶段', () => {
     it('应成功回放 plan tape 并写入产物文件', async () => {
       const tape = loadTape('happy-path-plan.json');
-      const replayer = new SessionReplayer(tape, { speedFactor: 0 });
+      const replayer = new SessionReplayer(tape, { artifactDirectory: resolveIssueArtifactsDir(42), speedFactor: 0 });
       const options = createRunOptions(tmpDir);
 
       const result = await replayer.run(options);
@@ -54,23 +76,24 @@ describe('SessionReplayer', () => {
       expect(result.output).toContain('Plan created successfully');
     });
 
-    it('应将产物文件写入 workDir', async () => {
+    it('应将产物文件写入独立数据目录', async () => {
       const tape = loadTape('happy-path-plan.json');
-      const replayer = new SessionReplayer(tape, { speedFactor: 0 });
+      const replayer = new SessionReplayer(tape, { artifactDirectory: resolveIssueArtifactsDir(42), speedFactor: 0 });
       const options = createRunOptions(tmpDir);
 
       await replayer.run(options);
 
-      const planPath = path.join(tmpDir, '.claude-plan', 'issue-42', '01-plan.md');
+      const planPath = resolveIssueArtifactPath(42, '01-plan.md');
       expect(fs.existsSync(planPath)).toBe(true);
       const content = fs.readFileSync(planPath, 'utf-8');
       expect(content).toContain('## Tasks');
+      expect(fs.readdirSync(tmpDir)).toEqual([]);
       expect(content).toContain('- [ ] 创建服务类');
     });
 
     it('应触发 stream events', async () => {
       const tape = loadTape('happy-path-plan.json');
-      const replayer = new SessionReplayer(tape, { speedFactor: 0 });
+      const replayer = new SessionReplayer(tape, { artifactDirectory: resolveIssueArtifactsDir(42), speedFactor: 0 });
       const events: StreamEvent[] = [];
       const options = createRunOptions(tmpDir, {
         onStreamEvent: (e) => events.push(e),
@@ -86,7 +109,7 @@ describe('SessionReplayer', () => {
 
     it('应记录 run 调用', async () => {
       const tape = loadTape('happy-path-plan.json');
-      const replayer = new SessionReplayer(tape, { speedFactor: 0 });
+      const replayer = new SessionReplayer(tape, { artifactDirectory: resolveIssueArtifactsDir(42), speedFactor: 0 });
 
       await replayer.run(createRunOptions(tmpDir));
 
@@ -98,7 +121,7 @@ describe('SessionReplayer', () => {
   describe('超时场景: wall-clock timeout', () => {
     it('应返回失败结果和错误信息', async () => {
       const tape = loadTape('timeout-wall-clock.json');
-      const replayer = new SessionReplayer(tape, { speedFactor: 0 });
+      const replayer = new SessionReplayer(tape, { artifactDirectory: resolveIssueArtifactsDir(42), speedFactor: 0 });
 
       const result = await replayer.run(createRunOptions(tmpDir));
 
@@ -111,11 +134,11 @@ describe('SessionReplayer', () => {
   describe('verify-fix-loop: verify 报告包含待修复项', () => {
     it('应写入 verify 报告产物', async () => {
       const tape = loadTape('verify-fix-loop.json');
-      const replayer = new SessionReplayer(tape, { speedFactor: 0 });
+      const replayer = new SessionReplayer(tape, { artifactDirectory: resolveIssueArtifactsDir(42), speedFactor: 0 });
 
       await replayer.run(createRunOptions(tmpDir));
 
-      const reportPath = path.join(tmpDir, '.claude-plan', 'issue-42', '02-verify-report.md');
+      const reportPath = resolveIssueArtifactPath(42, '02-verify-report.md');
       expect(fs.existsSync(reportPath)).toBe(true);
       const content = fs.readFileSync(reportPath, 'utf-8');
       expect(content).toContain('待修复');
@@ -124,11 +147,11 @@ describe('SessionReplayer', () => {
 
     it('verify 报告可被 TodolistExtractor 解析', async () => {
       const tape = loadTape('verify-fix-loop.json');
-      const replayer = new SessionReplayer(tape, { speedFactor: 0 });
+      const replayer = new SessionReplayer(tape, { artifactDirectory: resolveIssueArtifactsDir(42), speedFactor: 0 });
 
       await replayer.run(createRunOptions(tmpDir));
 
-      const reportPath = path.join(tmpDir, '.claude-plan', 'issue-42', '02-verify-report.md');
+      const reportPath = resolveIssueArtifactPath(42, '02-verify-report.md');
       const content = fs.readFileSync(reportPath, 'utf-8');
 
       const { extractTodolist } = await import('../../src/persistence/TodolistExtractor.js');
@@ -141,7 +164,7 @@ describe('SessionReplayer', () => {
   describe('格式异常: 截断 JSON / 连接中断', () => {
     it('应返回失败且 exitCode 非 0', async () => {
       const tape = loadTape('format-error.json');
-      const replayer = new SessionReplayer(tape, { speedFactor: 0 });
+      const replayer = new SessionReplayer(tape, { artifactDirectory: resolveIssueArtifactsDir(42), speedFactor: 0 });
 
       const result = await replayer.run(createRunOptions(tmpDir));
 
@@ -152,7 +175,7 @@ describe('SessionReplayer', () => {
 
     it('截断的 stdout 仍被捕获', async () => {
       const tape = loadTape('format-error.json');
-      const replayer = new SessionReplayer(tape, { speedFactor: 0 });
+      const replayer = new SessionReplayer(tape, { artifactDirectory: resolveIssueArtifactsDir(42), speedFactor: 0 });
 
       const result = await replayer.run(createRunOptions(tmpDir));
 
@@ -163,7 +186,7 @@ describe('SessionReplayer', () => {
   describe('session resume: 从中断恢复', () => {
     it('应返回成功结果', async () => {
       const tape = loadTape('session-resume.json');
-      const replayer = new SessionReplayer(tape, { speedFactor: 0 });
+      const replayer = new SessionReplayer(tape, { artifactDirectory: resolveIssueArtifactsDir(42), speedFactor: 0 });
 
       const result = await replayer.run(createRunOptions(tmpDir, { continueSession: true }));
 
@@ -173,7 +196,7 @@ describe('SessionReplayer', () => {
 
     it('stream events 应包含 resume 相关内容', async () => {
       const tape = loadTape('session-resume.json');
-      const replayer = new SessionReplayer(tape, { speedFactor: 0 });
+      const replayer = new SessionReplayer(tape, { artifactDirectory: resolveIssueArtifactsDir(42), speedFactor: 0 });
       const events: StreamEvent[] = [];
 
       await replayer.run(createRunOptions(tmpDir, {
@@ -192,11 +215,11 @@ describe('SessionReplayer', () => {
   describe('replayFileWrites: false 不写文件', () => {
     it('应跳过文件写入', async () => {
       const tape = loadTape('happy-path-plan.json');
-      const replayer = new SessionReplayer(tape, { speedFactor: 0, replayFileWrites: false });
+      const replayer = new SessionReplayer(tape, { artifactDirectory: resolveIssueArtifactsDir(42), speedFactor: 0, replayFileWrites: false });
 
       await replayer.run(createRunOptions(tmpDir));
 
-      const planPath = path.join(tmpDir, '.claude-plan', 'issue-42', '01-plan.md');
+      const planPath = resolveIssueArtifactPath(42, '01-plan.md');
       expect(fs.existsSync(planPath)).toBe(false);
     });
   });

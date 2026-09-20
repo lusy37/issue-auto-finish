@@ -1,3 +1,4 @@
+import { ARTIFACTS } from '../../../../shared/runtime/artifacts.js';
 import { ref, type Ref } from 'vue';
 import type { IssueRecord, SupplementInfo, AgentLogEntry, ReviewRound, ExecutableTask } from '@/types';
 import { getIssueIid } from '@/types';
@@ -78,7 +79,7 @@ export function useIssueDetail() {
 
   async function fetchPlanDocContent(number: number) {
     try {
-      planDocContent.value = await api.loadPlanDoc(number, '01-plan.md', 'html');
+      planDocContent.value = await api.loadPlanDoc(number, ARTIFACTS.plan.filename, 'html');
     } catch {
       planDocContent.value = '';
     }
@@ -86,7 +87,7 @@ export function useIssueDetail() {
 
   async function fetchPlanDiff(number: number) {
     try {
-      planDiff.value = await api.fetchPlanDiff(number, '01-plan.md');
+      planDiff.value = await api.fetchPlanDiff(number, ARTIFACTS.plan.filename);
     } catch {
       planDiff.value = { diff: '', hasChanges: false };
     }

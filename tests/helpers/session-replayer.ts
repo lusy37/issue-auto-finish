@@ -13,8 +13,10 @@ import type { SessionTape, TapeEvent } from './session-tape.js';
 export interface ReplayerOptions {
   /** Time compression ratio: 100 = 100x faster replay. Set 0 to skip delays. */
   speedFactor?: number;
-  /** If true, write file-write tape events to the actual filesystem */
+  /** 是否把 artifact-write 事件写入显式指定的产物目录 */
   replayFileWrites?: boolean;
+  /** 显式指定本次 Issue 的产物目录，禁止回放到项目 workDir。 */
+  artifactDirectory?: string;
 }
 
 export class SessionReplayer implements AIRunner {
@@ -65,9 +67,11 @@ export class SessionReplayer implements AIRunner {
           options.onStreamEvent?.(event.event);
           break;
 
-        case 'file-write':
+        case 'artifact-write':
           if (this.options.replayFileWrites) {
-            const absPath = path.join(options.workDir, event.path);
+            if (!this.options.artifactDirectory) throw new Error('回放产物必须指定 Issue 产物目录');
+            if (!event.filename || event.filename === '.' || event.filename === '..' || /[/\\\0:]/.test(event.filename)) throw new Error('回放产物名称必须是单个文件名');
+            const absPath = path.join(this.options.artifactDirectory, event.filename);
             const dir = path.dirname(absPath);
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
             fs.writeFileSync(absPath, event.content);

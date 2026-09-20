@@ -36,9 +36,9 @@ const mockWtPlanInstance = {
   ensureDir: vi.fn(),
   writeIssueMeta: vi.fn(),
   getAllPlanFiles: vi.fn().mockReturnValue([]),
-  writeReviewFeedback: vi.fn(),
+
   readReviewFeedback: vi.fn().mockReturnValue(null),
-  mergeBackupIfPresent: vi.fn(),
+
   writePlan: vi.fn(),
 };
 

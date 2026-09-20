@@ -10,7 +10,7 @@ export type TapeEvent =
   | { type: 'stdout'; data: string; offsetMs: number }
   | { type: 'stderr'; data: string; offsetMs: number }
   | { type: 'stream-event'; event: StreamEvent; offsetMs: number }
-  | { type: 'file-write'; path: string; content: string; offsetMs: number }
+  | { type: 'artifact-write'; filename: string; content: string; offsetMs: number }
   | { type: 'exit'; code: number | null; offsetMs: number };
 
 export interface SessionTape {

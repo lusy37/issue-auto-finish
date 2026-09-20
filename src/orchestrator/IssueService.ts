@@ -1,3 +1,4 @@
+import { ARTIFACTS } from '../shared/runtime/artifacts.js';
 import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
 import { randomUUID } from 'node:crypto';
 import { assertOwnedDirectory, isInside } from '../dag/TaskGraphExecutor.js';
@@ -223,7 +224,7 @@ export class IssueService {
     if (!isNoteSyncEnabledForIssue(number, this.tracker, this.config)) return;
 
     const baseUrl = this.config.issueNoteSync.webBaseUrl.replace(/\/$/, '');
-    const planFile = '01-plan.md';
+    const planFile = ARTIFACTS.plan.filename;
     const note = [
       t('api.reviewFeedback', { round }),
       '',

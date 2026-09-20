@@ -6,6 +6,9 @@ import { logger as rootLogger } from '../logger.js';
 
 const logger = rootLogger.child('GitOperations');
 
+// 工作台当前运行目录不属于项目交付内容。
+const REPOSITORY_CONTENT_PATHS = ['.', ':(exclude).iaf-mini'];
+
 export class GitOperations {
   private workDir: string;
 
@@ -42,11 +45,11 @@ export class GitOperations {
   }
   async resetOwned(commit: string): Promise<void> { await this.exec(['reset', '--hard', commit]); }
   async changedContent(from: string, to = 'HEAD'): Promise<boolean> {
-    return !!(await this.exec(['diff', '--name-only', from, to, '--', '.', ':(exclude).iaf-mini', ':(exclude).claude-plan']));
+    return !!(await this.exec(['diff', '--name-only', from, to, '--', ...REPOSITORY_CONTENT_PATHS]));
   }
   async commitCandidate(message: string): Promise<string> {
     if (await this.hasChanges()) {
-      await this.exec(['add', '-A', '--', '.', ':(exclude).iaf-mini', ':(exclude).claude-plan']);
+      await this.exec(['add', '-A', '--', ...REPOSITORY_CONTENT_PATHS]);
       const staged = await this.exec(['diff', '--cached', '--name-only']);
       if (staged) await this.commit(message);
     }

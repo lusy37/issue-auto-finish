@@ -8,7 +8,7 @@ import { isShuttingDown } from '../../shutdown/ShutdownSignal.js';
 import { ServiceShutdownError } from '../../errors/index.js';
 import { deliverIssueStep } from './DeliverIssueStep.js';
 import { syncResultToIssue } from './PhaseHelpers.js';
-import { createPhase } from '../../phases/PhaseFactory.js';
+import { ARTIFACTS, getPhaseArtifacts } from '../../shared/runtime/artifacts.js';
 import type { IssueLifecycle } from '../../tracker/IssueLifecycle.js';
 import { logger as rootLogger } from '../../logger.js';
 
@@ -57,7 +57,7 @@ export async function runWorkflow(
       },
       autoReview: () => {
         if (!deps.config.review.enabled) {
-          if (!wtPlan.isArtifactReady('01-plan.md')) throw new Error('完整计划尚未保存，不能按配置自动通过审核');
+          if (!wtPlan.isArtifactReady(ARTIFACTS.plan.filename)) throw new Error('完整计划尚未保存，不能按配置自动通过审核');
           logger.info('计划已保存，按配置自动通过审核', { number: issueIid });
           return 'configuration';
         }
@@ -68,8 +68,7 @@ export async function runWorkflow(
         return undefined;
       },
     publish: async (phaseId, operation) => {
-      const phase = createPhase(phaseId, deps.aiRunner, wtGit, wtPlan, deps.config, deps.tracker);
-      await syncResultToIssue(phase, ctx.phaseCtx, issueIid, phaseId, deps, issueIid, wtPlan, operation);
+      await syncResultToIssue(getPhaseArtifacts(phaseId), issueIid, phaseId, deps, issueIid, wtPlan, operation);
     },
     deliver: () => deliverIssueStep(ctx, deps, { serversStarted }),
     context: {

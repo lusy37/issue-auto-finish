@@ -1,3 +1,4 @@
+import { ARTIFACTS } from '../shared/runtime/artifacts.js';
 import { isE2eEnabledForIssue } from '../e2e/E2eSettings.js';
 import { RecoveryError } from '../dag/RecoveryError.js';
 import { resolvePromptRules } from '../knowledge/PromptRules.js';
@@ -93,8 +94,8 @@ export class DagPhaseRunner {
       if (candidate) {
         if ((await this.git.head()) !== candidate || await this.git.hasChanges()) throw new Error('检查过程中代码发生变化，该次验收结果无效');
         if (intent.kind === 'completed') {
-          const reportPath = path.join(this.plan.planDir, spec.id === 'verify' ? '02-verify-report.md' : '03-uat-report.md');
-          const runId = spec.id === 'uat' ? JSON.parse(this.plan.readFile('uat-run.json') ?? '{}').runId as string | undefined : undefined;
+          const reportPath = this.plan.artifactPath(spec.id === 'verify' ? ARTIFACTS.verifyReport.filename : ARTIFACTS.uatReport.filename);
+          const runId = spec.id === 'uat' ? JSON.parse(this.plan.readFile(ARTIFACTS.uatRun.filename) ?? '{}').runId as string | undefined : undefined;
           tracker.transaction(number, record => {
             const receipt = { commit: candidate, passed: true as const, completedAt: new Date().toISOString(), reportPath, runId };
             if (spec.id === 'verify') record.run!.verify = receipt;

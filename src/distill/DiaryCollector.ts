@@ -203,7 +203,7 @@ export class DiaryCollector {
   /**
    * 构建人工介入记录，覆盖三类来源：
    *   1. retry — Issue 重试次数 > 1
-   *   2. review-reject — review-history.json 中每一轮人工驳回（含 feedback 摘要）
+   *   2. review-reject — Issue 聚合审核历史中的每一轮人工驳回（含 feedback 摘要）
    *   3. review-approve — review 阶段最终被批准（含通过时间）
    *
    * 这三类信息会随 diary 一起进入 MemoryDistiller 的分析 prompt，

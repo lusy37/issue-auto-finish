@@ -1,3 +1,4 @@
+import { ARTIFACTS } from '../../../../shared/runtime/artifacts.js';
 import type {
   IssueRecord, SystemStatus, AgentLogEntry,
   GitHubIssue, SupplementInfo, ReviewRound,
@@ -91,7 +92,7 @@ export interface PlanDiff {
   hasChanges: boolean;
 }
 
-export async function fetchPlanDiff(number: number, file = '01-plan.md'): Promise<PlanDiff> {
+export async function fetchPlanDiff(number: number, file = ARTIFACTS.plan.filename): Promise<PlanDiff> {
   const url = `/api/issues/${number}/plan-diff?file=${encodeURIComponent(file)}`;
   return request<PlanDiff>(url);
 }

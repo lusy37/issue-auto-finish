@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ARTIFACTS } from '../../../../shared/runtime/artifacts.js';
 import { ref, watch, onMounted, onUnmounted } from 'vue';
 import type { PlanFileSpec } from '@/types';
 import * as api from '@/api/client';
@@ -30,8 +31,8 @@ const isFullscreen = ref(false);
 const { t } = useI18n();
 
 const NOT_FOUND_HINTS: Record<string, () => string> = {
-  'review-feedback.md': () => t('planDoc.noReviewFeedback'),
-  '02-verify-report.md': () => t('planDoc.verifyNotGenerated'),
+  [ARTIFACTS.reviewFeedback.filename]: () => t('planDoc.noReviewFeedback'),
+  [ARTIFACTS.verifyReport.filename]: () => t('planDoc.verifyNotGenerated'),
 };
 
 async function loadDoc(filename: string) {

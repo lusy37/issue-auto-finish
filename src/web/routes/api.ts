@@ -1,5 +1,7 @@
+import { ARTIFACTS } from '../../shared/runtime/artifacts.js';
 import { renderPlan } from '../../dag/contracts.js';
-import { resolveDataDir } from '../../paths.js';
+import { resolveIssueArtifactsDir, resolveIssueArtifactPath } from '../../persistence/ArtifactPaths.js';
+import { PlanPersistence } from '../../persistence/PlanPersistence.js';
 import { githubIssueToDemandSpec } from '../../demand/adapters/GitHubAdapter.js';
 import express, { type Request, type Response } from 'express';
 const { Router } = express;
@@ -96,7 +98,7 @@ function buildPreviewInfo(number: number, orch: IssueService) {
 }
 
 export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> {
-  const { tracker, config: cfg, agentLogStore: logStore, orchestrator: orch, mainGit: git, github, supplementStore, poller, previewReaper, worktreeReaper } = deps;
+  const { tracker, config: cfg, agentLogStore: logStore, orchestrator: orch, github, supplementStore, poller, previewReaper, worktreeReaper } = deps;
   const router = Router();
   // 在首次异步请求前占用编号，防止并发启动覆盖同一个任务。
   const startingIssues = new Set<number>();
@@ -164,13 +166,13 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     const def = getIssuePipelineDef(number);
     const allowed = [
       ...collectPipelineArtifacts(def).map(f => f.filename),
-      'issue-meta.json',
+      ARTIFACTS.issueMeta.filename,
     ];
     if (!allowed.includes(filename)) {
       res.status(400).json({ error: 'Invalid filename' });
       return;
     }
-    const content = await readPlanFile(number, filename, cfg, tracker, git);
+    const content = await readPlanFile(number, filename, tracker);
     if (content === null) {
       res.status(404).json({ error: 'Plan file not found' });
       return;
@@ -318,7 +320,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   router.put('/api/issues/:number/plans/:filename', (req: Request, res: Response) => {
     const number = parseInt(req.params.number, 10);
     const filename = req.params.filename;
-    if (filename === '01-plan.md') { res.status(403).json({ error: '计划由结构化版本生成，只能通过审核反馈重新规划' }); return; }
+    if (filename === ARTIFACTS.plan.filename) { res.status(403).json({ error: '计划由结构化版本生成，只能通过审核反馈重新规划' }); return; }
     const def = getIssuePipelineDef(number);
     const editableFiles = collectPipelineArtifacts(def).filter(f => f.editable).map(f => f.filename);
     if (!editableFiles.includes(filename)) {
@@ -330,10 +332,10 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(400).json({ error: 'Request body must contain a "content" string field' });
       return;
     }
-    const planDir = getWorktreePlanDir(number, cfg);
-    const filePath = path.join(planDir, filename);
+    const planDir = resolveIssueArtifactsDir(number, tracker.store.dataDir);
+    const filePath = resolveIssueArtifactPath(number, filename, tracker.store.dataDir);
     if (!fs.existsSync(planDir)) {
-      res.status(404).json({ error: 'Plan directory not found (worktree may have been cleaned)' });
+      res.status(404).json({ error: 'Issue 产物目录不存在' });
       return;
     }
     fs.writeFileSync(filePath, content, 'utf-8');
@@ -663,13 +665,13 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
     const filename = typeof req.query.file === 'string' && req.query.file.trim()
       ? req.query.file.trim()
-      : '01-plan.md';
+      : ARTIFACTS.plan.filename;
     if (!/^[\w.-]+$/.test(filename)) {
       res.status(400).json({ error: 'Invalid file name' });
       return;
     }
 
-    const currentContent = filename === '01-plan.md' && record.run?.planRevision
+    const currentContent = filename === ARTIFACTS.plan.filename && record.run?.planRevision
       ? renderPlan(tracker.store.readPlan(number, record.run.planRevision, record.run.planDigest)) : null;
     const history = record.run?.reviewHistory ?? [];
     const lastRound = history.length > 0 ? history[history.length - 1] : null;
@@ -914,7 +916,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       return;
     }
 
-    const content = await readPlanFile(number, filename, cfg, tracker, git);
+    const content = await readPlanFile(number, filename, tracker);
     if (content === null) {
       res.status(404).type('html').send(renderDocPage(number, title, t('api.docNotGenerated'), filename));
       return;
@@ -988,32 +990,11 @@ function escapeHtml(text: string): string {
 /** 审核历史与工作目录是否存在无关，仅以聚合状态为准。 */
 function loadReviewHistory(number: number, tracker: IssueTracker) { return tracker.get(number)?.run?.reviewHistory ?? []; }
 
-function getWorktreePlanDir(issueIid: number, _config: Config): string {
-  return path.join(resolveDataDir(), 'issues', String(issueIid), 'artifacts');
-}
-
-async function readImmutablePlan(issueIid: number, filename: string, _config: Config, tracker: IssueTracker, _mainGit?: GitOperations): Promise<string | null> {
-  const record = tracker.get(issueIid);
-  if (filename === '01-plan.md' && record?.run?.planRevision) return renderPlan(tracker.store.readPlan(issueIid, record.run.planRevision, record.run.planDigest));
-  return null;
-}
-
 async function readPlanFile(
   issueIid: number,
   filename: string,
-  config: Config,
   tracker: IssueTracker,
-  mainGit?: GitOperations,
 ): Promise<string | null> {
-  if (filename === '01-plan.md') return readImmutablePlan(issueIid, filename, config, tracker, mainGit);
-  const planDir = getWorktreePlanDir(issueIid, config);
-  const filePath = path.join(planDir, filename);
-  if (fs.existsSync(filePath)) {
-    try {
-      return fs.readFileSync(filePath, 'utf-8');
-    } catch {
-      return null;
-    }
-  }
-  return readImmutablePlan(issueIid, filename, config, tracker, mainGit);
+  // 读取产物只需要 Issue 数据目录，不依赖 worktree 或 Git 分支。
+  return new PlanPersistence('', issueIid, tracker.store.dataDir, tracker).readFile(filename);
 }

@@ -131,7 +131,7 @@ describe('prompt templates', () => {
   });
 
   it('buildPrompt', () => {
-    expect(templates.buildPrompt(baseCtx)).toMatchSnapshot();
+    expect(templates.buildPrompt({ ...baseCtx, planContent: '完整计划：实现登录服务并补充成功、失败和权限边界测试。' })).toMatchSnapshot();
   });
 
   it('rePlanPrompt with review history', () => {

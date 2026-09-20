@@ -216,7 +216,7 @@ function formatTimestamp(ts: string): string {
     </div>
 
     <!--
-      Replanning 期间 worktree 中的 01-plan.md 正在被 AI 重写，
+      重新规划期间，服务端正在生成新的不可变计划版本，
       此时展示的任何 diff 都是中间态。统一显示"生成中"提示，
       等进入 PhaseWaiting 后用户再到 waiting 分支查看完整对比。
     -->

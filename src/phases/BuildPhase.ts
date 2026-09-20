@@ -1,3 +1,4 @@
+import { ARTIFACTS } from '../shared/runtime/artifacts.js';
 import { BasePhase, PhaseContext } from './BasePhase.js';
 import { buildPrompt, demandToPromptContext } from '../prompts/templates.js';
 import { AIExecutionError } from '../errors/index.js';
@@ -21,6 +22,7 @@ export class BuildPhase extends BasePhase {
       issueDescription: pc.description,
       issueIid: Number(pc.displayId),
       workspace: ctx.workspace,
+      planContent: this.plan.readFile(ARTIFACTS.plan.filename) ?? undefined,
       knowledgeEnabled: this.config.knowledge.enabled,
     });
 

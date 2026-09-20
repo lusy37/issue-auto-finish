@@ -13,7 +13,7 @@ import {
  * plan 阶段。除标准 plan/rePlan prompt 构造外,还负责 reject-replan 的会话续聊路径:
  *
  *   1. 优先 `--resume <sessionId>`(原生续聊): 当 runner 支持 plan resume
- *      (`capabilities.planModeResumable=true`)且 review-history.json 中存有
+ *      (`capabilities.planModeResumable=true`)且 Issue 聚合审核历史中存有
  *      上一轮 plan 的 `reviewedSessionId` 时启用。AI 在原 session memory 中
  *      已经记得原方案,只需发反馈即可做对照式修订。
  *   2. fallback 全文注入: runner 不支持 resume / sessionId 缺失 / resume 实际
@@ -24,10 +24,6 @@ import {
  */
 export class PlanPhase extends BasePhase {
   readonly phaseName = 'plan' as const;
-
-  getResultFiles() {
-    return [{ filename: '01-plan.md', label: '实施计划' }];
-  }
 
   protected getRunMode(): 'plan' | 'agent' | undefined {
     return 'plan';

@@ -1,3 +1,4 @@
+import { getPhaseArtifacts } from '../../../../shared/runtime/artifacts.js';
 import { computed, ref, type Ref } from 'vue';
 import type { IssueLifecycle, IssueRecord, PipelineMode, PhaseStatus, PlanFileSpec, PipelineMeta } from '@/types';
 import { fetchPipelineMeta } from '@/api/client';
@@ -57,11 +58,10 @@ export function usePipeline() {
     if (meta.value?.modes[mode]) {
       return meta.value.modes[mode].artifacts.map(a => ({ file: a.filename, label: a.label }));
     }
-    return [
-      { file: '01-plan.md', label: t('planFile.01-plan.md') },
-      { file: '02-verify-report.md', label: t('planFile.02-verify-report.md') },
-      { file: 'review-feedback.md', label: t('planFile.review-feedback.md') },
-    ];
+    const phases = issue?.run?.workflow.definition?.phaseIds ?? ['plan', 'review', 'build', 'verify'];
+    return phases.flatMap(getPhaseArtifacts).map(artifact => ({
+      file: artifact.filename, label: t(`planFile.${artifact.filename}`),
+    }));
   }
 
   function getPhaseNames(issue?: IssueRecord | null): string[] {
@@ -150,7 +150,7 @@ export function usePipeline() {
         mode => mode.artifacts.some(artifact => artifact.filename === filename && artifact.editable),
       );
     }
-    return filename === '01-plan.md';
+    return false;
   }
 
   function issueUrl(number: number, systemStatus: Ref<{ config: { githubBaseUrl: string; repository: string } } | null>): string {

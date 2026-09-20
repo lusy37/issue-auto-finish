@@ -295,6 +295,8 @@ export const en: Record<string, string> = {
   'planFile.01-plan.md': 'Implementation Plan',
   'planFile.02-verify-report.md': 'Verification Report',
   'planFile.review-feedback.md': 'Review Feedback',
+  'planFile.03-uat-report.md': 'Browser Acceptance Report',
+  'planFile.review-history.json': 'Review History',
 
   // Confirm/alert messages
   'confirm.supplementSaved': 'Supplement saved. Retry from planning phase?',

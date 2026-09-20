@@ -1,3 +1,5 @@
+import { ARTIFACTS } from '../../src/shared/runtime/artifacts.js';
+import { resolveIssueArtifactsDir, resolveIssueArtifactPath } from '../../src/persistence/ArtifactPaths.js';
 import { structuredPlanOutput } from './structured-plan.js';
 /**
  * ScriptedAIRunner — 阶段功能层专用的可编程 AI Runner。
@@ -24,11 +26,11 @@ export interface AICallScript {
   sideEffect?: SideEffect;
   /** 模拟延迟（ms） */
   delayMs?: number;
-  /** 声明式产物文件映射：相对于 .claude-plan/issue-{number}/ 的 { filename: content }。
-   *  当 run() 被调用时自动写入 workDir 对应目录。需配合 issueIid 使用。 */
+  /** 声明式产物文件映射：相对于 DATA_DIR/issues/<编号>/artifacts/ 的 { filename: content }。
+   *  当 run() 被调用时写入对应 Issue 的数据目录。 */
   artifacts?: Record<string, string>;
   /** 声明式 todolist 内容——写入 01-plan.md 中的 checkbox 列表，
-   *  供 TodolistExtractor 消费。等效于 artifacts: { '01-plan.md': content } */
+   *  供 TodolistExtractor 消费。等效于 artifacts: { ARTIFACTS.plan.filename: content } */
   todolistContent?: string;
 }
 
@@ -73,16 +75,16 @@ export class ScriptedAIRunner implements AIRunner {
       }
     }
 
-    let planText = script.todolistContent ?? script.artifacts?.['01-plan.md'];
+    let planText = script.todolistContent ?? script.artifacts?.[ARTIFACTS.plan.filename];
     // Write declarative artifacts (requires issueIid extractable from workDir)
     if (script.artifacts) {
       const iidMatch = options.workDir.match(/issue-(\d+)/);
       const number = iidMatch ? parseInt(iidMatch[1], 10) : 0;
-      const planDir = path.join(process.env.DATA_DIR!, 'issues', String(number), 'artifacts');
+      const planDir = resolveIssueArtifactsDir(number);
       fs.mkdirSync(planDir, { recursive: true });
       for (const [filename, content] of Object.entries(script.artifacts)) {
-        if (options.mode === 'plan' && filename === '01-plan.md') continue;
-        fs.writeFileSync(path.join(planDir, filename), content);
+        if (options.mode === 'plan' && filename === ARTIFACTS.plan.filename) continue;
+        fs.writeFileSync(resolveIssueArtifactPath(number, filename), content);
       }
     }
 
@@ -90,9 +92,9 @@ export class ScriptedAIRunner implements AIRunner {
     if (script.todolistContent && options.mode !== 'plan') {
       const iidMatch = options.workDir.match(/issue-(\d+)/);
       const number = iidMatch ? parseInt(iidMatch[1], 10) : 0;
-      const planDir = path.join(process.env.DATA_DIR!, 'issues', String(number), 'artifacts');
+      const planDir = resolveIssueArtifactsDir(number);
       fs.mkdirSync(planDir, { recursive: true });
-      fs.writeFileSync(path.join(planDir, '01-plan.md'), script.todolistContent);
+      fs.writeFileSync(path.join(planDir, ARTIFACTS.plan.filename), script.todolistContent);
     }
 
     // Execute side effect
@@ -100,8 +102,8 @@ export class ScriptedAIRunner implements AIRunner {
       await script.sideEffect(options);
     }
 
-    planText ??= script.sideEffect?.artifact?.filename === '01-plan.md' ? script.sideEffect.artifact.content : undefined;
-    const report = script.artifacts?.['02-verify-report.md'] ?? (script.sideEffect?.artifact?.filename === '02-verify-report.md' ? script.sideEffect.artifact.content : undefined);
+    planText ??= script.sideEffect?.artifact?.filename === ARTIFACTS.plan.filename ? script.sideEffect.artifact.content : undefined;
+    const report = script.artifacts?.[ARTIFACTS.verifyReport.filename] ?? (script.sideEffect?.artifact?.filename === ARTIFACTS.verifyReport.filename ? script.sideEffect.artifact.content : undefined);
     if (options.phaseName === 'verify' && report) return { ...script.result, output: report };
     if (options.mode === 'plan' && script.result.success && (planText || script.result.output.length >= 50)) {
       return { ...script.result, output: structuredPlanOutput(planText ?? script.result.output) };
@@ -174,7 +176,7 @@ export function timeoutScript(type: 'wall-clock' | 'idle'): AICallScript {
 /**
  * 创建一个写产物文件的 SideEffect。
  *
- * 用于模拟 AI Agent 在 workDir 下写入 .claude-plan/issue-{number}/filename。
+ * 用于模拟阶段产物写入 DATA_DIR/issues/<编号>/artifacts/filename。
  * BasePhase.validatePhaseOutput 会检查这些文件。
  */
 export function writeArtifact(
@@ -183,8 +185,8 @@ export function writeArtifact(
   content: string,
 ): SideEffect {
   return Object.assign((_options: RunOptions) => {
-    const planDir = path.join(process.env.DATA_DIR!, 'issues', String(issueIid), 'artifacts');
+    const planDir = resolveIssueArtifactsDir(issueIid);
     fs.mkdirSync(planDir, { recursive: true });
-    fs.writeFileSync(path.join(planDir, filename), content);
+    fs.writeFileSync(resolveIssueArtifactPath(issueIid, filename), content);
   }, { artifact: { filename, content } });
 }

@@ -1,3 +1,5 @@
+import { ARTIFACTS } from '../shared/runtime/artifacts.js';
+import { resolveIssueArtifactsDir, resolveIssueArtifactPath } from './ArtifactPaths.js';
 import type { IssueTracker } from '../tracker/IssueTracker.js';
 import { renderPlan } from '../dag/contracts.js';
 import fs from 'node:fs';
@@ -6,8 +8,6 @@ import { resolveDataDir } from '../paths.js';
 import { logger as rootLogger } from '../logger.js';
 
 const logger = rootLogger.child('PlanPersistence');
-
-const BACKUP_ROOT = 'review-backups';
 
 export interface ReviewRound {
   round: number;
@@ -20,77 +20,6 @@ export interface ReviewRound {
 }
 
 export class PlanPersistence {
-  /** 运行产物保存在数据目录，不再修改目标仓库的 gitignore。 */
-  static ensureGitignore(_workDir: string): void {}
-
-  // ---------------------------------------------------------------------------
-  // 全局后备 — 当 worktree 因任何原因不存在时，把审核反馈先持久化到
-  // <dataDir>/review-backups/issue-{number}/，下一次 SetupStep 创建 worktree
-  // 后再合并回 review-history.json，避免反馈静默丢失。
-  // ---------------------------------------------------------------------------
-
-  /** 返回某 Issue 的全局后备目录绝对路径（不保证存在）。 */
-  static getReviewBackupDir(issueIid: number): string {
-    return path.join(resolveDataDir(), BACKUP_ROOT, `issue-${issueIid}`);
-  }
-
-  /** 读取全局后备的审核历史；不存在或解析失败时降级为空数组。 */
-  static readReviewHistoryBackup(issueIid: number): ReviewRound[] {
-    const filePath = path.join(PlanPersistence.getReviewBackupDir(issueIid), 'review-history.json');
-    if (!fs.existsSync(filePath)) return [];
-    try {
-      const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-      return Array.isArray(data) ? data : [];
-    } catch {
-      return [];
-    }
-  }
-
-  /**
-   * 把一轮反馈追加到全局后备 review-history.json（append-only）。
-   *
-   * @param planSnapshot 驳回时 01-plan.md 的完整内容；若 worktree 缺失无法读取，
-   *                     可传 undefined（diff 对比能力会降级，但反馈本身仍能保住）。
-   * @param reviewedSessionId 驳回时 plan 阶段使用的 sessionId；worktree 缺失场景
-   *                     通常拿不到，传 undefined 即可（fallback 到 prompt 注入）。
-   */
-  static writeReviewFeedbackBackup(
-    issueIid: number,
-    content: string,
-    planSnapshot?: string,
-    reviewedSessionId?: string,
-  ): void {
-    const dir = PlanPersistence.getReviewBackupDir(issueIid);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    const history = PlanPersistence.readReviewHistoryBackup(issueIid);
-    const round: ReviewRound = {
-      round: history.length + 1,
-      feedback: content,
-      timestamp: new Date().toISOString(),
-      ...(planSnapshot !== undefined ? { planSnapshot } : {}),
-      ...(reviewedSessionId !== undefined ? { reviewedSessionId } : {}),
-    };
-    history.push(round);
-    fs.writeFileSync(
-      path.join(dir, 'review-history.json'),
-      JSON.stringify(history, null, 2),
-      'utf-8',
-    );
-    logger.warn('Review feedback persisted to backup (worktree unavailable)', {
-      issueIid, round: round.round, hasSnapshot: planSnapshot !== undefined, hasSessionId: reviewedSessionId !== undefined,
-    });
-  }
-
-  /** 清空某 Issue 的全局后备目录（合并完毕后调用）。 */
-  static clearReviewBackup(issueIid: number): void {
-    const dir = PlanPersistence.getReviewBackupDir(issueIid);
-    if (!fs.existsSync(dir)) return;
-    fs.rmSync(dir, { recursive: true, force: true });
-    logger.info('Review backup cleared', { issueIid });
-  }
-
   private workDir: string;
   private issueIid: number;
 
@@ -104,7 +33,11 @@ export class PlanPersistence {
   }
 
   get planDir(): string {
-    return path.join(this.dataDir, 'issues', String(this.issueIid), 'artifacts');
+    return resolveIssueArtifactsDir(this.issueIid, this.dataDir);
+  }
+
+  artifactPath(filename: string): string {
+    return resolveIssueArtifactPath(this.issueIid, filename, this.dataDir);
   }
 
   ensureDir(): void {
@@ -115,7 +48,7 @@ export class PlanPersistence {
 
   writeIssueMeta(meta: { id: number; number: number; title: string; labels: string[]; state: string }): void {
     this.ensureDir();
-    const filePath = path.join(this.planDir, 'issue-meta.json');
+    const filePath = this.artifactPath(ARTIFACTS.issueMeta.filename);
     fs.writeFileSync(filePath, JSON.stringify(meta, null, 2), 'utf-8');
     logger.info('Issue meta written');
   }
@@ -127,108 +60,18 @@ export class PlanPersistence {
 
   writePlan(content: string): void {
     this.ensureDir();
-    fs.writeFileSync(path.join(this.planDir, '01-plan.md'), content, 'utf-8');
+    fs.writeFileSync(this.artifactPath(ARTIFACTS.plan.filename), content, 'utf-8');
     logger.info('Plan document written');
   }
 
-  /**
-   * 把一轮反馈追加到 worktree 内的 review-history.json + review-feedback.md。
-   *
-   * @param planSnapshot 驳回时 01-plan.md 的完整内容，用于支持"本轮 vs 上轮"对比
-   *                     和知识库蒸馏。当 01-plan.md 不存在时传 undefined（首轮异常路径）。
-   * @param reviewedSessionId 驳回时 plan 阶段使用的 AI session id；
-   *                     供下一轮 plan 调用在执行器支持时恢复会话。无法获取时传 undefined，
-   *                     下一轮通过提示词注入计划与反馈。
-   */
-  writeReviewFeedback(content: string, planSnapshot?: string, reviewedSessionId?: string): void {
-    this.ensureDir();
-    const history = this.readReviewHistory();
-    const round: ReviewRound = {
-      round: history.length + 1,
-      feedback: content,
-      timestamp: new Date().toISOString(),
-      ...(planSnapshot !== undefined ? { planSnapshot } : {}),
-      ...(reviewedSessionId !== undefined ? { reviewedSessionId } : {}),
-    };
-    history.push(round);
-    fs.writeFileSync(
-      path.join(this.planDir, 'review-history.json'),
-      JSON.stringify(history, null, 2),
-      'utf-8',
-    );
-    fs.writeFileSync(
-      path.join(this.planDir, 'review-feedback.md'),
-      PlanPersistence.renderReviewHistoryMarkdown(history),
-      'utf-8',
-    );
-    logger.info('Review feedback appended', {
-      round: round.round, hasSnapshot: planSnapshot !== undefined, hasSessionId: reviewedSessionId !== undefined,
-    });
-  }
-
-  /**
-   * 若全局后备目录存在审核反馈，则合并进 worktree 的 review-history.json：
-   *   1. 读取 existing(worktree) + backup
-   *   2. 按 timestamp 稳定排序
-   *   3. 重新分配 round 号
-   *   4. 重写 worktree 的 review-history.json + review-feedback.md
-   *   5. 清理后备目录
-   *
-   * 用于 SetupStep 在 worktree 重建后调用，避免 worktree 缺失期间收到的
-   * 反馈丢失。
-   */
-  mergeBackupIfPresent(): void {
-    const backupHistory = PlanPersistence.readReviewHistoryBackup(this.issueIid);
-    if (backupHistory.length === 0) return;
-
-    const existing = this.readReviewHistory();
-    const combined = [...existing, ...backupHistory];
-    combined.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-    const renumbered: ReviewRound[] = combined.map((r, idx) => ({ ...r, round: idx + 1 }));
-
-    this.ensureDir();
-    fs.writeFileSync(
-      path.join(this.planDir, 'review-history.json'),
-      JSON.stringify(renumbered, null, 2),
-      'utf-8',
-    );
-    fs.writeFileSync(
-      path.join(this.planDir, 'review-feedback.md'),
-      PlanPersistence.renderReviewHistoryMarkdown(renumbered),
-      'utf-8',
-    );
-    PlanPersistence.clearReviewBackup(this.issueIid);
-    logger.info('Review backup merged into worktree', {
-      issueIid: this.issueIid,
-      total: renumbered.length,
-      mergedFromBackup: backupHistory.length,
-    });
+  /** 审核事实只从当前 Issue 聚合记录读取，不读取后备文件或展示副本。 */
+  readReviewHistory(): ReviewRound[] {
+    return this.tracker?.get(this.issueIid)?.run?.reviewHistory ?? [];
   }
 
   readReviewFeedback(): string | null {
     const history = this.readReviewHistory();
-    if (history.length) return PlanPersistence.renderReviewHistoryMarkdown(history);
-    if (fs.existsSync(path.join(this.dataDir, 'issues', String(this.issueIid), 'run.json'))) return null;
-    const filePath = path.join(this.planDir, 'review-feedback.md');
-    if (!fs.existsSync(filePath)) return null;
-    try {
-      return fs.readFileSync(filePath, 'utf-8');
-    } catch {
-      return null;
-    }
-  }
-
-  readReviewHistory(): ReviewRound[] {
-    const aggregateFile = path.join(this.dataDir, 'issues', String(this.issueIid), 'run.json');
-    if (fs.existsSync(aggregateFile)) return JSON.parse(fs.readFileSync(aggregateFile, 'utf8')).record.run.reviewHistory ?? [];
-    const filePath = path.join(this.planDir, 'review-history.json');
-    if (!fs.existsSync(filePath)) return [];
-    try {
-      const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-      return Array.isArray(data) ? data : [];
-    } catch {
-      return [];
-    }
+    return history.length ? PlanPersistence.renderReviewHistoryMarkdown(history) : null;
   }
 
   static renderReviewHistoryMarkdown(history: ReviewRound[]): string {
@@ -250,11 +93,17 @@ export class PlanPersistence {
 
   /** 读取 planDir 下指定文件，不存在返回 null */
   readFile(filename: string): string | null {
-    if (filename === '01-plan.md') {
-      const run = this.tracker?.get(this.issueIid)?.run;
-      if (run?.planRevision && run.planDigest) return renderPlan(this.tracker!.store.readPlan(this.issueIid, run.planRevision, run.planDigest));
+    if (filename === ARTIFACTS.plan.filename && this.tracker) {
+      const run = this.tracker.get(this.issueIid)?.run;
+      if (run?.planRevision && run.planDigest) return renderPlan(this.tracker.store.readPlan(this.issueIid, run.planRevision, run.planDigest));
+      return null;
     }
-    const filePath = path.join(this.planDir, filename);
+    if (filename === ARTIFACTS.reviewFeedback.filename || filename === ARTIFACTS.reviewHistory.filename) {
+      const history = this.readReviewHistory();
+      if (filename === ARTIFACTS.reviewHistory.filename) return JSON.stringify(history, null, 2);
+      return history.length ? PlanPersistence.renderReviewHistoryMarkdown(history) : null;
+    }
+    const filePath = this.artifactPath(filename);
     if (!fs.existsSync(filePath)) return null;
     try {
       return fs.readFileSync(filePath, 'utf-8');
@@ -265,7 +114,7 @@ export class PlanPersistence {
 
   /** 检查 planDir 下指定文件是否就绪（存在 + 大于 minBytes） */
   isArtifactReady(filename: string, minBytes = 50): boolean {
-    const filePath = path.join(this.planDir, filename);
+    const filePath = this.artifactPath(filename);
     if (!fs.existsSync(filePath)) return false;
     try {
       return fs.statSync(filePath).size >= minBytes;
@@ -276,8 +125,8 @@ export class PlanPersistence {
 
   /** 写入 planDir 下指定文件（自动 ensureDir） */
   writeFile(filename: string, content: string): void {
-    if (filename === '01-plan.md') throw new Error('计划展示副本只读，请生成结构化计划版本');
+    if (filename === ARTIFACTS.plan.filename) throw new Error('计划展示副本只读，请生成结构化计划版本');
     this.ensureDir();
-    fs.writeFileSync(path.join(this.planDir, filename), content, 'utf-8');
+    fs.writeFileSync(this.artifactPath(filename), content, 'utf-8');
   }
 }

@@ -381,10 +381,10 @@ export function createMockPlanPersistence() {
     ensureDir: vi.fn(),
     writeIssueMeta: vi.fn(),
     writePlan: vi.fn(),
-    writeReviewFeedback: vi.fn(),
+
     readReviewFeedback: vi.fn().mockReturnValue(null),
     readReviewHistory: vi.fn().mockReturnValue([]),
-    mergeBackupIfPresent: vi.fn(),
+
     getAllPlanFiles: vi.fn().mockReturnValue([]),
     readFile: vi.fn().mockReturnValue(null),
     isArtifactReady: vi.fn().mockReturnValue(false),

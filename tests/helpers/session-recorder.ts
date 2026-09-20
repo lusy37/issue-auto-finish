@@ -2,7 +2,7 @@
  * SessionRecorder — 包装真实 AIRunner，拦截交互并录制为 tape 文件。
  *
  * 开发时一次性使用：用真实 AI CLI 跑一次流水线阶段，
- * 将 stdout/stderr/stream-event/file-write/exit 全部序列化为 SessionTape JSON。
+ * 将 stdout/stderr/stream-event/artifact-write/exit 全部序列化为 SessionTape JSON。
  * 之后在 CI 中用 SessionReplayer 回放，无需真实 AI。
  */
 import fs from 'node:fs';
@@ -16,7 +16,7 @@ export class SessionRecorder implements AIRunner {
   private readonly outputPath: string;
   private readonly runnerName: string;
 
-  constructor(inner: AIRunner, outputPath: string, runnerName: string = 'unknown') {
+  constructor(inner: AIRunner, outputPath: string, runnerName: string = 'unknown', private readonly artifactDirectory?: string) {
     this.inner = inner;
     this.outputPath = outputPath;
     this.runnerName = runnerName;
@@ -63,7 +63,7 @@ export class SessionRecorder implements AIRunner {
       });
     }
 
-    this.scanArtifacts(options.workDir, startTime, events);
+    this.scanArtifacts(startTime, events);
 
     const tape: SessionTape = {
       metadata: {
@@ -92,36 +92,17 @@ export class SessionRecorder implements AIRunner {
     return this.inner.killByWorkDir(targetWorkDir);
   }
 
-  /**
-   * Scan the workDir for artifact files created during the AI run.
-   * Records file-write events for any .claude-plan/ files found.
-   */
-  private scanArtifacts(workDir: string, startTime: number, events: TapeEvent[]): void {
-    const planDir = path.join(workDir, '.claude-plan');
-    if (!fs.existsSync(planDir)) return;
-
-    const walkDir = (dir: string) => {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          walkDir(fullPath);
-        } else if (entry.isFile()) {
-          const relPath = path.relative(workDir, fullPath);
-          try {
-            const content = fs.readFileSync(fullPath, 'utf-8');
-            events.push({
-              type: 'file-write',
-              path: relPath,
-              content,
-              offsetMs: Date.now() - startTime,
-            });
-          } catch {
-            // skip unreadable files
-          }
-        }
-      }
-    };
-
-    walkDir(planDir);
+  /** 只录制调用方指定的 Issue 产物目录，文件名相对于该目录。 */
+  private scanArtifacts(startTime: number, events: TapeEvent[]): void {
+    if (!this.artifactDirectory || !fs.existsSync(this.artifactDirectory)) return;
+    for (const entry of fs.readdirSync(this.artifactDirectory, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      events.push({
+        type: 'artifact-write',
+        filename: entry.name,
+        content: fs.readFileSync(path.join(this.artifactDirectory, entry.name), 'utf8'),
+        offsetMs: Date.now() - startTime,
+      });
+    }
   }
 }

@@ -248,8 +248,9 @@ describe('Architecture Guards', () => {
 
   // ─── Rule 6 ──────────────────────────────────────────────────────────
   // web/frontend/ 不应导入后端 src/ 代码
-  it('共享契约不包含运行时代码', () => {
-    for (const file of getTypeScriptFiles(path.join(SRC_DIR, 'shared'))) {
+  it('共享类型契约不包含运行时代码', () => {
+    const runtimeDir = path.join(SRC_DIR, 'shared', 'runtime') + path.sep;
+    for (const file of getTypeScriptFiles(path.join(SRC_DIR, 'shared')).filter(file => !file.startsWith(runtimeDir))) {
       const ast = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
       const invalid = ast.statements.filter(statement => !(
         ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement) ||
@@ -257,6 +258,20 @@ describe('Architecture Guards', () => {
         (ts.isExportDeclaration(statement) && statement.isTypeOnly)
       ));
       expect(invalid.map(statement => statement.getText(ast)), file).toEqual([]);
+    }
+  });
+
+  it('共享运行模块不依赖 Node、第三方包或服务端实现', () => {
+    for (const file of getTypeScriptFiles(path.join(SRC_DIR, 'shared', 'runtime'))) {
+      const ast = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+      const dependencies = parseDependencies(file);
+      for (const statement of ast.statements) {
+        if (ts.isExportDeclaration(statement) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
+          dependencies.push(statement.moduleSpecifier.text);
+        }
+      }
+      const invalid = dependencies.filter(dep => !depResolvesToModule(file, dep, path.join('shared', 'runtime')));
+      expect(invalid, file).toEqual([]);
     }
   });
 
@@ -286,10 +301,11 @@ describe('Architecture Guards', () => {
         const isWithinWeb =
           resolved.startsWith(webDir + path.sep) || resolved === webDir;
 
-        // 共享契约只能通过显式类型导入/导出使用，运行时代码仍禁止跨入服务端。
+        // 纯共享运行模块允许值导入；其他共享契约仍只允许显式类型导入。
         const sharedDir = path.join(SRC_DIR, 'shared');
         const isShared = resolved.startsWith(sharedDir + path.sep);
-        if (isWithinWeb) continue;
+        const isSharedRuntime = resolved.startsWith(path.join(sharedDir, 'runtime') + path.sep);
+        if (isWithinWeb || isSharedRuntime) continue;
         if (!isShared) { violations.push({file:path.relative(SRC_DIR,file),dep}); continue; }
         const ast = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
         const references = ast.statements.filter(statement =>

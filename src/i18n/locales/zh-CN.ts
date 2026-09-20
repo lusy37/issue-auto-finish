@@ -11,7 +11,7 @@ export const zhCN: Record<string, string> = {
   'pipeline.phase.uat': 'UAT验证',
   'planFile.01-plan.md': '实施计划',
   'planFile.02-verify-report.md': '验证报告',
-  'planFile.03-uat-report.md': 'UAT验证报告',
+  'planFile.03-uat-report.md': '浏览器验收报告',
   'planFile.review-feedback.md': '审核反馈',
   'planFile.review-history.json': '审核历史',
 
@@ -104,54 +104,6 @@ export const zhCN: Record<string, string> = {
   'docLabel.02-verify-report.md': '验证报告',
   'docLabel.review-feedback.md': '审核反馈',
 
-  'prompt.planModeVerify': `你是**严格的**测试工程师。验证代码变更的正确性。
-
-## Issue 信息
-- IID: #{number}
-- 标题: {title}
-
-## 幂等性检查（最先执行）
-在执行任何操作之前，先检查是否已存在验证报告：
-1. 读取 {planDir}/02-verify-report.md（如果存在）
-2. 如果报告存在且"总结"部分包含"验证通过"，则**直接结束**，不要重复执行任何验证步骤
-3. 如果报告不存在或总结为"验证失败"，继续执行下面的验证步骤
-
-**重要**：此检查的目的是防止重复执行导致破坏性操作（如删除已通过的测试文件）。
-
-## 前置检查
-在执行验证前，先确认依赖环境:
-1. 检查 {dependencyCheckPath} 是否存在
-2. 如不存在，运行 {installCommand}；如果失败，尝试 {installFallbackCommand}
-3. 如果依赖始终无法安装完整，在报告中标注为"环境问题"并继续后续检查
-
-## 验证步骤
-1. 运行 {lintCommand} 检查代码风格
-2. 运行 {buildCommand} 检查编译
-3. 运行 {testFilesCommand} 运行相关测试
-4. 检查代码变更与 {planDir}/01-plan.md 实施计划的一致性
-5. **严格检查** {planDir}/01-plan.md 中 Todolist 是否**所有项**都已完成（- [x]）
-
-## 已知的预存问题（忽略即可）
-{knownIssuesSection}
-- 如果某个 lint/build/test 的失败**不涉及本次变更的文件**，标注为"预存问题"
-
-## 验证标准（必须全部满足才算通过）
-- Lint 零错误（本次变更相关）
-- Build 成功
-- 所有测试通过
-- Todolist 100% 完成（无未勾选项）
-- 代码符合实施计划
-
-将验证结果写入 {planDir}/02-verify-report.md，**必须**包括以下各节：
-- **Lint 结果**: 通过/失败 + 详情（区分本次变更 vs 预存问题）
-- **Build 结果**: 通过/失败 + 详情（区分本次变更 vs 预存问题）
-- **Test 结果**: 通过/失败 + 详情
-- **Todolist 检查**: X/Y 项完成 + 未完成项列表
-- **计划一致性检查**: 是否符合实施计划
-- **总结**: 验证通过/验证失败 + 具体原因
-
-**重要**: 如果任何一项检查失败，必须在"总结"中明确写"验证失败"。`,
-
   'prompt.plan': `你是资深技术负责人。请一次性完成需求分析和方案设计。
 
 ## Issue 信息
@@ -191,12 +143,14 @@ export const zhCN: Record<string, string> = {
 - 标题: {title}
 
 请先阅读:
-- {planDir}/01-plan.md (完整实施计划，包含需求分析、系统设计和 Todolist)
 - AGENTS.md (项目架构和代码规范)
 
+## 完整实施计划
+{planContent}
+
 ## 实施要求
-1. 严格按照 01-plan.md 中的 Todolist 逐项完成
-2. 每完成一项，更新 01-plan.md 中对应的勾选状态 (- [ ] → - [x])
+1. 按照完整计划实现任务，并逐项核对验收标准
+2. 计划和运行产物由服务端保存，不修改计划勾选状态或创建内部产物目录
 3. 严格遵循 AGENTS.md 中的代码规范（{codeStyleDescription}）
 4. 不要过度工程化，只实现计划中要求的内容
 5. 确保代码安全，避免 OWASP Top 10 漏洞`,

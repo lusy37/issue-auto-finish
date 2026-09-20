@@ -1,3 +1,4 @@
+import { createReviewStore } from '../helpers/review-store.js';
 import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
@@ -30,6 +31,7 @@ describe('PlanPhase', () => {
   let plan: PlanPersistence;
   let aiRunner: ReturnType<typeof createMockAIRunner>;
   let phase: PlanPhase;
+  let appendFeedback: ReturnType<typeof createReviewStore>['appendFeedback'];
 
   const ctx: PhaseContext = {
     demand: createTestDemand(),
@@ -39,7 +41,7 @@ describe('PlanPhase', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-phase-test-'));
-    plan = new PlanPersistence(tmpDir, 42);
+    ({ plan, appendFeedback } = createReviewStore(tmpDir));
     plan.ensureDir();
     aiRunner = createMockAIRunner();
 
@@ -62,7 +64,7 @@ describe('PlanPhase', () => {
   });
 
   it('uses rePlanPrompt when review feedback exists', () => {
-    plan.writeReviewFeedback('方案中缺少对性能的考虑，请补充负载测试方案。');
+    appendFeedback('方案中缺少对性能的考虑，请补充负载测试方案。');
 
     const prompt = (phase as any).buildPrompt(ctx);
     expect(prompt).toContain('审核反馈');
@@ -71,7 +73,7 @@ describe('PlanPhase', () => {
   });
 
   it('includes supplement text in rePlan prompt', () => {
-    plan.writeReviewFeedback('请增加错误处理');
+    appendFeedback('请增加错误处理');
 
     const ctxWithSupplement: PhaseContext = {
       ...ctx,
@@ -105,7 +107,7 @@ describe('PlanPhase', () => {
   it('claude + reject feedback (with planSnapshot): injects rejected plan into prompt', () => {
     const oldPlan = '# 旧方案标题\n\n这是被驳回的实施计划全文,需要被注入 prompt 让 AI 看到。';
     const feedback = '缺少错误处理与权限校验';
-    plan.writeReviewFeedback(feedback, oldPlan);
+    appendFeedback(feedback, oldPlan);
 
     const claudePhase = new PlanPhase(
       aiRunner,
@@ -125,8 +127,8 @@ describe('PlanPhase', () => {
   });
 
   it('claude + multi-round reject: only injects the LATEST snapshot (avoid stale plans)', () => {
-    plan.writeReviewFeedback('round-1 反馈', '# 第一版方案\n\n旧方案 V1 占位文本');
-    plan.writeReviewFeedback('round-2 反馈', '# 第二版方案\n\n旧方案 V2 占位文本');
+    appendFeedback('round-1 反馈', '# 第一版方案\n\n旧方案 V1 占位文本');
+    appendFeedback('round-2 反馈', '# 第二版方案\n\n旧方案 V2 占位文本');
 
     const claudePhase = new PlanPhase(
       aiRunner,
@@ -146,7 +148,7 @@ describe('PlanPhase', () => {
 
   it('claude + oversized planSnapshot: 保留完整审核快照', () => {
     const huge = '占位文本'.repeat(3000); // 远超 8000 字符上限
-    plan.writeReviewFeedback('过长方案反馈', huge);
+    appendFeedback('过长方案反馈', huge);
 
     const claudePhase = new PlanPhase(
       aiRunner,
@@ -169,7 +171,7 @@ describe('PlanPhase', () => {
     // 因此 usesDeterministicPlanCopy 返回 true,同样走 snapshot 注入路径。
     // 本测试锁定该行为,防止后续 ptyProfile 调整误伤注入逻辑。
     const oldPlan = '# claude 路径下的旧方案\n\n这份方案应同样被注入 prompt';
-    plan.writeReviewFeedback('请补充错误处理', oldPlan);
+    appendFeedback('请补充错误处理', oldPlan);
 
     const prompt = (phase as any).buildPrompt(ctx);
 
@@ -208,7 +210,7 @@ describe('Phase artifact validation', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('PlanPhase returns failed when AI succeeds but 01-plan.md is missing', async () => {
+  it('计划输出为空时失败', async () => {
     const phase = new PlanPhase(
       aiRunner,
       createMockGitOperations() as any,
@@ -222,10 +224,8 @@ describe('Phase artifact validation', () => {
     expect(intent.error.message).toMatch(/计划内容为空或不完整/);
   });
 
-  it('PlanPhase returns failed when 01-plan.md exists but is too small', async () => {
-    const planDir = path.join(tmpDir, '.claude-plan', 'issue-42');
-    fs.mkdirSync(planDir, { recursive: true });
-    fs.writeFileSync(path.join(planDir, '01-plan.md'), 'tiny');
+  it('旧展示副本不能代替本次结构化计划输出', async () => {
+    plan.writePlan('旧计划展示副本');
 
     const phase = new PlanPhase(
       aiRunner,
@@ -240,13 +240,7 @@ describe('Phase artifact validation', () => {
     expect(intent.error.message).toMatch(/计划内容为空或不完整/);
   });
 
-  it('PlanPhase succeeds when 01-plan.md has sufficient content', async () => {
-    const planDir = path.join(tmpDir, '.claude-plan', 'issue-42');
-    fs.mkdirSync(planDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(planDir, '01-plan.md'),
-      '# Plan\n\nThis is a detailed implementation plan with enough content to pass validation.\n',
-    );
+  it('有效结构化输出由服务端生成计划产物', async () => {
 
     const phase = new PlanPhase(
       aiRunner,

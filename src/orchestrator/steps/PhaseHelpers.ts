@@ -4,7 +4,7 @@
  * 供阶段副作用执行器和交付步骤共用。
  */
 import type { PlanPersistence } from '../../persistence/PlanPersistence.js';
-import type { BasePhase, PhaseContext } from '../../phases/BasePhase.js';
+import type { ArtifactSpec } from '../../shared/runtime/artifacts.js';
 import type { OrchestratorDeps } from '../IssueProcessingContext.js';
 import { isNoteSyncEnabledForIssue } from '../../notesync/NoteSyncSettings.js';
 import { truncateToSummary, buildNoteSyncComment } from '../../notesync/NoteSyncSettings.js';
@@ -25,8 +25,7 @@ export async function safeComment(deps: OrchestratorDeps, issueId: number, messa
 // ── 产物同步到 Issue ──
 
 export async function syncResultToIssue(
-  phase: BasePhase,
-  ctx: PhaseContext,
+  resultFiles: readonly ArtifactSpec[],
   displayId: number,
   phaseName: string,
   deps: OrchestratorDeps,
@@ -42,7 +41,6 @@ export async function syncResultToIssue(
       await safeComment(deps, issueId, marker ? `${body}\n${marker}` : body);
     };
     const enabled = isNoteSyncEnabledForIssue(displayId, deps.tracker, deps.config);
-    const resultFiles = phase.getResultFiles(ctx);
 
     if (!enabled || resultFiles.length === 0) {
       await commentOnce('summary', issueProgressComment(phaseName, 'completed'));

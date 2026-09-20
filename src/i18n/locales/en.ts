@@ -11,7 +11,7 @@ export const en: Record<string, string> = {
   'pipeline.phase.uat': 'UAT Verification',
   'planFile.01-plan.md': 'Implementation Plan',
   'planFile.02-verify-report.md': 'Verification Report',
-  'planFile.03-uat-report.md': 'UAT Report',
+  'planFile.03-uat-report.md': 'Browser Acceptance Report',
   'planFile.review-feedback.md': 'Review Feedback',
   'planFile.review-history.json': 'Review History',
 
@@ -104,54 +104,6 @@ export const en: Record<string, string> = {
   'docLabel.02-verify-report.md': 'Verification Report',
   'docLabel.review-feedback.md': 'Review Feedback',
 
-  'prompt.planModeVerify': `You are a **strict** test engineer. Verify the correctness of code changes.
-
-## Issue Information
-- IID: #{number}
-- Title: {title}
-
-## Idempotency Check (execute FIRST)
-Before performing any action, check if a verification report already exists:
-1. Read {planDir}/02-verify-report.md (if it exists)
-2. If the report exists and its "Summary" section contains "Verification Passed", **stop immediately** — do NOT re-run any verification steps
-3. If the report does not exist or the summary says "Verification Failed", proceed with the verification steps below
-
-**Important**: This check prevents destructive re-execution (e.g. deleting test files that already passed).
-
-## Pre-checks
-Before running verification, confirm the dependency environment:
-1. Check if {dependencyCheckPath} exists
-2. If not, run {installCommand}; if that fails, try {installFallbackCommand}
-3. If dependencies cannot be fully installed, mark as "environment issue" in the report and continue
-
-## Verification Steps
-1. Run {lintCommand} to check code style
-2. Run {buildCommand} to check compilation
-3. Run {testFilesCommand} to run relevant tests
-4. Check code changes against {planDir}/01-plan.md implementation plan consistency
-5. **Strictly check** if **all items** in {planDir}/01-plan.md Todolist are completed (- [x])
-
-## Known Pre-existing Issues (can be ignored)
-{knownIssuesSection}
-- If a lint/build/test failure **does not involve files changed in this PR**, mark as "pre-existing issue"
-
-## Verification Criteria (ALL must pass)
-- Lint zero errors (related to current changes)
-- Build successful
-- All tests pass
-- Todolist 100% complete (no unchecked items)
-- Code matches implementation plan
-
-Write verification results to {planDir}/02-verify-report.md, **must** include these sections:
-- **Lint Results**: Pass/Fail + details (distinguish current changes vs pre-existing issues)
-- **Build Results**: Pass/Fail + details (distinguish current changes vs pre-existing issues)
-- **Test Results**: Pass/Fail + details
-- **Todolist Check**: X/Y items completed + list of incomplete items
-- **Plan Consistency Check**: Whether it matches the implementation plan
-- **Summary**: Verification Passed/Verification Failed + specific reasons
-
-**Important**: If any check fails, you MUST write "Verification Failed" in the "Summary" section.`,
-
   'prompt.plan': `You are a senior technical lead. Please complete requirements analysis and solution design in one go.
 
 ## Issue Information
@@ -194,12 +146,14 @@ Ensure the Todolist is detailed enough that each step can be independently execu
 - Title: {title}
 
 Please read first:
-- {planDir}/01-plan.md (Complete implementation plan including requirements analysis, system design and Todolist)
 - AGENTS.md (Project Architecture and Code Standards)
 
+## Complete Implementation Plan
+{planContent}
+
 ## Implementation Requirements
-1. Strictly follow the Todolist in 01-plan.md, completing items one by one
-2. After completing each item, update its checkbox status in 01-plan.md (- [ ] → - [x])
+1. Implement the tasks in the complete plan and check every acceptance criterion
+2. The server persists plans and runtime artifacts; do not edit plan checkboxes or create internal artifact directories
 3. Strictly follow code standards in AGENTS.md ({codeStyleDescription})
 4. Don't over-engineer, only implement what's required in the plan
 5. Ensure code security, avoid OWASP Top 10 vulnerabilities`,

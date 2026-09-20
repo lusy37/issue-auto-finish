@@ -194,6 +194,8 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
           new PlanPersistence(
             path.join(config.project.worktreeBaseDir, "issue-" + number),
             number,
+            tracker.store.dataDir,
+            tracker,
           ),
       });
     collector.start();

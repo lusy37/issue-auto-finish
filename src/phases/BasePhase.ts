@@ -1,4 +1,5 @@
 import { resolvePromptRules } from '../knowledge/PromptRules.js';
+import { ARTIFACTS, getPhaseArtifacts } from '../shared/runtime/artifacts.js';
 import { renderPlan } from '../dag/contracts.js';
 import { decodePlanContent } from '../dag/codecs/TaskPlanCodec.js';
 import type { AIRunner, RunResult, StreamEvent } from '../ai-runner/index.js';
@@ -88,9 +89,9 @@ export abstract class BasePhase {
     this.logger = rootLogger.child(this.constructor.name);
   }
 
-  /** 获取阶段预期的产物文件列表。编排器需通过此方法同步产物到 Issue。 */
+  /** 阶段校验与发布使用同一份产物定义。 */
   getResultFiles(_ctx?: PhaseContext): Array<{ filename: string; label: string }> {
-    return [];
+    return getPhaseArtifacts(this.phaseName).map(({ filename, label }) => ({ filename, label }));
   }
 
   /**
@@ -143,7 +144,7 @@ export abstract class BasePhase {
       try { this.plan.writePlan(renderPlan(decodePlanContent(JSON.parse(result.output.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1] ?? result.output)))); }
       catch (error) { return { kind: 'failed', error: { message: `结构化计划无效：${(error as Error).message}`, retryable: 'hard' } }; }
     }
-    if (this.phaseName === 'verify') this.plan.writeFile('02-verify-report.md', result.output);
+    if (this.phaseName === 'verify') this.plan.writeFile(ARTIFACTS.verifyReport.filename, result.output);
     try {
       await this.validatePhaseOutput(ctx, displayId, expectedResultFiles);
     } catch (err) {

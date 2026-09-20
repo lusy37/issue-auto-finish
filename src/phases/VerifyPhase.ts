@@ -16,11 +16,6 @@ export class VerifyPhase extends BasePhase {
   readonly phaseName = 'verify' as const;
   private readonly reportParser = new VerifyReportParser();
 
-  getResultFiles() {
-    const filename = '02-verify-report.md';
-    return [{ filename, label: '验证报告' }];
-  }
-
   async run(ctx: PhaseContext, callbacks?: PhaseCallbacks): Promise<PhaseResult> {
     const intent = await super.run(ctx, callbacks);
     if (intent.kind !== 'completed') return intent;

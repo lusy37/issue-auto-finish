@@ -17,10 +17,8 @@ export interface PromptContext {
   supplementText?: string;
   workspace?: WorkspaceLayout;
   knowledgeEnabled?: boolean;
-}
-
-function planDir(number: number): string {
-  return `.claude-plan/issue-${number}`;
+  /** 完整计划由调用方提供，不从项目仓库猜测内部产物路径。 */
+  planContent?: string;
 }
 
 const PLAN_OUTPUT_CONSTRAINT = [
@@ -102,7 +100,6 @@ export function planModeVerifyPrompt(ctx: PromptContext): string {
 
 export function planPrompt(ctx: PromptContext): string {
   const supplementSection = ctx.supplementText ? `\n\n${ctx.supplementText}` : '';
-  const pd = planDir(ctx.issueIid);
 
   const outputInstruction = '请制定一份完整的实施计划，内容包括：';
   const outputConstraint = PLAN_OUTPUT_CONSTRAINT;
@@ -112,7 +109,6 @@ export function planPrompt(ctx: PromptContext): string {
     title: ctx.issueTitle,
     description: ctx.issueDescription,
     supplement: supplementSection,
-    planDir: pd,
     outputInstruction,
     outputConstraint,
   });
@@ -120,12 +116,11 @@ export function planPrompt(ctx: PromptContext): string {
 }
 
 export function buildPrompt(ctx: PromptContext): string {
-  const pd = planDir(ctx.issueIid);
   const kv = getKnowledgeForPrompt(ctx.knowledgeEnabled);
   const base = t('prompt.build', {
+    planContent: ctx.planContent ?? ctx.issueDescription,
     number: ctx.issueIid,
     title: ctx.issueTitle,
-    planDir: pd,
     ...kv,
   });
   return base;
@@ -166,7 +161,6 @@ export function buildReviewFeedbackResumePrompt(
 
 export function rePlanPrompt(ctx: PromptContext, history: ReviewRoundForPrompt[]): string {
   const supplementSection = ctx.supplementText ? `\n\n${ctx.supplementText}` : '';
-  const pd = planDir(ctx.issueIid);
   const feedbackLines = history.map(
     r => t('prompt.rePlanRound', { round: r.round, timestamp: r.timestamp, feedback: r.feedback })
   ).join('\n\n');
@@ -187,7 +181,6 @@ export function rePlanPrompt(ctx: PromptContext, history: ReviewRoundForPrompt[]
     supplement: supplementSection,
     historyCount: history.length,
     feedbackLines,
-    planDir: pd,
     rePlanReadInstruction,
     rePlanOutputInstruction,
     outputConstraint,

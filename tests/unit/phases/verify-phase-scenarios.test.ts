@@ -1,3 +1,4 @@
+import { resolveIssueArtifactsDir } from '../../../src/persistence/ArtifactPaths.js';
 /**
  * VerifyPhase 报告解析场景测试 — 使用 ScriptedAIRunner。
  */
@@ -163,8 +164,8 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
   });
 
   it.each(['-', '*'])('报告缺少明确命令结果时，不能凭 %s 格式待办推断验收通过', async (bullet) => {
-    // 模拟计划尚有一项未完成，验证实际阶段使用统一待办解析器。
-    const planDir = path.join(dataDir, '.claude-plan', `issue-${ISSUE_IID}`);
+    // 准备计划展示副本，确认其勾选状态不能替代本次检查结果。
+    const planDir = resolveIssueArtifactsDir(ISSUE_IID);
     mkdirSync(planDir, { recursive: true });
     writeFileSync(path.join(planDir, '01-plan.md'), `# 计划\n\n${bullet} [x] 步骤一\n  ${bullet} [X] 步骤二\n${bullet} [ ] 步骤三\n`);
 

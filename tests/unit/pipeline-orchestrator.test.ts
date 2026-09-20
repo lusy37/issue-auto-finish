@@ -24,9 +24,9 @@ const mockWtPlanInstance = {
   ensureDir: vi.fn(),
   writeIssueMeta: vi.fn(),
   writePlan: vi.fn(),
-  writeReviewFeedback: vi.fn(),
+
   readReviewFeedback: vi.fn().mockReturnValue(null),
-  mergeBackupIfPresent: vi.fn(),
+
   getAllPlanFiles: vi.fn().mockReturnValue([]),
 };
 
@@ -59,9 +59,6 @@ vi.mock('../../src/git/GitOperations.js', () => ({
 
 vi.mock('../../src/persistence/PlanPersistence.js', () => {
   const ctor = vi.fn().mockImplementation(() => mockWtPlanInstance);
-  // 静态方法：reject 路径在 worktree 缺失时降级写入全局后备
-  (ctor as unknown as { writeReviewFeedbackBackup: typeof vi.fn }).writeReviewFeedbackBackup = vi.fn();
-  (ctor as unknown as { readReviewHistoryBackup: typeof vi.fn }).readReviewHistoryBackup = vi.fn().mockReturnValue([]);
   return { PlanPersistence: ctor };
 });
 

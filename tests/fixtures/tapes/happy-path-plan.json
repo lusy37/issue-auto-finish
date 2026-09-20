@@ -10,29 +10,48 @@
   "events": [
     {
       "type": "stream-event",
-      "event": { "type": "system", "content": { "subtype": "init", "session_id": "tape-session-1" }, "timestamp": "2025-06-01T10:00:00Z" },
+      "event": {
+        "type": "system",
+        "content": {
+          "subtype": "init",
+          "session_id": "tape-session-1"
+        },
+        "timestamp": "2025-06-01T10:00:00Z"
+      },
       "offsetMs": 100
     },
     {
       "type": "stream-event",
-      "event": { "type": "assistant", "content": "I'll analyze the requirements and create a plan.", "timestamp": "2025-06-01T10:00:02Z" },
+      "event": {
+        "type": "assistant",
+        "content": "I'll analyze the requirements and create a plan.",
+        "timestamp": "2025-06-01T10:00:02Z"
+      },
       "offsetMs": 2000
     },
     {
       "type": "stream-event",
-      "event": { "type": "raw", "content": "Read(src/index.ts)", "timestamp": "2025-06-01T10:00:05Z" },
+      "event": {
+        "type": "raw",
+        "content": "Read(src/index.ts)",
+        "timestamp": "2025-06-01T10:00:05Z"
+      },
       "offsetMs": 5000
     },
     {
       "type": "stream-event",
-      "event": { "type": "raw", "content": "Write(.claude-plan/issue-42/01-plan.md)", "timestamp": "2025-06-01T10:00:30Z" },
+      "event": {
+        "type": "raw",
+        "content": "阶段产物：01-plan.md",
+        "timestamp": "2025-06-01T10:00:30Z"
+      },
       "offsetMs": 30000
     },
     {
-      "type": "file-write",
-      "path": ".claude-plan/issue-42/01-plan.md",
+      "type": "artifact-write",
       "content": "# 实现功能 A\n\n## Tasks\n\n- [ ] 创建服务类\n- [ ] 添加 REST API\n- [ ] 编写测试\n\n## 方案\n\n使用标准的分层架构实现。\n",
-      "offsetMs": 30500
+      "offsetMs": 30500,
+      "filename": "01-plan.md"
     },
     {
       "type": "stdout",
