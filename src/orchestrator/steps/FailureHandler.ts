@@ -1,3 +1,4 @@
+import { ISSUE_LABELS, withWorkbenchLabels } from '../../clients/IssueLabels.js';
 import type { GitHubIssue } from '../../clients/GitHubClient.js';
 import type { WorktreeContext } from '../../git/WorktreeContext.js';
 import type { OrchestratorDeps } from '../IssueProcessingContext.js';
@@ -48,10 +49,7 @@ export async function handleFailure(
   }
 
   try {
-    await deps.github.updateIssueLabels(issue.number, [
-      ...issue.labels.filter(l => !l.startsWith('auto-finish:') && l !== 'auto-finish'),
-      'auto-finish', 'auto-finish:failed',
-    ]);
+    await deps.github.updateIssueLabels(issue.number, withWorkbenchLabels(issue.labels, [ISSUE_LABELS.root, ISSUE_LABELS.failed]));
   } catch { /* ignore */ }
 
   try {

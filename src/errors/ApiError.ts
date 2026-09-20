@@ -1,3 +1,4 @@
+import { GITHUB_MAX_AUTO_WAIT_MS } from './GitHubPolicy.js';
 import { AppError } from "./BaseError.js";
 
 export class GitHubApiError extends AppError {
@@ -19,7 +20,7 @@ export class GitHubApiError extends AppError {
   /** Whether this error is potentially retryable (5xx, 429, or network). */
   get isRetryable(): boolean {
     return this.isRateLimited
-      ? (this.retryAfterMs ?? 60000) <= 30000
+      ? (this.retryAfterMs ?? 60000) <= GITHUB_MAX_AUTO_WAIT_MS
       : this.statusCode >= 500 || this.statusCode === 0;
   }
 

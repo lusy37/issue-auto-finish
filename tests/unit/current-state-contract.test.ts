@@ -52,18 +52,18 @@ it.each<IssueLifecycle>([
   expect(new IssueTracker(directory, managers()).get(1)!.lifecycle).toEqual(lifecycle);
 });
 
-it('v5 文件只持久化 lifecycle，不保存旧状态字段', () => {
+it('v6 文件只持久化 lifecycle，不保存旧状态字段', () => {
   const tracker = new IssueTracker(directory, managers());
   tracker.create(input());
   const stored = JSON.parse(fs.readFileSync(tracker.store.file(1), 'utf8'));
-  expect(stored.format).toBe('iaf-mini/issue-run/v5-langgraph');
+  expect(stored.format).toBe('iaf-mini/issue-run/v6-langgraph');
   expect(stored.record.lifecycle).toEqual({ kind: 'pending' });
   for (const key of ['state', 'currentPhase', 'pausedAtPhase', 'attempts', 'lastError', 'failedAtState', 'lastErrorRetryable', 'orchestrationState']) {
     expect(stored.record).not.toHaveProperty(key);
   }
 });
 
-it('v5 文件出现已删除状态字段时直接拒绝，不做清理或适配', () => {
+it('v6 文件出现已删除状态字段时直接拒绝，不做清理或适配', () => {
   const tracker = new IssueTracker(directory, managers());
   tracker.create(input());
   const file = tracker.store.file(1);

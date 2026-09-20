@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { AI_DEFAULTS, PROJECT_DEFAULTS } from "../../../../shared/runtime/defaults.js";
 import { ref, onMounted } from "vue";
 import { json } from "@/api/mini";
 import { useAction } from "@/composables/useAction";
@@ -14,8 +15,8 @@ const featureLabels: Record<string, string> = {
   VERIFY_FIX_LOOP_ENABLED: "验证失败后自动修复",
 };
 const labels: Record<string, string> = {
-  MAX_CONCURRENT_ISSUES: "同时执行的父 Issue 数量（默认 1）",
-  AI_MAX_CONCURRENCY: "全局 AI 并发额度（默认 4，范围 1～32）",
+  MAX_CONCURRENT_ISSUES: `同时执行的父 Issue 数量（默认 ${PROJECT_DEFAULTS.maxConcurrentIssues}）`,
+  AI_MAX_CONCURRENCY: `全局 AI 并发额度（默认 ${AI_DEFAULTS.maxConcurrency}，范围 1～${AI_DEFAULTS.maxConcurrencyLimit}）`,
   MAX_RETRIES: "首次执行之外的自动重试次数（0 表示不自动重试）",
   GITHUB_API_URL: "GitHub API 地址",
   GITHUB_TOKEN: "GitHub Token（留空保留原值）",
@@ -30,6 +31,10 @@ const labels: Record<string, string> = {
   UAT_CONFIG_FILE: "Playwright 配置文件",
   UAT_TIMEOUT_MS: "验收超时（毫秒）",
   E2E_BASE_URL: "验收预览地址",
+  PREVIEW_STARTUP_TIMEOUT_MS: "预览启动就绪超时（毫秒）",
+  PREVIEW_READINESS_INTERVAL_MS: "预览探测间隔（毫秒）",
+  PREVIEW_BACKEND_READY_URL: "后端就绪 HTTP 地址（可用 {port}；留空探测端口）",
+  PREVIEW_FRONTEND_READY_URL: "前端就绪 HTTP 地址（可用 {port}；留空探测端口）",
   PREVIEW_ENABLED: "启动预览服务（true / false）",
   PREVIEW_BACKEND_COMMAND: "后端启动命令（端口从 PORT 读取）",
   PREVIEW_FRONTEND_COMMAND: "前端启动命令（{port} 替换为分配端口）",

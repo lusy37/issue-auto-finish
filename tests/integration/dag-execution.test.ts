@@ -123,6 +123,8 @@ it('冲突修复额度在失败、普通重试和重新加载后仍最多两次'
   const both = new Promise<void>(resolve => { release = resolve; });
   const ai = runner(async options => {
     if (options.prompt.startsWith('只修复当前 rebase')) {
+      expect(options).toMatchObject({ mode: 'agent', timeoutMs: 10000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' });
+      expect(options.prompt).toContain('批准计划');
       conflictCalls++;
       return { ...success, success: false, errorMessage: '冲突修复失败' };
     }

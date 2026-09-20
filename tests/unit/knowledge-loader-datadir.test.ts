@@ -1,3 +1,4 @@
+import { KNOWLEDGE_DEFAULTS } from '../../src/knowledge/KnowledgeDefaults.js';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,8 +26,8 @@ describe('KnowledgeLoader DATA_DIR priority', () => {
     fs.mkdirSync(knowledgeDir, { recursive: true });
 
     const knowledgeData = {
-      version: 1,
-      projectName: 'data-dir-test',
+      ...structuredClone(KNOWLEDGE_DEFAULTS),
+      businessContext: { purpose: 'data-dir-test' },
       generatedAt: new Date().toISOString(),
       repoPath: '/test',
     };
@@ -41,7 +42,7 @@ describe('KnowledgeLoader DATA_DIR priority', () => {
 
     const result = loadKnowledge();
     expect(result).not.toBeNull();
-    expect(result!.projectName).toBe('data-dir-test');
+    expect(result!.businessContext.purpose).toBe('data-dir-test');
   });
 
   it('DATA_DIR takes priority over project directory', async () => {
@@ -51,8 +52,8 @@ describe('KnowledgeLoader DATA_DIR priority', () => {
 
     // Write to DATA_DIR
     const dataDirKnowledge = {
-      version: 1,
-      projectName: 'from-data-dir',
+      ...structuredClone(KNOWLEDGE_DEFAULTS),
+      businessContext: { purpose: 'from-data-dir' },
       generatedAt: new Date().toISOString(),
       repoPath: '/test',
     };
@@ -66,6 +67,6 @@ describe('KnowledgeLoader DATA_DIR priority', () => {
 
     const result = loadKnowledge();
     expect(result).not.toBeNull();
-    expect(result!.projectName).toBe('from-data-dir');
+    expect(result!.businessContext.purpose).toBe('from-data-dir');
   });
 });

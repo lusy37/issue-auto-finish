@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "baseUrl": ".",
+    "paths": { "@/*": ["src/web/frontend/src/*"] }
+  },
+  "include": ["tests/**/*.ts", "src/**/*.ts", "src/**/*.vue"],
+  "exclude": ["node_modules", "dist", "src/web/frontend/dist"]
+}

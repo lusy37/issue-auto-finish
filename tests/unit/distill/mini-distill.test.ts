@@ -94,7 +94,7 @@ it("非法蒸馏不消费日记；手动重试、规则启用、版本及执行�
       knowledgeStore,
       versionStore,
       workDir: dir,
-      timeoutMs: 1000,
+      aiPolicy: { timeoutMs: 1000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' },
       minDiariesForDistill: 1,
     }),
     agentRuleDistiller: new AgentRuleDistiller({
@@ -102,7 +102,7 @@ it("非法蒸馏不消费日记；手动重试、规则启用、版本及执行�
       knowledgeStore,
       versionStore,
       workDir: dir,
-      timeoutMs: 1000,
+      aiPolicy: { timeoutMs: 1000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' },
       confidenceThreshold: 0.2,
     }),
   };

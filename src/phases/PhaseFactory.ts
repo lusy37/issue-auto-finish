@@ -6,12 +6,12 @@ import { PhaseNotRegisteredError, UnregisteredPhasesError } from '../errors/inde
 import { BasePhase } from './BasePhase.js';
 import { VerifyPhase } from './VerifyPhase.js';
 import { PlanPhase } from './PlanPhase.js';
-import { BuildPhase } from './BuildPhase.js';
 import { UatPhase } from './UatPhase.js';
 import type { PhaseSessionStore } from './PhaseSessionStore.js';
 
 type PhaseArgs = [AIRunner, GitOperations, PlanPersistence, Config, PhaseSessionStore?];
-export type PhaseConstructor = new (...args: PhaseArgs) => BasePhase;
+export type PhaseExecutor = Pick<BasePhase, 'phaseName' | 'run' | 'getResultFiles'>;
+export type PhaseConstructor = new (...args: PhaseArgs) => PhaseExecutor;
 
 // ---------------------------------------------------------------------------
 // Phase Registry
@@ -36,7 +36,6 @@ export function _resetPhaseRegistry(): void {
 
 function registerBuiltinPhases(): void {
   PHASE_REGISTRY.set('plan', PlanPhase);
-  PHASE_REGISTRY.set('build', BuildPhase);
   PHASE_REGISTRY.set('verify', VerifyPhase);
   PHASE_REGISTRY.set('uat', UatPhase);
 }
@@ -47,7 +46,7 @@ registerBuiltinPhases();
 // Factory / validation
 // ---------------------------------------------------------------------------
 
-export function createPhase(name: string, ...args: PhaseArgs): BasePhase {
+export function createPhase(name: string, ...args: PhaseArgs): PhaseExecutor {
   const Ctor = PHASE_REGISTRY.get(name);
   if (!Ctor) {
     throw new PhaseNotRegisteredError(name, [...PHASE_REGISTRY.keys()]);

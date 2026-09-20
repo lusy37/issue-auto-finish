@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PlanPhase } from '../../src/phases/PlanPhase.js';
-import { BuildPhase } from '../../src/phases/BuildPhase.js';
+import { VerifyPhase } from '../../src/phases/VerifyPhase.js';
 import { PlanPersistence } from '../../src/persistence/PlanPersistence.js';
 import type { PhaseContext } from '../../src/phases/BasePhase.js';
 import type { DemandSpec } from '../../src/demand/DemandSpec.js';
@@ -145,16 +145,16 @@ describe('Session Resume — 聚合状态', () => {
     expect(tracker.getPhaseProgress(42, 'plan')?.sessionId).toBe('result-session');
   });
 
-  it('BuildPhase 使用相同的聚合状态恢复规则', async () => {
-    setPhaseProgress(tracker, 'build', { status: 'failed', sessionId: 'build-session' });
+  it('VerifyPhase 使用相同的聚合状态恢复规则', async () => {
+    setPhaseProgress(tracker, 'verify', { status: 'failed', sessionId: 'verify-session' });
     const git = createMockGitOperations();
     git.hasChanges.mockResolvedValue(true);
-    const phase = new BuildPhase(aiRunner, git as never, plan, createTestConfig(), tracker);
+    const phase = new VerifyPhase(aiRunner, git as never, plan, createTestConfig(), tracker);
 
     await phase.run(ctx);
 
     expect(aiRunner.run.mock.calls[0][0]).toMatchObject({
-      sessionId: 'build-session',
+      sessionId: 'verify-session',
       continueSession: true,
     });
   });

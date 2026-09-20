@@ -1,3 +1,5 @@
+import { ISSUE_LABELS } from '../../clients/IssueLabels.js';
+import { inspectWorkflow, GraphSnapshotChangedError } from '../../orchestrator/inspectWorkflow.js';
 import { ARTIFACTS } from '../../shared/runtime/artifacts.js';
 import { renderPlan } from '../../dag/contracts.js';
 import { resolveIssueArtifactsDir, resolveIssueArtifactPath } from '../../persistence/ArtifactPaths.js';
@@ -343,13 +345,22 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     res.json({ success: true, message: `Plan file ${filename} saved` });
   });
 
+  router.get('/api/issues/:number/graphs', async (req: Request, res: Response) => {
+    const number = Number(req.params.number);
+    if (!tracker.get(number)) { res.status(404).json({ error: 'Issue 不存在' }); return; }
+    try { res.json(await inspectWorkflow(tracker, number)); }
+    catch (error) {
+      res.status(error instanceof GraphSnapshotChangedError ? 409 : 500).json({ error: (error as Error).message });
+    }
+  });
+
   router.get('/api/issues/:number/tasks', (req: Request, res: Response) => {
     const number = Number(req.params.number);
     const record = tracker.get(number);
     if (!record) { res.status(404).json({ error: 'Issue 不存在' }); return; }
     const run = record.run!;
     const plan = run.planRevision && run.planDigest ? tracker.store.readPlan(number, run.planRevision, run.planDigest) : undefined;
-    res.json({ planRevision: run.planRevision, buildGeneration: run.buildGeneration, control: run.stopIntent, tasks: plan?.tasks.map(task => ({ ...task, ...run.tasks[task.id] })) ?? [] });
+    res.json({ version: run.version, workflowGeneration: run.workflow.generation, planRevision: run.planRevision, buildGeneration: run.buildGeneration, control: run.stopIntent, tasks: plan?.tasks.filter(task => run.tasks[task.id]).map(task => ({ ...task, ...run.tasks[task.id] })) ?? [] });
   });
 
   router.get('/api/issues/:number/logs', (req: Request, res: Response) => {
@@ -458,7 +469,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
 
       try {
-        await github.addLabel(body.issueIid, 'auto-finish');
+        await github.addLabel(body.issueIid, ISSUE_LABELS.root);
       } catch (err) {
         logger.warn('Failed to add auto-finish label', { error: (err as Error).message });
       }

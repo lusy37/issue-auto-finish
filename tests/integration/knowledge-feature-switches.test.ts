@@ -1,3 +1,8 @@
+import { DagPhaseRunner } from '../../src/orchestrator/DagPhaseRunner.js';
+import { GitOperations } from '../../src/git/GitOperations.js';
+import { AsyncMutex } from '../../src/utils/AsyncMutex.js';
+import { graphFixture, task } from '../helpers/dag-repository.js';
+import { createMockOrchestratorDeps } from '../helpers/mock-factories.js';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,7 +15,6 @@ import { VersionStore } from '../../src/distill/VersionStore.js';
 import { MemoryDistiller } from '../../src/distill/MemoryDistiller.js';
 import { AgentRuleDistiller } from '../../src/distill/AgentRuleDistiller.js';
 import { DistillScheduler } from '../../src/distill/DistillScheduler.js';
-import { BuildPhase } from '../../src/phases/BuildPhase.js';
 import { VerifyPhase } from '../../src/phases/VerifyPhase.js';
 import type { PhaseContext } from '../../src/phases/BasePhase.js';
 import { PlanPersistence } from '../../src/persistence/PlanPersistence.js';
@@ -20,6 +24,7 @@ import { createTestConfig, createMockGitOperations } from '../helpers/mock-facto
 import type { AIRunner, RunOptions } from '../../src/ai-runner/AIRunner.js';
 
 let dir: string;
+const graphDirectories: string[] = [];
 beforeEach(() => {
   const root = path.resolve('.iaf-mini/repair-tests');
   fs.mkdirSync(root, { recursive: true });
@@ -29,6 +34,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   resetKnowledgeCache();
+  for (const directory of graphDirectories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
   vi.unstubAllEnvs();
   fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -60,6 +66,7 @@ it.each([
     killAll() {}, killByWorkDir() { return 0; },
     async run(options) {
       calls.push(options);
+      if (options.phaseName === 'build') fs.writeFileSync(path.join(options.workDir, 'feature.txt'), '代码变化');
       if (options.phaseName === 'verify') plan.writeFile('02-verify-report.md', '# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: 通过\n\n## 总结\n所有检查通过。');
       return { success: true, exitCode: 0, output: options.phaseName === 'verify' ? plan.readFile('02-verify-report.md')! : JSON.stringify({ actions: [] }) };
     },
@@ -70,9 +77,13 @@ it.each([
     demand: { demandId: 'gh-1', title: '开发页面', description: '实现需求', createdAt: new Date().toISOString(), sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' } },
     branchName: 'feat/issue-1', pipelineMode: 'plan-mode',
   };
-  for (const Phase of [BuildPhase, VerifyPhase]) {
+  for (const Phase of [VerifyPhase]) {
     expect((await new Phase(runner, git as never, plan, config).run(ctx)).kind).toBe('completed');
   }
+  const f = graphFixture([task('a')]); graphDirectories.push(f.directory);
+  Object.assign(config.project, { gitRootDir: f.repo, workDir: f.integration, worktreeBaseDir: f.worktrees, projectSubDir: '' });
+  const native = new DagPhaseRunner(createMockOrchestratorDeps({ config, tracker: f.tracker, aiRunner: runner, mainGitMutex: new AsyncMutex() }), new GitOperations(f.integration), new PlanPersistence(f.integration, 1, f.data, f.tracker));
+  expect((await native.run({ id: 'build', label: '构建', kind: 'ai' }, { issueIid: 1, demand: f.tracker.get(1)!.demandSpec, workDir: f.integration, branchName: 'iaf-1' })).kind).toBe('completed');
   const prompt = calls.map(call => call.prompt).join('\n');
   for (const marker of ['附加业务知识标记', '附加约定标记', '附加代码规则标记', '历史问题标记', '旧经验规则标记', '附加自定义知识标记']) {
     expect(prompt.includes(marker), marker).toBe(flags.knowledge);
@@ -93,7 +104,7 @@ it.each([
     timing: { totalDurationMs: 100, phaseTimings: [], startedAt: now, finishedAt: now },
     humanInterventions: [], distilled: false, createdAt: now,
   });
-  const distillerDeps = { aiRunner: runner, diaryStore, knowledgeStore, versionStore, workDir: dir, timeoutMs: 1000 };
+  const distillerDeps = { aiRunner: runner, diaryStore, knowledgeStore, versionStore, workDir: dir, aiPolicy: { timeoutMs: 1000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' } };
   const scheduler = new DistillScheduler({
     enabled: flags.distill, diaryStore, knowledgeStore,
     memoryDistiller: new MemoryDistiller({ ...distillerDeps, minDiariesForDistill: 1 }),

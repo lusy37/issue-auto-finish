@@ -1,3 +1,5 @@
+import { AI_DEFAULTS } from '../shared/runtime/defaults.js';
+import { parseCodexSessionId } from './SessionId.js';
 import path from 'node:path';
 import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
 import { fileURLToPath } from 'node:url';
@@ -5,7 +7,7 @@ import { spawnProcess } from '../utils/process.js';
 import type { AIRunner, RunOptions, RunResult, StreamEvent } from './AIRunner.js';
 import { ConcurrencyLimiter } from './ConcurrencyLimiter.js';
 
-let globalLimiter = new ConcurrencyLimiter(4);
+let globalLimiter = new ConcurrencyLimiter(AI_DEFAULTS.maxConcurrency);
 export function configureAIConcurrency(limit: number): void {
   if (globalLimiter.limit === limit) return;
   if (globalLimiter.running || globalLimiter.waiting) throw new Error('修改 AI 并发需重启服务');
@@ -18,7 +20,7 @@ export class ManagedCodexRunner implements AIRunner {
     if (this.calls.size) await new Promise<void>(resolve => this.idleWaiters.add(resolve));
   }
   constructor(private binary = '', private model?: string) {}
-  canResumeSession(sessionId: string): boolean { return sessionId.startsWith('codex:') && sessionId.length > 6; }
+  canResumeSession(sessionId: string): boolean { return parseCodexSessionId(sessionId) !== undefined; }
   killAll(): void { for (const controller of this.calls.keys()) controller.abort(); }
   killByWorkDir(workDir: string): number {
     let count = 0;

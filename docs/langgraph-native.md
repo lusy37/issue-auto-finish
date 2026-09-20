@@ -57,7 +57,9 @@
 
 自定义 IssueCheckpointer 实现框架的存储协议，目的是复用现有每 Issue 聚合事务。另开一个检查点数据库会产生两个独立写入边界，不能自动保证审核事实与执行结果一致。
 
-运行格式为 `iaf-mini/issue-run/v5-langgraph`。开发阶段不保留 v4 及更早格式的读取、投影或迁移代码；非 v5 文件会在加载边界被拒绝。演示默认使用 `.iaf-mini/demo-langgraph-v5`，模型变更后应切换新的 DATA_DIR 或清空确认无用的开发数据。
+检查点和 pending write 继续使用 LangGraph JsonPlus 序列化，但 `json` 类型直接以 UTF-8 JSON 文本写入聚合文件，不再经过 Base64；当前工作流若产生其他序列化类型会在持久化边界明确拒绝。
+
+运行格式为 `iaf-mini/issue-run/v6-langgraph`。开发阶段不保留 v5 及更早格式的读取、投影或迁移代码；非 v6 文件会在加载边界被拒绝。演示默认使用 `.iaf-mini/demo-langgraph-v6`，模型变更后应切换新的 DATA_DIR 或清空确认无用的开发数据。
 
 Zod 只保留在不可信数据边界：聚合 JSON、AI 计划输出、审核输入及 LangGraph `StateSchema`。`contracts.ts` 和 `WorkflowState.ts` 只定义 TypeScript 领域类型；DAG 循环、审核反馈、版本与凭证归属等跨字段规则由普通 invariant 函数表达，避免业务规则隐藏在大型 Schema/refine 中。
 
@@ -120,3 +122,5 @@ npm run test:all -- --maxWorkers=1 --testTimeout=180000 --hookTimeout=60000
 | `npm run test:windows` | 1/1 通过，退出码 0；5.46 秒 |
 
 完整运行和定向复验合并覆盖当前 876 项测试；由于宿主机当时有 200 余个 Node/MCP 进程，没有把结果表述成“单次完整命令全绿”。本轮回归使用真实临时 Git 仓库和真实 Edge 浏览器；AI 与 GitHub 平台均为模拟实现，没有把模拟结果表述为真实 Codex 或真实 GitHub 写入。GitHub 已发出的外部请求仍无法与本地 JSON 做跨系统事务回滚；实现只保证旧 workflow generation、旧派发或旧候选提交的迟到响应不能覆盖新的本地状态。完整结构化证据见 [最新验收记录](evidence/langgraph-native-validation.json)。
+
+2026-09-20：调用策略、旧路径清理、双图展示与工程检查已落地，见 [实施记录](langgraph-native-repair-plan.md#10-本轮落地记录)。业务生命周期与页面图的数据来源见 [双图说明](issue-lifecycle.md)。

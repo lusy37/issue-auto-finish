@@ -68,7 +68,7 @@ describe('AgentRuleDistiller', () => {
       knowledgeStore,
       versionStore,
       workDir: tmpDir,
-      timeoutMs: 10000,
+      aiPolicy: { timeoutMs: 10000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' },
       confidenceThreshold: 0.7,
       rulesDir,
     });
@@ -95,17 +95,19 @@ describe('AgentRuleDistiller', () => {
       ],
     });
 
+    const runner = makeMockAIRunner('```json\n' + aiOutput + '\n```');
     const distiller = new AgentRuleDistiller({
-      aiRunner: makeMockAIRunner('```json\n' + aiOutput + '\n```'),
+      aiRunner: runner,
       knowledgeStore,
       versionStore,
       workDir: tmpDir,
-      timeoutMs: 10000,
+      aiPolicy: { timeoutMs: 10000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' },
       confidenceThreshold: 0.7,
       rulesDir,
     });
 
     const result = await distiller.distill();
+    expect(runner.run).toHaveBeenCalledWith(expect.objectContaining({ mode: 'plan', timeoutMs: 10000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' }));
     expect(result.actions).toBe(1);
 
     // Check MDC file created
@@ -129,7 +131,7 @@ describe('AgentRuleDistiller', () => {
       knowledgeStore,
       versionStore,
       workDir: tmpDir,
-      timeoutMs: 10000,
+      aiPolicy: { timeoutMs: 10000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' },
       confidenceThreshold: 0.7,
       rulesDir,
     });
@@ -163,7 +165,7 @@ describe('AgentRuleDistiller', () => {
       knowledgeStore,
       versionStore,
       workDir: tmpDir,
-      timeoutMs: 10000,
+      aiPolicy: { timeoutMs: 10000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' },
       confidenceThreshold: 0.7,
       rulesDir,
     });

@@ -1,3 +1,6 @@
+import type { GitOperations } from '../../src/git/GitOperations.js';
+import type { GitHubClient } from '../../src/clients/GitHubClient.js';
+import type { RunOptions } from '../../src/ai-runner/AIRunner.js';
 import { newIssueRun, type PlanContent } from '../../src/dag/contracts.js';
 import { vi } from 'vitest';
 import type { Config } from '../../src/config.js';
@@ -8,7 +11,6 @@ import type {
   GitDeps,
   AIDeps,
   PreviewDeps,
-  CompletionDeps,
   PolicyDeps,
   OrchestratorDeps,
 } from '../../src/orchestrator/IssueProcessingContext.js';
@@ -16,70 +18,70 @@ import { EventBus } from '../../src/events/EventBus.js';
 
 export function createMockGitOperations() {
   return {
-    fetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    resetOwned: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    fetchAndPull: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    createBranch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    checkout: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    add: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    commit: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    push: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    branchExists: vi.fn<() => Promise<boolean>>().mockResolvedValue(false),
-    remoteBranchExists: vi.fn<() => Promise<boolean>>().mockResolvedValue(false),
-    getCurrentBranch: vi.fn<() => Promise<string>>().mockResolvedValue('master'),
-    hasChanges: vi.fn<() => Promise<boolean>>().mockResolvedValue(false),
-    stash: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    stashPop: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    addAndCommit: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    addCommitAndPush: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    checkoutTrack: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    worktreeAdd: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    worktreeAddExisting: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    worktreeAddTracking: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    worktreeRemove: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    worktreePrune: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    worktreeList: vi.fn<() => Promise<string[]>>().mockResolvedValue([]),
-    deleteBranch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    deleteRemoteBranch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    isRebaseInProgress: vi.fn<() => Promise<boolean>>().mockResolvedValue(false),
-    rebaseAbort: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    showFile: vi.fn<() => Promise<string | null>>().mockResolvedValue(null),
-    refExists: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
+    fetch: vi.fn<(...args: Parameters<GitOperations['fetch']>) => Promise<void>>().mockResolvedValue(undefined),
+    resetOwned: vi.fn<(...args: Parameters<GitOperations['resetOwned']>) => Promise<void>>().mockResolvedValue(undefined),
+    fetchAndPull: vi.fn<(...args: Parameters<GitOperations['fetchAndPull']>) => Promise<void>>().mockResolvedValue(undefined),
+    createBranch: vi.fn<(...args: Parameters<GitOperations['createBranch']>) => Promise<void>>().mockResolvedValue(undefined),
+    checkout: vi.fn<(...args: Parameters<GitOperations['checkout']>) => Promise<void>>().mockResolvedValue(undefined),
+    add: vi.fn<(...args: Parameters<GitOperations['add']>) => Promise<void>>().mockResolvedValue(undefined),
+    commit: vi.fn<(...args: Parameters<GitOperations['commit']>) => Promise<void>>().mockResolvedValue(undefined),
+    push: vi.fn<(...args: Parameters<GitOperations['push']>) => Promise<void>>().mockResolvedValue(undefined),
+    branchExists: vi.fn<(...args: Parameters<GitOperations['branchExists']>) => Promise<boolean>>().mockResolvedValue(false),
+    remoteBranchExists: vi.fn<(...args: Parameters<GitOperations['remoteBranchExists']>) => Promise<boolean>>().mockResolvedValue(false),
+    getCurrentBranch: vi.fn<(...args: Parameters<GitOperations['getCurrentBranch']>) => Promise<string>>().mockResolvedValue('master'),
+    hasChanges: vi.fn<(...args: Parameters<GitOperations['hasChanges']>) => Promise<boolean>>().mockResolvedValue(false),
+    stash: vi.fn<(...args: Parameters<GitOperations['stash']>) => Promise<void>>().mockResolvedValue(undefined),
+    stashPop: vi.fn<(...args: Parameters<GitOperations['stashPop']>) => Promise<void>>().mockResolvedValue(undefined),
+    addAndCommit: vi.fn<(...args: Parameters<GitOperations['addAndCommit']>) => Promise<void>>().mockResolvedValue(undefined),
+    addCommitAndPush: vi.fn<(...args: Parameters<GitOperations['addCommitAndPush']>) => Promise<void>>().mockResolvedValue(undefined),
+    checkoutTrack: vi.fn<(...args: Parameters<GitOperations['checkoutTrack']>) => Promise<void>>().mockResolvedValue(undefined),
+    worktreeAdd: vi.fn<(...args: Parameters<GitOperations['worktreeAdd']>) => Promise<void>>().mockResolvedValue(undefined),
+    worktreeAddExisting: vi.fn<(...args: Parameters<GitOperations['worktreeAddExisting']>) => Promise<void>>().mockResolvedValue(undefined),
+    worktreeAddTracking: vi.fn<(...args: Parameters<GitOperations['worktreeAddTracking']>) => Promise<void>>().mockResolvedValue(undefined),
+    worktreeRemove: vi.fn<(...args: Parameters<GitOperations['worktreeRemove']>) => Promise<void>>().mockResolvedValue(undefined),
+    worktreePrune: vi.fn<(...args: Parameters<GitOperations['worktreePrune']>) => Promise<void>>().mockResolvedValue(undefined),
+    worktreeList: vi.fn<(...args: Parameters<GitOperations['worktreeList']>) => Promise<string[]>>().mockResolvedValue([]),
+    deleteBranch: vi.fn<(...args: Parameters<GitOperations['deleteBranch']>) => Promise<void>>().mockResolvedValue(undefined),
+    deleteRemoteBranch: vi.fn<(...args: Parameters<GitOperations['deleteRemoteBranch']>) => Promise<void>>().mockResolvedValue(undefined),
+    isRebaseInProgress: vi.fn<(...args: Parameters<GitOperations['isRebaseInProgress']>) => Promise<boolean>>().mockResolvedValue(false),
+    rebaseAbort: vi.fn<(...args: Parameters<GitOperations['rebaseAbort']>) => Promise<void>>().mockResolvedValue(undefined),
+    showFile: vi.fn<(...args: Parameters<GitOperations['showFile']>) => Promise<string | null>>().mockResolvedValue(null),
+    refExists: vi.fn<(...args: Parameters<GitOperations['refExists']>) => Promise<boolean>>().mockResolvedValue(true),
   };
 }
 
 export function createMockGitHubClient() {
   return {
-    listIssues: vi.fn<() => Promise<GitHubIssue[]>>().mockResolvedValue([]),
+    listIssues: vi.fn<(...args: Parameters<GitHubClient['listIssues']>) => Promise<GitHubIssue[]>>().mockResolvedValue([]),
     listIssuesAdvanced: vi.fn().mockResolvedValue({ issues: [], total: 0 }),
-    getIssueDetail: vi.fn<() => Promise<GitHubIssue>>(),
-    createIssueNote: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    updateIssueLabels: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    addLabel: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    getIssueDetail: vi.fn<(...args: Parameters<GitHubClient['getIssueDetail']>) => Promise<GitHubIssue>>(),
+    createIssueNote: vi.fn<(...args: Parameters<GitHubClient['createIssueNote']>) => Promise<void>>().mockResolvedValue(undefined),
+    updateIssueLabels: vi.fn<(...args: Parameters<GitHubClient['updateIssueLabels']>) => Promise<void>>().mockResolvedValue(undefined),
+    addLabel: vi.fn<(...args: Parameters<GitHubClient['addLabel']>) => Promise<void>>().mockResolvedValue(undefined),
     createPullRequest: vi.fn().mockResolvedValue({
       id: 1, number: 1, title: 'test PR', html_url: 'https://github.example.com/pr/1', state: 'open',
     }),
-    createPullRequestNote: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    createPullRequestNote: vi.fn<(...args: Parameters<GitHubClient['createPullRequestNote']>) => Promise<void>>().mockResolvedValue(undefined),
     uploadFile: vi.fn().mockResolvedValue({
       alt: 'screenshot', url: '/uploads/hash/screenshot.png', markdown: '![screenshot](/uploads/hash/screenshot.png)',
     }),
     findPullRequestByBranch: vi.fn().mockResolvedValue(null),
-    closePullRequest: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    closePullRequest: vi.fn<(...args: Parameters<GitHubClient['closePullRequest']>) => Promise<void>>().mockResolvedValue(undefined),
     deleteIssue: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    closeIssue: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    closeIssue: vi.fn<(...args: Parameters<GitHubClient['closeIssue']>) => Promise<void>>().mockResolvedValue(undefined),
     createIssue: vi.fn().mockResolvedValue({
       id: 200, number: 99, title: 'Created Issue', description: 'desc', state: 'open',
       labels: ['auto-finish'], created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z',
       author: { username: 'testuser', name: 'Test User' },
     }),
     listIssueNotes: vi.fn().mockResolvedValue([]),
-    deleteIssueNote: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    cleanupAgentNotes: vi.fn<() => Promise<number>>().mockResolvedValue(0),
-    removeLabelsWithPrefix: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    deleteIssueNote: vi.fn<(...args: Parameters<GitHubClient['deleteIssueNote']>) => Promise<void>>().mockResolvedValue(undefined),
+    cleanupAgentNotes: vi.fn<(...args: Parameters<GitHubClient['cleanupAgentNotes']>) => Promise<number>>().mockResolvedValue(0),
+    removeLabelsWithPrefix: vi.fn<(...args: Parameters<GitHubClient['removeLabelsWithPrefix']>) => Promise<void>>().mockResolvedValue(undefined),
     getCurrentUser: vi.fn().mockResolvedValue({ id: 1, username: 'bot-user', name: 'Bot User' }),
     setIssueAssignee: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     clearIssueAssignee: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    updateIssueNote: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    updateIssueNote: vi.fn<(...args: Parameters<GitHubClient['updateIssueNote']>) => Promise<void>>().mockResolvedValue(undefined),
     createIssueNotePlain: vi.fn().mockResolvedValue({ id: 999, body: '', author: { username: 'bot-user', name: 'Bot' }, created_at: '2024-01-01T00:00:00Z' }),
   };
 }
@@ -92,7 +94,7 @@ export function createMockAIRunner() {
     exitCode: 0,
   };
   return {
-    run: vi.fn<() => Promise<RunResult>>().mockResolvedValue(defaultResult),
+    run: vi.fn<(options: RunOptions) => Promise<RunResult>>().mockResolvedValue(defaultResult),
     killAll: vi.fn(),
     killByWorkDir: vi.fn().mockReturnValue(0),
   };
@@ -161,7 +163,9 @@ export function createMockIssueTracker() {
   return tracker;
 }
 
-export function createTestConfig(overrides?: Partial<Config>): Config {
+export type TestConfigOverrides = { [K in keyof Config]?: Config[K] extends object ? Partial<Config[K]> : Config[K] };
+
+export function createTestConfig(overrides?: TestConfigOverrides): Config {
   return {
     github: {
       apiUrl: 'https://github.example.com',
@@ -179,10 +183,14 @@ export function createTestConfig(overrides?: Partial<Config>): Config {
       ...overrides?.project,
     },
     ai: {
+      maxConcurrency: 4,
+      idleTimeoutMs: 1200000,
+      timeoutGraceMs: 60000,
+      timeoutExtensionMs: 600000,
+      timeoutMaxExtensions: 3,
       mode: 'codex',
       binary: '',
       phaseTimeoutMs: 1800000,
-      nvmNodeVersion: '20',
       model: 'test-codex-model',
       ...overrides?.ai,
     },
@@ -214,16 +222,23 @@ export function createTestConfig(overrides?: Partial<Config>): Config {
       ...overrides?.issueNoteSync,
     },
     e2e: {
+      timeoutMs: 300000,
       configFile: 'playwright.config.ts',
       enabled: false,
       baseUrl: 'https://localhost:8890',
-      backendUrl: 'http://127.0.0.1:3000',
-      authCookies: '[]',
       backendPortBase: 14000,
       frontendPortBase: 19000,
       ...overrides?.e2e,
     },
     preview: {
+      startupTimeoutMs: 60000,
+      readinessIntervalMs: 200,
+      backendReadyUrl: '',
+      frontendReadyUrl: '',
+      backendCommand: '',
+      frontendCommand: '',
+      frontendDir: '.',
+      reapIntervalMs: 300000,
       enabled: false,
       host: '',
       ttlMs: 86400000,
@@ -234,60 +249,7 @@ export function createTestConfig(overrides?: Partial<Config>): Config {
       cleanupEnabled: true,
       retentionMs: 604800000,
       cleanupIntervalMs: 3600000,
-      ideSshHost: '',
       ...overrides?.worktree,
-    },
-    brainstorm: {
-      enabled: true,
-      maxRefinementRounds: 5,
-      timeoutMs: 600000,
-      generator: {
-        mode: 'codex' as const,
-        binary: '',
-        nvmNodeVersion: '20',
-        model: 'test-codex-model',
-      },
-      reviewer: {
-        mode: 'codex' as const,
-        binary: '',
-        nvmNodeVersion: '20',
-        model: 'test-codex-model',
-      },
-      ...overrides?.brainstorm,
-    },
-    chat: {
-      enabled: true,
-      timeoutMs: 300000,
-      maxSessionMessages: 100,
-      agent: {
-        mode: 'codex' as const,
-        binary: '',
-        nvmNodeVersion: '20',
-        model: 'test-codex-model',
-      },
-      ...overrides?.chat,
-    },
-    braindump: {
-      enabled: true,
-      maxConcurrent: 3,
-      splitTimeoutMs: 300000,
-      taskTimeoutMs: 1800000,
-      maxConflictAttempts: 20,
-      createPr: false,
-      ...overrides?.braindump,
-    },
-    autoUpdate: {
-      enabled: true,
-      intervalMs: 600000,
-      registry: 'https://registry.npmjs.org',
-      drainTimeoutMs: 300000,
-      ...overrides?.autoUpdate,
-    },
-    iwiki: {
-      authCookie: undefined,
-      authToken: undefined,
-      baseUrl: undefined,
-      ...overrides?.iwiki,
     },
     locale: overrides?.locale ?? 'zh-CN',
     knowledge: {
@@ -297,46 +259,16 @@ export function createTestConfig(overrides?: Partial<Config>): Config {
     },
     distill: {
       enabled: true,
-      intervalMs: 3600000,
-      diarySummarize: true,
       minDiariesForDistill: 3,
       memoryConfidenceThreshold: 0.7,
-      vectorEnabled: false,
       ...overrides?.distill,
-    },
-    coordination: {
-      nodeId: undefined,
-      ...overrides?.coordination,
-    },
-    sync: {
-      knowledgeToProject: false,
-      rulesToProject: false,
-      ...overrides?.sync,
     },
     verifyFixLoop: {
       enabled: true,
       maxIterations: 3,
-      todolistCheckEnabled: true,
       ...overrides?.verifyFixLoop,
     },
-    release: {
-      enabled: false,
-      detectCacheTtlMs: 604800000,
-      ...overrides?.release,
-    },
-    terminal: {
-      enabled: false,
-      idleTimeoutMs: 1800000,
-      maxSessions: 5,
-      ...overrides?.terminal,
-    },
-    pty: {
-      idleDetectMs: 30000,
-      defaultAgent: 'codex',
-      phaseAgents: {},
-      ...overrides?.pty,
-    },
-  } as Config;
+  };
 }
 
 export function createMockSystemUseCaseAnalyzer() {
@@ -398,7 +330,6 @@ export function createMockPlanPersistence() {
 
 export function createMockCoreDeps(overrides?: Partial<CoreDeps>): CoreDeps {
   return {
-    tenantId: 'test',
     config: createTestConfig(),
     tracker: createMockIssueTracker() as any,
     github: createMockGitHubClient() as any,
@@ -427,19 +358,11 @@ export function createMockAIDeps(overrides?: Partial<AIDeps>): AIDeps {
 
 export function createMockPreviewDeps(overrides?: Partial<PreviewDeps>): PreviewDeps {
   return {
-    shouldDeployServers: vi.fn().mockReturnValue(false),
     startPreviewServers: vi.fn().mockResolvedValue(null),
     stopPreviewServers: vi.fn(),
     buildPreviewUrl: vi.fn().mockReturnValue(null),
     getPortsForIssue: vi.fn().mockReturnValue(undefined),
     isPreviewRunning: vi.fn().mockReturnValue(false),
-    ...overrides,
-  };
-}
-
-export function createMockCompletionDeps(overrides?: Partial<CompletionDeps>): CompletionDeps {
-  return {
-    screenshotPublisher: { publishScreenshot: vi.fn() } as any,
     ...overrides,
   };
 }
@@ -458,7 +381,6 @@ export function createMockOrchestratorDeps(overrides?: Partial<OrchestratorDeps>
     ...createMockGitDeps(),
     ...createMockAIDeps(),
     ...createMockPreviewDeps(),
-    ...createMockCompletionDeps(),
     ...createMockPolicyDeps(),
     portAllocator: { allocate: vi.fn(), release: vi.fn(), getPortsForIssue: vi.fn() } as any,
     devServerManager: { start: vi.fn(), stop: vi.fn(), getStatus: vi.fn().mockReturnValue({ running: false }) } as any,

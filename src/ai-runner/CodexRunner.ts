@@ -1,10 +1,10 @@
+import { codexSessionId, parseCodexSessionId } from './SessionId.js';
 import path from 'node:path';
 import { Codex, type ThreadOptions, type ThreadItem } from '@openai/codex-sdk';
 import type { AIRunner, RunOptions, RunResult } from './AIRunner.js';
 import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
 import { findExecutable } from '../utils/process.js';
 
-const SESSION_PREFIX = 'codex:';
 
 /** 留空时由 SDK 定位随依赖安装的原生程序；Windows 不接受脚本启动器。 */
 export function createCodexClient(binary = ''): Codex {
@@ -30,7 +30,7 @@ export class CodexRunner implements AIRunner {
 
   /** 会话标识是不透明值；仅接受本执行器命名空间内的非空标识。 */
   canResumeSession(sessionId: string): boolean {
-    return sessionId.startsWith(SESSION_PREFIX) && sessionId.length > SESSION_PREFIX.length;
+    return parseCodexSessionId(sessionId) !== undefined;
   }
 
   async run(options: RunOptions): Promise<RunResult> {
@@ -97,7 +97,7 @@ export class CodexRunner implements AIRunner {
         model: options.model || this.model || undefined,
       };
       const thread = sessionId
-        ? client.resumeThread(sessionId.slice(SESSION_PREFIX.length), threadOptions)
+        ? client.resumeThread(parseCodexSessionId(sessionId)!, threadOptions)
         : client.startThread(threadOptions);
       scheduleWallTimeout(options.timeoutMs);
       refreshIdleTimeout();
@@ -108,7 +108,7 @@ export class CodexRunner implements AIRunner {
         refreshIdleTimeout();
         switch (event.type) {
           case 'thread.started':
-            sessionId = SESSION_PREFIX + event.thread_id;
+            sessionId = codexSessionId(event.thread_id);
             emit('system', 'Codex 会话已启动');
             break;
           case 'turn.started':

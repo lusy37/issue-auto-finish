@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Issue 经验采集与规则蒸馏",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "output": "docs/langgraph-native-experience-distill.html",
+    "viewBox": [1080, 480],
+    "views": [
+      { "id": "diary_capture", "label": "日记采集", "focus": ["terminal_issue", "diary_collector", "diary_store"], "note": "完成或失败事件触发 fire-and-forget 采集，并以 executionKey 防重。" },
+      { "id": "manual_distill", "label": "手动蒸馏", "focus": ["manual_trigger", "diary_store", "memory_distiller", "rule_distiller", "knowledge_store", "distill_records"], "note": "一次手动运行先生成或合并 memory，再尝试生成候选 agent-rule。" },
+      { "id": "rule_feedback", "label": "规则反馈", "focus": ["knowledge_store", "enable_gate", "prompt_consumer"], "note": "候选规则经过人工启用后才反馈到下一次任务。" }
+    ]
+  },
+  "stages": [
+    { "label": "任务与人工触发" },
+    { "label": "日记层" },
+    { "label": "AI 蒸馏层" },
+    { "label": "知识与审计" },
+    { "label": "反馈到后续任务" }
+  ],
+  "nodes": [
+    { "id": "terminal_issue", "type": "backend", "label": "Issue 终态", "sublabel": "completed 或 failed", "stage": 0, "row": 0, "width": 132 },
+    { "id": "manual_trigger", "type": "external", "label": "用户手动蒸馏", "sublabel": "POST /api/distill/run", "stage": 0, "row": 1, "width": 138, "tag": "无定时器" },
+    { "id": "diary_collector", "type": "messagebus", "label": "DiaryCollector", "sublabel": "EventBus + executionKey", "stage": 1, "row": 0, "width": 138 },
+    { "id": "diary_store", "type": "database", "label": "diaries.json", "sublabel": "耗时、失败、人工介入", "stage": 1, "row": 1, "width": 138 },
+    { "id": "memory_distiller", "type": "backend", "label": "MemoryDistiller", "sublabel": "CREATE / MERGE / SUPERSEDE", "stage": 2, "row": 1, "width": 148 },
+    { "id": "rule_distiller", "type": "backend", "label": "AgentRuleDistiller", "sublabel": "成熟 memory → 候选规则", "stage": 2, "row": 0, "width": 148 },
+    { "id": "knowledge_store", "type": "database", "label": "KnowledgeStore", "sublabel": "memory + agent-rule", "stage": 3, "row": 0, "width": 142 },
+    { "id": "distill_records", "type": "database", "label": "版本与运行记录", "sublabel": "versions.json + runs.json", "stage": 3, "row": 1, "width": 144 },
+    { "id": "enable_gate", "type": "security", "label": "人工启用规则", "sublabel": "enabled 且非 deprecated", "stage": 4, "row": 0, "width": 140 },
+    { "id": "prompt_consumer", "type": "backend", "label": "后续任务提示词", "sublabel": "Plan/Build/Verify/子任务", "stage": 4, "row": 1, "width": 142 }
+  ],
+  "flows": [
+    { "id": "terminal_event", "from": "terminal_issue", "to": "diary_collector", "label": "终态事件", "classification": "fire-and-forget", "variant": "dashed", "route": "straight", "labelAt": [208, 108] },
+    { "id": "persist_diary", "from": "diary_collector", "to": "diary_store", "label": "去重执行日记", "classification": "Layer 1", "variant": "default", "labelDy": 24 },
+    { "id": "manual_run", "from": "manual_trigger", "to": "memory_distiller", "label": "force=true", "classification": "单实例互斥", "variant": "emphasis", "route": "bottom-channel", "fromSide": "bottom", "toSide": "bottom", "labelAt": [420, 366] },
+    { "id": "read_undistilled", "from": "diary_store", "to": "memory_distiller", "label": "未蒸馏日记", "classification": "AI 批处理输入", "variant": "emphasis", "route": "straight", "labelAt": [421, 220] },
+    { "id": "write_memory", "from": "memory_distiller", "to": "knowledge_store", "label": "memory 与证据", "classification": "Layer 2", "variant": "emphasis", "labelAt": [640, 214] },
+    { "id": "next_rule", "from": "memory_distiller", "to": "rule_distiller", "label": "顺序执行", "classification": "同一次 run", "variant": "default", "labelAt": [530, 214] },
+    { "id": "write_rule", "from": "rule_distiller", "to": "knowledge_store", "label": "候选 agent-rule", "classification": "Layer 3", "variant": "emphasis", "route": "straight", "labelAt": [639, 108] },
+    { "id": "knowledge_audit", "from": "knowledge_store", "to": "distill_records", "label": "版本与 run 状态", "classification": "versions.json + runs.json", "variant": "security", "labelAt": [805, 214] },
+    { "id": "candidate_rule", "from": "knowledge_store", "to": "enable_gate", "label": "候选规则", "classification": "默认不启用", "variant": "security", "labelDy": -23 },
+    { "id": "enabled_rule", "from": "enable_gate", "to": "prompt_consumer", "label": "启用规则", "classification": "下一次任务上下文", "variant": "emphasis", "labelAt": [1015, 214] }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "自动与手动边界", "items": ["Issue 终态自动采集 Diary", "Memory 和 AgentRule 蒸馏仅由用户手动触发"] },
+    { "dot": "violet", "title": "三层经验模型", "items": ["Diary 保存一次执行事实", "Memory 合并跨任务模式", "AgentRule 是可供后续 Agent 使用的候选规则"] },
+    { "dot": "rose", "title": "失败隔离", "items": ["蒸馏失败只更新 runs.json，不改变 Issue 完成态", "多个本地文件不是跨存储事务；规则阶段失败时，memory 可能已经成功保存"] }
+  ]
+}

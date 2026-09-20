@@ -1,3 +1,4 @@
+import { MAX_PLAN_TASKS } from '../limits.js';
 import { z } from 'zod';
 import { assertPlanInvariants } from '../invariants.js';
 import type { PlanContent } from '../contracts.js';
@@ -12,8 +13,8 @@ const taskPlanSchema = z.object({
     title: nonEmptyText,
     instructions: nonEmptyText,
     acceptanceCriteria: z.array(nonEmptyText).min(1),
-    dependsOn: z.array(z.string()).max(19),
-  }).strict()).min(1).max(20),
+    dependsOn: z.array(z.string()).max(MAX_PLAN_TASKS - 1),
+  }).strict()).min(1).max(MAX_PLAN_TASKS),
 }).strict();
 
 /** AI/文件输入边界：先校验字段形状，再执行普通 DAG invariant。 */

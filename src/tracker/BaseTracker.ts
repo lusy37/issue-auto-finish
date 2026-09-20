@@ -1,3 +1,4 @@
+import { TRACKER_FORMAT } from '../shared/runtime/formats.js';
 import { writeJsonAtomicSync } from "../utils/atomicFile.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -33,18 +34,18 @@ export abstract class BaseTracker<TRecord> {
     if (!fs.existsSync(this.filePath)) return { [this.collectionKey]: {} };
     const parsed = JSON.parse(fs.readFileSync(this.filePath, "utf8"));
     if (
-      parsed?.format !== "iaf-mini/v1" ||
+      parsed?.format !== TRACKER_FORMAT ||
       !parsed[this.collectionKey] ||
       typeof parsed[this.collectionKey] !== "object" ||
       Array.isArray(parsed[this.collectionKey])
     )
-      throw new Error(`存储数据格式无效：需要 iaf-mini/v1 格式及 ${this.collectionKey} 对象。请检查文件：${this.filePath}`);
+      throw new Error(`存储数据格式无效：需要 ${TRACKER_FORMAT} 格式及 ${this.collectionKey} 对象。请检查文件：${this.filePath}`);
     return { [this.collectionKey]: parsed[this.collectionKey] };
   }
 
   protected save(): void {
     try {
-      writeJsonAtomicSync(this.filePath, { format: "iaf-mini/v1", ...this.data });
+      writeJsonAtomicSync(this.filePath, { format: TRACKER_FORMAT, ...this.data });
     } catch (err) {
       const cause = err as NodeJS.ErrnoException;
       const wrapped = new Error(

@@ -1,8 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import {
-  runWithIssueContext,
-  getIssueContext,
-  issueContext,
+getIssueContext,
+runWithIssueContext
 } from '../../src/context/IssueContext.js';
 
 describe('IssueContext', () => {

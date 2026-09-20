@@ -1,3 +1,5 @@
+import { buildCallOptions, configuredCallPolicy } from '../ai-runner/CallPolicy.js';
+import { parseJsonOutput } from '../prompts/parseJsonOutput.js';
 import { resolvePromptRules } from '../knowledge/PromptRules.js';
 import { ARTIFACTS, getPhaseArtifacts } from '../shared/runtime/artifacts.js';
 import { renderPlan } from '../dag/contracts.js';
@@ -25,12 +27,6 @@ function formatCountsByDesc(counts: Map<string, number>): string | undefined {
   return entries.map(([k, v]) => `${k}×${v}`).join(', ');
 }
 
-/** verify-fix loop 的修复上下文 — 当验证失败回退到 build 阶段时注入 */
-export interface FixContext {
-  iteration: number;
-  verifyFailures: string[];
-  rawReport: string;
-}
 
 export interface PhaseContext {
   onTemporaryFile?: (file: string, present: boolean) => void;
@@ -38,7 +34,6 @@ export interface PhaseContext {
   branchName: string;
   pipelineMode?: string;
   ports?: PortPair;
-  fixContext?: FixContext;
   workspace?: WorkspaceLayout;
   workDir?: string;
 }
@@ -47,14 +42,14 @@ export interface PhaseContext {
  * 阶段抽象基类 — 纯逻辑执行，零编排副作用。
  *
  * 阶段约定：
- * - run() 返回 PhaseResult（completed / failed / awaitGate / awaitAsync / requestRetryFrom）。
+ * - run() 返回 PhaseResult（completed / failed / requestRetryFrom）。
  * - 阶段内部不推进生命周期，也不触发 eventBus / git commit / GitHub 评论；
  *   这些副作用由编排器根据返回的 Intent 驱动。
  * - 阶段只通过 PlanPersistence 读写产物；执行会话凭证通过窄存储端口持久化。
  *
  * 失败 → Intent 映射：
  * - 产物校验失败（无变更/缺产物）→ retryable='hard-no-auto'（自动重试无意义，需用户介入）
- * - AI 超时但仍在活跃输出 → retryable='soft'（不消耗 retry budget）
+ * - AI 超时但仍在活跃输出 → retryable='soft'（同样消耗有限重试预算）
  * - AI 永久失败（auth/quota/model 不存在）→ retryable='hard-no-auto'
  * - 其他 AI 失败 → retryable='hard'
  */
@@ -97,8 +92,7 @@ export abstract class BasePhase {
   /**
    * 执行阶段并返回意图 — 纯逻辑，零编排副作用。
    *
-   * 子类可 override 此方法以表达更丰富的意图（如 VerifyPhase 返回 requestRetryFrom，
-   * 审核阶段返回 awaitGate）。默认行为：成功 → completed，失败 → failed。
+   * VerifyPhase 可返回 requestRetryFrom 请求集成修复。默认成功返回 completed，失败返回 failed。
    */
   async run(ctx: PhaseContext, callbacks?: PhaseCallbacks): Promise<PhaseResult> {
     const displayId = Number(ctx.demand.sourceRef.displayId);
@@ -141,7 +135,7 @@ export abstract class BasePhase {
     this.persistSessionId(displayId, result.sessionId);
     if (this.phaseName === 'plan') {
       if (result.output.trim().length < BasePhase.MIN_ARTIFACT_BYTES) return { kind: 'failed', error: { message: '计划内容为空或不完整', retryable: 'hard-no-auto' } };
-      try { this.plan.writePlan(renderPlan(decodePlanContent(JSON.parse(result.output.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1] ?? result.output)))); }
+      try { this.plan.writePlan(renderPlan(decodePlanContent(parseJsonOutput(result.output)))); }
       catch (error) { return { kind: 'failed', error: { message: `结构化计划无效：${(error as Error).message}`, retryable: 'hard' } }; }
     }
     if (this.phaseName === 'verify') this.plan.writeFile(ARTIFACTS.verifyReport.filename, result.output);
@@ -166,9 +160,6 @@ export abstract class BasePhase {
 
   protected abstract buildPrompt(ctx: PhaseContext): string;
 
-  protected getRunMode(): 'plan' | 'agent' | undefined {
-    return undefined;
-  }
 
   protected getResumePrompt(_ctx: PhaseContext): string {
     return t('basePhase.resumePrompt');
@@ -197,13 +188,7 @@ export abstract class BasePhase {
     const result = await this.aiRunner.run({
       prompt,
       workDir: this.plan.baseDir,
-      timeoutMs: this.config.ai.phaseTimeoutMs,
-      idleTimeoutMs: this.config.ai.idleTimeoutMs,
-      timeoutGraceMs: this.config.ai.timeoutGraceMs,
-      timeoutExtensionMs: this.config.ai.timeoutExtensionMs,
-      timeoutMaxExtensions: this.config.ai.timeoutMaxExtensions,
-      mode: this.getRunMode(),
-      model: this.config.ai.model,
+      ...buildCallOptions(configuredCallPolicy(this.config.ai), this.phaseName === 'plan' ? 'plan' : 'verify'),
       phaseName: this.phaseName,
       sessionId: options?.sessionId,
       continueSession: options?.continueSession,
@@ -258,7 +243,7 @@ export abstract class BasePhase {
   /**
    * 把 RunResult 翻译成结构化 PhaseError。
    *
-   * - wasActiveAtTimeout=true → soft（不消耗 budget，下次续跑）
+   * - wasActiveAtTimeout=true → soft（消耗有限预算，下次可续跑）
    * - 永久失败模式（model 不存在 / auth / quota） → hard-no-auto（必须用户介入）
    * - 其他 → hard（消耗 budget，达上限后转 manual）
    */

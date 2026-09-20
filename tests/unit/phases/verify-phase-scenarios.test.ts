@@ -23,11 +23,11 @@ const ISSUE_IID = 42;
 
 function buildPhaseCtx(): PhaseContext {
   return {
-    demand: {
+    demand: { createdAt: '2026-09-20T00:00:00Z',
       demandId: '42',
       title: 'Test Issue',
       description: 'Verify feature',
-      sourceRef: { displayId: String(ISSUE_IID), source: 'github' as const, externalId: '200' },
+      sourceRef: { displayId: String(ISSUE_IID), source: 'github-issue' as const, externalId: '200' },
     },
     branchName: 'feat/issue-42',
     pipelineMode: 'plan-mode',
@@ -176,7 +176,7 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
     ]);
 
     const phase = createPhase(runner, {
-      verifyFixLoop: { enabled: true, maxIterations: 3, todolistCheckEnabled: true },
+      verifyFixLoop: { enabled: true, maxIterations: 3 },
     });
     const intent = await phase.run(buildPhaseCtx());
 

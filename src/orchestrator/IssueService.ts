@@ -1,3 +1,4 @@
+import { getIssueContext } from '../context/IssueContext.js';
 import { ARTIFACTS } from '../shared/runtime/artifacts.js';
 import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
 import { randomUUID } from 'node:crypto';
@@ -118,6 +119,10 @@ export class IssueService {
       frontendPortBase: config.e2e.frontendPortBase,
     });
     this.devServerManager = new DevServerManager({
+      startupTimeoutMs: config.preview.startupTimeoutMs,
+      readinessIntervalMs: config.preview.readinessIntervalMs,
+      backendReadyUrl: config.preview.backendReadyUrl,
+      frontendReadyUrl: config.preview.frontendReadyUrl,
       onProcessStarted: (number, pid, workDir) => {
         const callId = randomUUID();
         this.tracker.transaction(number, record => {
@@ -522,7 +527,6 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       ensureWorktree: (wtCtx) => this.ensureWorktree(wtCtx),
       installDependencies: (workDir, signal, force) => this.installDependencies(workDir, signal ?? (issueNumber === undefined ? undefined : this.controllers.get(issueNumber)?.signal), force),
       shouldAutoApprove: (labels) => this.shouldAutoApprove(labels),
-      shouldDeployServers: (number) => this.shouldDeployServers(number),
       startPreviewServers: (wtCtx, issue) => this.startPreviewServers(wtCtx, issue),
       stopPreviewServers: (number) => this.stopPreviewServers(number),
       buildPreviewUrl: (number) => this.buildPreviewUrl(number),
@@ -610,11 +614,6 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     }
   }
 
-  private shouldDeployServers(issueIid: number): boolean {
-    return isE2eEnabledForIssue(issueIid, this.tracker, this.config)
-      || this.config.preview.enabled;
-  }
-
   private shouldAutoApprove(issueLabels: string[]): boolean {
     const autoLabels = this.config.review.autoApproveLabels;
     if (!autoLabels.length) return false;
@@ -635,7 +634,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
         current.previewStartedAt = new Date().toISOString();
       });
 
-      await this.devServerManager.startServers(wtCtx, ports);
+      await this.devServerManager.startServers(wtCtx, ports, getIssueContext()?.signal);
 
       const previewUrl = this.buildPreviewUrl(issue.number);
       if (previewUrl) {
@@ -765,7 +764,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
         current.ports = ports;
         current.previewStartedAt = new Date().toISOString();
       });
-      await this.devServerManager.startServers(wtCtx, ports);
+      await this.devServerManager.startServers(wtCtx, ports, getIssueContext()?.signal);
     } catch (err) {
       this.portAllocator.release(issueIid);
       this.tracker.transaction(issueIid, current => {

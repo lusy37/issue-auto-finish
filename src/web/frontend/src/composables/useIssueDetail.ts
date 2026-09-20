@@ -15,6 +15,15 @@ function emptySupplementForm(): SupplementInfo {
 export function useIssueDetail() {
   const selectedIssue = ref<IssueRecord | null>(null);
   const detailVersion = ref(0);
+  let detailRequest = 0;
+  let selection = 0;
+  const resourceRequests = new Map<string, number>();
+  function resourceGuard(key: string, number: number) {
+    const request = (resourceRequests.get(key) ?? 0) + 1;
+    resourceRequests.set(key, request);
+    const selected = selection;
+    return () => resourceRequests.get(key) === request && selected === selection && selectedIssue.value && getIssueIid(selectedIssue.value) === number;
+  }
 
   const detailSupplement = ref<SupplementInfo>(emptySupplementForm());
   const detailSupplementForm = ref<SupplementInfo>(emptySupplementForm());
@@ -31,6 +40,8 @@ export function useIssueDetail() {
 
 
   async function selectIssue(issue: IssueRecord, agentLogs: { value: AgentLogEntry[] }) {
+    const request = ++detailRequest;
+    selection++;
     selectedIssue.value = issue;
     detailSupplementEditing.value = false;
     detailSupplement.value = emptySupplementForm();
@@ -44,12 +55,14 @@ export function useIssueDetail() {
         api.fetchIssueDetail(getIssueIid(issue)),
         api.fetchIssueLogs(getIssueIid(issue)),
       ]);
-      selectedIssue.value = detail;
+      if (request !== detailRequest || !selectedIssue.value || getIssueIid(selectedIssue.value) !== getIssueIid(issue)) return;
+      if ((detail.run?.version ?? 0) >= (selectedIssue.value.run?.version ?? 0)) selectedIssue.value = detail;
       agentLogs.value = logs.reverse();
     } catch (e) {
       console.error('Fetch detail failed', e);
     }
 
+    if (request !== detailRequest) return;
     fetchSupplement(getIssueIid(issue));
     fetchReviewHistory(getIssueIid(issue));
     fetchPlanDocContent(getIssueIid(issue));
@@ -59,49 +72,61 @@ export function useIssueDetail() {
   async function refreshDetail(): Promise<void> {
     if (!selectedIssue.value) return;
     const number = getIssueIid(selectedIssue.value);
+    const request = ++detailRequest;
     try {
       const fresh = await api.fetchIssueDetail(number);
+      if (request !== detailRequest || !selectedIssue.value || getIssueIid(selectedIssue.value) !== number) return;
+      if ((fresh.run?.version ?? 0) < (selectedIssue.value.run?.version ?? 0)) return;
       selectedIssue.value = fresh;
       detailVersion.value++;
     } catch (e) {
       console.error('Refresh detail failed', e);
     }
+    if (request !== detailRequest) return;
     fetchReviewHistory(number);
     fetchPlanDocContent(number);
     fetchPlanDiff(number);
   }
 
   async function fetchReviewHistory(number: number) {
+    const current = resourceGuard('fetchReviewHistory', number);
     try {
-      reviewHistory.value = await api.fetchReviewHistory(number);
+      const value = await api.fetchReviewHistory(number);
+      if (current()) reviewHistory.value = value;
     } catch { /* ignore - history may not exist */ }
   }
 
   async function fetchPlanDocContent(number: number) {
+    const current = resourceGuard('fetchPlanDocContent', number);
     try {
-      planDocContent.value = await api.loadPlanDoc(number, ARTIFACTS.plan.filename, 'html');
+      const value = await api.loadPlanDoc(number, ARTIFACTS.plan.filename, 'html');
+      if (current()) planDocContent.value = value;
     } catch {
-      planDocContent.value = '';
+      if (current()) planDocContent.value = '';
     }
   }
 
   async function fetchPlanDiff(number: number) {
+    const current = resourceGuard('fetchPlanDiff', number);
     try {
-      planDiff.value = await api.fetchPlanDiff(number, ARTIFACTS.plan.filename);
+      const value = await api.fetchPlanDiff(number, ARTIFACTS.plan.filename);
+      if (current()) planDiff.value = value;
     } catch {
-      planDiff.value = { diff: '', hasChanges: false };
+      if (current()) planDiff.value = { diff: '', hasChanges: false };
     }
   }
 
   async function fetchSupplement(number: number) {
+    const current = resourceGuard('fetchSupplement', number);
     detailSupplementLoading.value = true;
     detailSupplementError.value = '';
     try {
-      detailSupplement.value = await api.fetchSupplement(number);
+      const value = await api.fetchSupplement(number);
+      if (current()) detailSupplement.value = value;
     } catch (error) {
-      detailSupplementError.value = (error as Error).message;
+      if (current()) detailSupplementError.value = (error as Error).message;
     }
-    finally { detailSupplementLoading.value = false; }
+    finally { if (current()) detailSupplementLoading.value = false; }
   }
 
   function enterSupplementEdit() {

@@ -132,7 +132,7 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
     vi.spyOn(platform, "findPullRequestByBranch").mockResolvedValue(null);
     let platformPr: GitHubPullRequest | undefined;
     vi.spyOn(platform, 'listPullRequests').mockImplementation(async () => platformPr ? [platformPr] : []);
-    vi.spyOn(platform, 'getPullRequestDetail').mockImplementation(async () => platformPr!);
+    vi.spyOn(platform, 'getPullRequestDetail').mockImplementation(async () => ({ ...platformPr!, has_conflicts: false, merge_status: 'clean' }));
     const createPr = vi.spyOn(platform, 'createPullRequest').mockImplementation(async options => {
       platformPr = { id: 5, number: 5, title: options.title, html_url: 'http://example.test/pr/5', state: 'open',
         description: options.description, source_branch: options.sourceBranch, target_branch: options.targetBranch,

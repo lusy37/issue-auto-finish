@@ -15,7 +15,7 @@ it('补充需求后确认重新规划，使用当前 plan 阶段并刷新任务�
   vi.stubGlobal('alert', vi.fn());
   const detail = useIssueDetail();
   detail.selectedIssue.value = { issueIid: 42, demandSpec: { sourceRef: { displayId: '42' } } } as unknown as IssueRecord;
-  detail.detailSupplementForm.value = { requirements: '新增验收要求' };
+  detail.detailSupplementForm.value = { ...detail.detailSupplementForm.value, requirements: '新增验收要求' };
   const refresh = vi.fn().mockResolvedValue(undefined);
   await detail.saveDetailSupplement(refresh);
   expect(api.retryFromPhase).toHaveBeenCalledWith(42, 'plan');

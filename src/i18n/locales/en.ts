@@ -139,24 +139,6 @@ Please read the project's AGENTS.md first to understand the architecture, then p
 Ensure the Todolist is detailed enough that each step can be independently executed and verified.
 {outputConstraint}`,
 
-  'prompt.build': `You are a software engineer. Please complete code changes according to the implementation plan.
-
-## Issue Information
-- IID: #{number}
-- Title: {title}
-
-Please read first:
-- AGENTS.md (Project Architecture and Code Standards)
-
-## Complete Implementation Plan
-{planContent}
-
-## Implementation Requirements
-1. Implement the tasks in the complete plan and check every acceptance criterion
-2. The server persists plans and runtime artifacts; do not edit plan checkboxes or create internal artifact directories
-3. Strictly follow code standards in AGENTS.md ({codeStyleDescription})
-4. Don't over-engineer, only implement what's required in the plan
-5. Ensure code security, avoid OWASP Top 10 vulnerabilities`,
 
   'prompt.rePlan': `You are a senior technical lead. The previous implementation plan was not approved. Please modify the plan based on review feedback.
 
@@ -218,32 +200,6 @@ Please submit the complete revised implementation plan.`,
   'update.completed': 'Update completed, service will restart automatically',
   'update.failed': 'Update failed: {error}',
 
-  'prompt.conflictResolve': `You are a senior software engineer handling merge conflicts during a Git rebase operation.
-
-## Context
-- Issue IID: #{number}
-- Branch: \`{branch}\` is being rebased onto \`{baseBranch}\`
-- Conflicting files:
-{conflictFilesList}
-
-## Task
-Please resolve the conflicts in each file listed above:
-
-1. Open each conflicting file and carefully read the conflict markers (<<<<<<< HEAD / ======= / >>>>>>> ...)
-2. Understand the intent of both sides:
-   - HEAD (current branch) changes
-   - Incoming branch changes
-3. Correctly merge the code, ensuring:
-   - Meaningful changes from both sides are preserved
-   - All conflict markers are completely removed (<<<<<<<, =======, >>>>>>>)
-   - The merged code is logically complete, compilable, and runnable
-4. If a conflict involves structural changes (e.g., function signature changes), ensure all references are updated accordingly
-
-## Important
-- Do not leave any conflict markers
-- Do not introduce new bugs
-- Maintain consistent code style
-- Only modify conflicting files, do not make additional code changes`,
 
   // Distill (Knowledge Distillation)
   'distill.diaryCreated': '📝 Experience diary recorded for Issue #{number} ({outcome})',
@@ -262,26 +218,6 @@ Please resolve the conflicts in each file listed above:
   'distill.triggerSuccess': '🧪 Knowledge distillation triggered, please wait...',
 
   // Build fix mode suffix (verify-fix loop)
-  'prompt.buildFixSuffix': `
-
-## \u26a0\ufe0f Fix Mode (Iteration {iteration})
-
-**Important**: The previous verification found the following issues. Please fix them in this iteration:
-
-{failures}
-
-### Fix Requirements
-1. Carefully read the specific error messages in the verification report
-2. Fix all issues causing lint/build/test failures
-3. Complete all incomplete Todolist items (- [ ] \u2192 - [x]), especially adding unit tests
-4. Do not introduce new problems
-5. After fixing, ensure {lintCommand} and {buildCommand} and {testFilesCommand} all pass
-
-### Original Verification Report Summary
-\`\`\`
-{rawReport}
-\`\`\`
-`,
 
   // --- E2E Runner ---
   'e2e.runnerCreated': 'E2E verify phases will use dedicated AI runner ({mode})',

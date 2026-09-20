@@ -1,3 +1,4 @@
+import type { Config } from '../../src/config.js';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -31,7 +32,7 @@ it('无浏览器配置的仓库关闭 E2E 后，经审核重启仍可完成 veri
   fs.writeFileSync(path.join(repo, 'README.md'), '# 无浏览器依赖的测试仓库\n');
   await git(repo, 'add', '.'); await git(repo, 'commit', '-m', '初始化');
   await git(repo, 'remote', 'add', 'origin', origin); await git(repo, 'push', '-u', 'origin', 'main');
-  const config = transformEnvToConfig(envSchema.parse({ GITHUB_TOKEN: 'mock', GITHUB_REPOSITORY: 'test/project', PROJECT_WORK_DIR: repo, BASE_BRANCH: 'main', WORKTREE_BASE_DIR: path.join(directory, 'worktrees'), E2E_UI_ENABLED: 'false', PREVIEW_ENABLED: 'false', ISSUE_NOTE_SYNC_ENABLED: 'false' }), directory);
+  const config: Config = transformEnvToConfig(envSchema.parse({ GITHUB_TOKEN: 'mock', GITHUB_REPOSITORY: 'test/project', PROJECT_WORK_DIR: repo, BASE_BRANCH: 'main', WORKTREE_BASE_DIR: path.join(directory, 'worktrees'), E2E_UI_ENABLED: 'false', PREVIEW_ENABLED: 'false', ISSUE_NOTE_SYNC_ENABLED: 'false' }), directory);
   const definition = buildPlanModePipeline({ e2eEnabled: false });
   const managers = new Map([[definition.mode, definition]]);
   const tracker = new IssueTracker(process.env.DATA_DIR!, managers);

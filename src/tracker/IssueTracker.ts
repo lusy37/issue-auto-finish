@@ -1,3 +1,4 @@
+import { parsePhaseCallId } from '../orchestration/ExecutionIds.js';
 import type { IssueRecord, NewIssueRecord, PhaseProgress } from './IssueRecord.js';
 import { type PipelineDef } from '../pipeline/PipelineMetadata.js';
 import { IssueRunStore } from '../dag/IssueRunStore.js';
@@ -34,8 +35,8 @@ export class IssueTracker {
     const run = record?.run;
     if (!run || this.store.isBlocked(identity.issueNumber) || run.stopIntent || run.planRevision !== identity.planRevision || run.buildGeneration !== identity.buildGeneration || run.dispatchId !== identity.dispatchId || !sameIdentity(run.calls[identity.callId]?.identity, identity)) throw new Error('执行身份已失效');
     const lifecycle = record!.lifecycle;
-    if (identity.taskId.startsWith('$phase:')
-      && (lifecycle.kind !== 'running' || lifecycle.phase !== identity.taskId.slice(7))) {
+    const phase = parsePhaseCallId(identity.taskId);
+    if (phase && (lifecycle.kind !== 'running' || lifecycle.phase !== phase)) {
       throw new Error('父阶段调用身份已失效');
     }
     if (run.activeCalls?.[identity.taskId] && run.activeCalls[identity.taskId] !== identity.callId) throw new Error('调用已被新的执行替代');

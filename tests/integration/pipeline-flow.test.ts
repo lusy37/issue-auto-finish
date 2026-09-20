@@ -234,6 +234,6 @@ describe('集成测试：流水线正常流程', () => {
     const tracker2 = new TrackerClass(harness.dataDir, lifecycleManagers);
     const recoveredRecord = tracker2.get(issue.number);
     expect(recoveredRecord).toBeDefined();
-    expect(recoveredRecord!.state).toBe(record!.state);
+    expect(recoveredRecord!.lifecycle).toEqual(record!.lifecycle);
   });
 });

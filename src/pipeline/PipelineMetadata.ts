@@ -12,7 +12,6 @@ export interface PhaseSpec {
   /** 此阶段是否可被用户单独重试。默认：kind === 'ai' */
   retryable?: boolean;
   /** 此阶段完成后是否应启动预览服务器。默认：false */
-  deploysPreview?: boolean;
   /** 此阶段产出的文件列表。默认：[] */
   artifacts?: PlanFileSpec[];
 }
@@ -83,7 +82,6 @@ export function buildPlanModePipeline(opts: { e2eEnabled: boolean }): PipelineDe
     label: spec.label,
     kind: spec.kind,
     ...(spec.retryable !== undefined ? { retryable: spec.retryable } : {}),
-    ...(spec.deploysPreview !== undefined ? { deploysPreview: spec.deploysPreview } : {}),
     ...(spec.artifacts ? { artifacts: spec.artifacts.map(artifact => ({ ...artifact })) } : {}),
   }));
   return { mode: 'plan-mode', phases };

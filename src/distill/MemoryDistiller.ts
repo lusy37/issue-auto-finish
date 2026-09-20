@@ -1,3 +1,5 @@
+import { buildCallOptions, type AICallPolicy } from '../ai-runner/CallPolicy.js';
+import { parseJsonOutput } from '../prompts/parseJsonOutput.js';
 import { memoryActionsSchema } from './ActionSchema.js';
 /**
  * MemoryDistiller — Layer 2: 批量分析日记，提取共性模式。
@@ -22,7 +24,7 @@ export interface MemoryDistillerDeps {
   knowledgeStore: KnowledgeStore;
   versionStore: VersionStore;
   workDir: string;
-  timeoutMs: number;
+  aiPolicy: AICallPolicy;
   minDiariesForDistill: number;
 }
 
@@ -32,7 +34,7 @@ export class MemoryDistiller {
   private knowledgeStore: KnowledgeStore;
   private versionStore: VersionStore;
   private workDir: string;
-  private timeoutMs: number;
+  private aiPolicy: AICallPolicy;
   private minDiariesForDistill: number;
 
   constructor(deps: MemoryDistillerDeps) {
@@ -41,7 +43,7 @@ export class MemoryDistiller {
     this.knowledgeStore = deps.knowledgeStore;
     this.versionStore = deps.versionStore;
     this.workDir = deps.workDir;
-    this.timeoutMs = deps.timeoutMs;
+    this.aiPolicy = deps.aiPolicy;
     this.minDiariesForDistill = deps.minDiariesForDistill;
   }
 
@@ -79,7 +81,7 @@ export class MemoryDistiller {
     const result = await this.aiRunner.run({
       prompt,
       workDir: this.workDir,
-      timeoutMs: this.timeoutMs,
+      ...buildCallOptions(this.aiPolicy, 'memory-distill'),
     });
 
     if (!result.success) {
@@ -139,16 +141,8 @@ export class MemoryDistiller {
   /** 解析 AI 输出的 actions */
   private parseActions(output: string): MemoryDistillAction[] {
     try {
-      // 提取 JSON 块
-      const jsonMatch = output.match(/```json\s*([\s\S]*?)```/) ?? output.match(/\{[\s\S]*"actions"[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('蒸馏结果缺少 JSON，日记尚未标记为已处理');
-      }
-      const jsonStr = jsonMatch[1] ?? jsonMatch[0];
-      const parsed = JSON.parse(jsonStr) as { actions: MemoryDistillAction[] };
-      if (!Array.isArray(parsed.actions)) {
-        throw new Error('蒸馏 actions 格式无效');
-      }
+      const parsed = parseJsonOutput(output);
+      if (!parsed || typeof parsed !== 'object' || !('actions' in parsed)) throw new Error('蒸馏结果缺少 actions');
       return memoryActionsSchema.parse(parsed.actions);
     } catch (err) {
       logger.warn('Failed to parse AI distillation output', {

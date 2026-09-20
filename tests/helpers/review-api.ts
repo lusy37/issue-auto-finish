@@ -35,7 +35,7 @@ export async function reviewApi(subdir = '') {
   await newPlan();
   const persistence = new PlanPersistence(directory, 42, data, tracker);
   const app = express(); app.use(express.json());
-  app.use(createApiRouter({ tracker, config, github, orchestrator, agentLogStore: { getLogs: () => [] } as never, supplementStore: undefined as never }));
+  app.use(createApiRouter({ tracker, config, github: github as unknown as import('../../src/clients/GitHubClient.js').GitHubClient, orchestrator, agentLogStore: { getLogs: () => [] } as never, supplementStore: undefined as never }));
   let server: Server;
   await new Promise<void>(resolve => { server = app.listen(0, '127.0.0.1', resolve); });
   const baseUrl = `http://127.0.0.1:${(server!.address() as { port: number }).port}`;

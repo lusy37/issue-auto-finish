@@ -69,6 +69,7 @@ export function assertIssueLifecycleShape(value: unknown): asserts value is Issu
 }
 
 /** 校验生命周期事件，不参与计算 LangGraph 下一节点。 */
+// 生命周期说明与完整转换表见 docs/issue-lifecycle.md；此处不决定图的执行位置。
 export function reduceIssueLifecycle(current: IssueLifecycle, event: IssueLifecycleEvent): IssueLifecycle {
   switch (event.type) {
     case 'setup-completed':

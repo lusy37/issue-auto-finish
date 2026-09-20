@@ -9,7 +9,6 @@ import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PlanPhase } from '../../src/phases/PlanPhase.js';
-import { BuildPhase } from '../../src/phases/BuildPhase.js';
 import { VerifyPhase } from '../../src/phases/VerifyPhase.js';
 import { PlanPersistence } from '../../src/persistence/PlanPersistence.js';
 import {
@@ -32,11 +31,11 @@ const ISSUE_IID = 42;
 
 function buildPhaseCtx(overrides?: Partial<PhaseContext>): PhaseContext {
   return {
-    demand: {
+    demand: { createdAt: '2026-09-20T00:00:00Z',
       demandId: '42',
       title: 'Integration Test Issue',
       description: 'Test full phase lifecycle',
-      sourceRef: { displayId: String(ISSUE_IID), source: 'github' as const, externalId: '200' },
+      sourceRef: { displayId: String(ISSUE_IID), source: 'github-issue' as const, externalId: '200' },
     },
     branchName: 'feat/issue-42',
     pipelineMode: 'plan-mode',
@@ -85,34 +84,6 @@ describe('Phase-AI Integration', () => {
     expect(runner.runCalls[0].phaseName).toBe('plan');
   });
 
-  // ── Build → validates changes ──
-
-  it('BuildPhase: should succeed with git changes', async () => {
-    const mockGit = createMockGitOperations();
-    mockGit.hasChanges.mockResolvedValue(true);
-
-    const runner = new ScriptedAIRunner([successScript()]);
-    const phase = new BuildPhase(runner, mockGit as any, wtPlan, config);
-
-    const intent = await phase.run(buildPhaseCtx());
-    expect(intent.kind).toBe('completed');
-    expect(mockGit.hasChanges).toHaveBeenCalled();
-  });
-
-  it('BuildPhase: should fail without git changes', async () => {
-    const mockGit = createMockGitOperations();
-    mockGit.hasChanges.mockResolvedValue(false);
-
-    const runner = new ScriptedAIRunner([successScript()]);
-    const phase = new BuildPhase(runner, mockGit as any, wtPlan, config);
-
-    const intent = await phase.run(buildPhaseCtx());
-    expect(intent.kind).toBe('failed');
-    if (intent.kind === 'failed') {
-      expect(intent.error.message).toMatch(/未产生任何代码变更/);
-    }
-  });
-
   // ── Verify → parses report ──
 
   it('VerifyPhase: should return completed when report passes', async () => {
@@ -143,33 +114,6 @@ describe('Phase-AI Integration', () => {
       const failures = intent.context?.verifyFailures as readonly string[] | undefined;
       expect(failures).toContain('测试未通过');
     }
-  });
-
-  // ── Multi-phase sequence ──
-
-  it('should run Plan → Build → Verify in sequence', async () => {
-    const mockGit = createMockGitOperations();
-    mockGit.hasChanges.mockResolvedValue(true);
-
-    const planRunner = new ScriptedAIRunner([
-      successScript({ output: 'B'.repeat(100) }),
-    ]);
-    const buildRunner = new ScriptedAIRunner([successScript()]);
-    const verifyReport = `# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: 通过\n\n## 总结\n通过`;
-    const verifyRunner = new ScriptedAIRunner([
-      successScript(undefined, writeArtifact(ISSUE_IID, '02-verify-report.md', verifyReport)),
-    ]);
-
-    const ctx = buildPhaseCtx();
-
-    const planPhase = new PlanPhase(planRunner, createMockGitOperations() as any, wtPlan, config);
-    expect((await planPhase.run(ctx)).kind).toBe('completed');
-
-    const buildPhase = new BuildPhase(buildRunner, mockGit as any, wtPlan, config);
-    expect((await buildPhase.run(ctx)).kind).toBe('completed');
-
-    const verifyPhase = new VerifyPhase(verifyRunner, createMockGitOperations() as any, wtPlan, config);
-    expect((await verifyPhase.run(ctx)).kind).toBe('completed');
   });
 
   // ── Error propagation ──

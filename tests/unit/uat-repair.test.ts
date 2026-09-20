@@ -14,7 +14,7 @@ describe('UAT 修复入口分类', () => {
     fs.writeFileSync(path.join(workDir, config.e2e.configFile), 'export default {};');
     vi.mocked(executeUat).mockResolvedValue({ runId: 'fresh', issueIid: 1, passed: false, failureKind, error: failureKind === 'assertion' ? 'expect 页面标题通过' : '浏览器启动失败', passedTests: 0, failedTests: failureKind === 'assertion' ? 1 : 0, skippedTests: 0, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString() });
     const plan = new PlanPersistence(workDir, 1, workDir);
-    const phase = new UatPhase(createMockAIRunner(), createMockGitOperations(), plan, config);
+    const phase = new UatPhase(createMockAIRunner(), createMockGitOperations() as unknown as import('../../src/git/GitOperations.js').GitOperations, plan, config);
     const result = await phase.run({ workDir, branchName: 'iaf-1', demand: { demandId: 'gh-1', title: '需求', description: '实现', createdAt: new Date().toISOString(), sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' } } });
     expect(result).toMatchObject(failureKind === 'assertion' ? { kind: 'requestRetryFrom', targetPhaseId: 'build' } : { kind: 'failed', error: { retryable: 'hard-no-auto' } });
     expect(JSON.parse(plan.readFile(ARTIFACTS.uatRun.filename)!)).toMatchObject({ runId: 'fresh', passed: false });

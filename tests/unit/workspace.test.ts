@@ -9,7 +9,7 @@ describe('buildSingleRepoWorkspace', () => {
         gitRootDir: '/data/project',
         projectSubDir: 'app/svc',
         baseBranch: 'master',
-        branchPrefix: 'feat/issue',
+        branchPrefix: 'feat/issue', worktreeBaseDir: '/tmp/worktrees',
       },
       'team/project',
     );

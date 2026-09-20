@@ -1,0 +1,74 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "LangGraph Native 后端主流程与恢复分支",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "output": "docs/langgraph-native-backend-flow.html"
+  },
+  "lanes": [
+    { "id": "service", "label": "入口、状态与人工控制" },
+    { "id": "graph", "label": "LangGraph 原生工作流" },
+    { "id": "validation", "label": "验收与交付" }
+  ],
+  "phases": [
+    { "id": "bootstrap", "label": "发现与准备", "fromCol": 0, "toCol": 0 },
+    { "id": "implementation", "label": "计划与审核", "fromCol": 1, "toCol": 2, "variant": "emphasis" },
+    { "id": "acceptance", "label": "开发、验收与交付", "fromCol": 3, "toCol": 5, "variant": "security" }
+  ],
+  "groups": [
+    { "id": "evidence_gate", "label": "候选提交验收门禁", "lane": "validation", "fromCol": 3, "toCol": 5, "variant": "security" },
+    { "id": "recovery_control", "label": "同一 Issue 聚合事务", "lane": "service", "fromCol": 1, "toCol": 2, "variant": "dashed" }
+  ],
+  "mainPath": [
+    "intake",
+    "plan",
+    "review",
+    "build",
+    "verify",
+    "uat",
+    "deliver"
+  ],
+  "semanticChecks": {
+    "allowedRoots": ["intake"],
+    "allowedTerminals": ["deliver", "intervention", "run_store"],
+    "requiredEdges": [
+      { "from": "plan", "to": "review" },
+      { "from": "review", "to": "build" },
+      { "from": "build", "to": "verify" },
+      { "from": "verify", "to": "uat" }
+    ],
+    "requiredPaths": [
+      { "from": "intake", "to": "deliver" },
+      { "from": "review", "to": "plan" },
+      { "from": "verify", "to": "build" },
+      { "from": "uat", "to": "build" }
+    ]
+  },
+  "nodes": [
+    { "id": "intake", "lane": "service", "col": 0, "type": "external", "label": "IssueService", "sublabel": "轮询/API、锁、worktree", "width": 132 },
+    { "id": "plan", "lane": "graph", "col": 1, "type": "backend", "label": "plan", "sublabel": "不可变计划", "width": 116 },
+    { "id": "review", "lane": "graph", "col": 2, "type": "security", "label": "review interrupt", "sublabel": "批准或驳回", "tag": "人工门禁", "width": 132 },
+    { "id": "build", "lane": "graph", "col": 3, "type": "messagebus", "label": "build 子图", "sublabel": "DAG 并行、Git 串行", "width": 132 },
+    { "id": "verify", "lane": "validation", "col": 3, "type": "backend", "label": "verify", "sublabel": "绑定候选提交", "width": 116 },
+    { "id": "uat", "lane": "validation", "col": 4, "type": "security", "label": "UAT（可跳过）", "sublabel": "本次退出码与报告", "width": 132 },
+    { "id": "deliver", "lane": "validation", "col": 5, "type": "cloud", "label": "唯一交付", "sublabel": "推送、PR、完成回写", "width": 132 },
+    { "id": "run_store", "lane": "service", "col": 1, "type": "database", "label": "run.json v5", "sublabel": "生命周期、检查点、凭证", "width": 132 },
+    { "id": "intervention", "lane": "service", "col": 2, "type": "security", "label": "恢复/人工介入", "sublabel": "重试、暂停、继续、取消", "width": 140 }
+  ],
+  "edges": [
+    { "id": "intake_plan", "from": "intake", "to": "plan", "label": "新图/恢复", "variant": "emphasis", "role": "main" },
+    { "id": "plan_review", "from": "plan", "to": "review", "label": "计划版本", "variant": "default", "role": "main" },
+    { "id": "review_build", "from": "review", "to": "build", "label": "批准", "variant": "emphasis", "role": "main" },
+    { "id": "review_replan", "from": "review", "to": "plan", "label": "驳回反馈", "variant": "security", "role": "return" },
+    { "id": "build_verify", "from": "build", "to": "verify", "label": "候选提交", "variant": "default", "role": "main" },
+    { "id": "verify_uat", "from": "verify", "to": "uat", "label": "通过", "variant": "emphasis", "role": "main" },
+    { "id": "verify_repair", "from": "verify", "to": "build", "label": "失败修复", "variant": "security", "role": "return" },
+    { "id": "uat_deliver", "from": "uat", "to": "deliver", "label": "通过/跳过", "variant": "emphasis", "role": "main" },
+    { "id": "uat_repair", "from": "uat", "to": "build", "label": "失败修复", "variant": "security", "role": "return" },
+    { "id": "setup_store", "from": "intake", "to": "run_store", "label": "初始化", "variant": "dashed", "role": "async" },
+    { "id": "phase_failure", "from": "build", "to": "intervention", "label": "异常/暂停/耗尽", "variant": "security", "role": "error" },
+    { "id": "resume_saved", "from": "intervention", "to": "run_store", "label": "持久化后恢复", "variant": "dashed", "role": "return" }
+  ]
+}

@@ -1,14 +1,14 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach,describe,expect,it } from 'vitest';
 import {
-  isNoteSyncEnabledForIssue,
-  getNoteSyncEnabled,
-  setNoteSyncOverride,
-  truncateToSummary,
-  buildNoteSyncComment,
+buildNoteSyncComment,
+getNoteSyncEnabled,
+isNoteSyncEnabledForIssue,
+setNoteSyncOverride,
+truncateToSummary,
 } from '../../src/notesync/NoteSyncSettings.js';
 import {
-  createTestConfig,
-  createMockIssueTracker,
+createMockIssueTracker,
+createTestConfig,
 } from '../helpers/mock-factories.js';
 
 describe('NoteSyncSettings', () => {

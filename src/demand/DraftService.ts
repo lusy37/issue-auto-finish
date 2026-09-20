@@ -1,3 +1,6 @@
+import { DRAFT_FORMAT } from '../shared/runtime/formats.js';
+import { parseJsonOutput } from '../prompts/parseJsonOutput.js';
+import { ISSUE_LABELS } from '../clients/IssueLabels.js';
 import type { DemandDraft } from '../shared/workbench.js';
 export type { DemandDraft } from '../shared/workbench.js';
 import { writeJsonAtomicSync } from '../utils/atomicFile.js';
@@ -14,7 +17,7 @@ function readDraft(file: string, id: string): DemandDraft {
   try {
     const draft: DemandDraft = JSON.parse(fs.readFileSync(file, 'utf8'));
     draftInput.parse(draft);
-    if (!/^[a-f0-9-]{36}$/.test(id) || draft.format !== 'iaf-mini/draft/v2' || draft.id !== id || draft.marker !== `<!-- iaf-draft:${id} -->` || !['draft', 'unknown', 'created'].includes(draft.status) || typeof draft.createdAt !== 'string') throw new Error('格式或标记无效');
+    if (!/^[a-f0-9-]{36}$/.test(id) || draft.format !== DRAFT_FORMAT || draft.id !== id || draft.marker !== `<!-- iaf-draft:${id} -->` || !['draft', 'unknown', 'created'].includes(draft.status) || typeof draft.createdAt !== 'string') throw new Error('格式或标记无效');
     if (draft.status !== 'draft' && !draft.creationRequestedAt) throw new Error('缺少创建意图');
     if (draft.status === 'created' && (!Number.isSafeInteger(draft.issueIid) || !draft.issueUrl)) throw new Error('缺少平台关联凭证');
     return draft;
@@ -45,9 +48,9 @@ export class DraftService {
     if (!input.trim() || input.length > 20000) throw new Error('需求长度必须为 1～20000 字符');
     const result = await this.runner.run({ workDir: this.workDir, mode: 'plan', phaseName: 'draft', timeoutMs: 120000, prompt: `整理为一个完整父需求，不拆成多个 Issue。仅返回 JSON：{"title":"标题","description":"完整说明","acceptanceCriteria":"验收标准"}。不修改代码。\n${input}` });
     if (!result.success) throw new Error(result.errorMessage || '需求整理失败');
-    const content = draftInput.parse(JSON.parse(result.output.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1] ?? result.output));
+    const content = draftInput.parse(parseJsonOutput(result.output));
     const id = randomUUID();
-    const draft: DemandDraft = { ...content, format: 'iaf-mini/draft/v2', id, marker: `<!-- iaf-draft:${id} -->`, input, createdAt: new Date().toISOString(), status: 'draft' };
+    const draft: DemandDraft = { ...content, format: DRAFT_FORMAT, id, marker: `<!-- iaf-draft:${id} -->`, input, createdAt: new Date().toISOString(), status: 'draft' };
     this.save(draft);
     return draft;
   }
@@ -72,7 +75,7 @@ export class DraftService {
       draft.creationRequestedAt = new Date().toISOString();
       this.save(draft);
       try {
-        const issue = await this.client.createIssue(draft.title, `${draft.description}\n\n## 验收标准\n${draft.acceptanceCriteria}\n\n${draft.marker}`, ['auto-finish']);
+        const issue = await this.client.createIssue(draft.title, `${draft.description}\n\n## 验收标准\n${draft.acceptanceCriteria}\n\n${draft.marker}`, [ISSUE_LABELS.root]);
         this.verifyIssue(issue, draft);
         Object.assign(draft, { status: 'created', issueIid: issue.number, issueUrl: issue.html_url, error: undefined });
       } catch (error) { draft.error = (error as Error).message; }

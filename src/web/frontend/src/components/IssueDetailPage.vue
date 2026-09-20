@@ -7,8 +7,8 @@ import * as api from '@/api/client';
 import { usePipeline, loadPipelineMeta } from '@/composables/usePipeline';
 import { useSSE } from '@/composables/useSSE';
 import { useIssueDetail } from '@/composables/useIssueDetail';
+import { repairProgress } from '@/composables/repairProgress';
 import { useAgentLogs } from '@/composables/useAgentLogs';
-import { t } from '@/i18n/index';
 import { formatTime } from '@/utils/formatters';
 import PipelineProgress from './PipelineProgress.vue';
 import ReviewGatePanel from './ReviewGatePanel.vue';
@@ -26,10 +26,7 @@ const detail = useIssueDetail();
 const logs = useAgentLogs();
 
 const selectedIssueIid = computed(() => detail.selectedIssue.value ? getIssueIid(detail.selectedIssue.value) : undefined);
-const currentVerifyFixLoop = computed(() => {
-  const number = selectedIssueIid.value;
-  return number != null ? logs.getVerifyFixLoop(number) : undefined;
-});
+const currentVerifyFixLoop = computed(() => repairProgress(detail.selectedIssue.value, systemStatus.value?.config.verifyFixMaxIterations ?? 0));
 const retryCount = computed(() => Object.values(detail.selectedIssue.value?.run?.retryUsed ?? {}).reduce((sum, value) => sum + value, 0));
 const issueError = computed(() => detail.selectedIssue.value?.lifecycle.kind === 'failed'
   ? detail.selectedIssue.value.lifecycle.error.message
@@ -120,28 +117,7 @@ const { connected } = useSSE((eventName, rawPayload) => {
     }
   }
 
-  if (eventName.startsWith('verify:')) {
-    const d = payload.data;
-    const number = d?.issueIid as number | undefined;
-    if (number) {
-      logs.updateVerifyFixLoop(number, eventName, d as Record<string, unknown>);
-      if (detail.selectedIssue.value && getIssueIid(detail.selectedIssue.value) === number) {
-        let message = '';
-        if (eventName === 'verify:loopStarted') {
-          message = t('verify.loopStarted', { max: d.maxIterations as number });
-        } else if (eventName === 'verify:iterationComplete') {
-          message = d.passed
-            ? t('verify.iterationPassed', { n: d.iteration as number })
-            : t('verify.iterationFailed', { n: d.iteration as number, reasons: ((d.failures as string[]) ?? []).join('; ') });
-        } else if (eventName === 'verify:loopExhausted') {
-          message = t('verify.loopExhausted', { n: d.totalIterations as number });
-        }
-        if (message) {
-          logs.pushSystemLog(number, selectedIssueIid, 'verify', message, payload.timestamp);
-        }
-      }
-    }
-  }
+
 });
 
 async function fetchStatus() {

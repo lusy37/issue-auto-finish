@@ -1,3 +1,4 @@
+import type { Config } from '../../src/config.js';
 import { suspendAtReview } from '../helpers/native-review.js';
 import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { it, expect, vi } from "vitest";
@@ -32,7 +33,7 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
   const dir = fs.mkdtempSync(path.join(root, "工作台 "));
   vi.stubEnv("DATA_DIR", path.join(dir, "data"));
   vi.stubEnv("IAF_CONFIG_PATH", path.join(dir, ".env"));
-  const config = transformEnvToConfig(
+  const config: Config = transformEnvToConfig(
     envSchema.parse({
       GITHUB_API_URL: "http://127.0.0.1:9",
       GITHUB_TOKEN: "test",
@@ -129,7 +130,7 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
       knowledgeStore,
       versionStore,
       workDir: dir,
-      timeoutMs: 1000,
+      aiPolicy: { timeoutMs: 1000 },
       minDiariesForDistill: 1,
     }),
     agentRuleDistiller: new AgentRuleDistiller({
@@ -137,7 +138,7 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
       knowledgeStore,
       versionStore,
       workDir: dir,
-      timeoutMs: 1000,
+      aiPolicy: { timeoutMs: 1000 },
       confidenceThreshold: 0.7,
     }),
   });
@@ -250,6 +251,12 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
     await page.goto(base + "/detail?issue=1");
     await page.getByRole("button", { name: "内部任务", exact: true }).click();
     await browserExpect(page.getByText("implementation · 实现需求", { exact: true })).toBeVisible();
+    await browserExpect(page.getByRole("heading", { name: "Issue 主流程" })).toBeVisible();
+    await browserExpect(page.getByText("检查点下一步：review", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "构建 build", exact: true }).click();
+    await browserExpect(page.getByRole("group", { name: "流程节点与依赖关系" })).toHaveCount(2);
+    await page.getByLabel("显示原生节点与声明路由").check();
+    await browserExpect(page.getByRole("button", { name: "publish_plan ", exact: false })).toBeVisible();
     await page.getByRole("button", { name: "审查", exact: true }).click();
     await browserExpect(
       page.getByRole("button", { name: "通过计划" }),

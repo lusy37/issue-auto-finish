@@ -5,7 +5,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PlanPhase } from '../../src/phases/PlanPhase.js';
-import { BuildPhase } from '../../src/phases/BuildPhase.js';
 import { PlanPersistence } from '../../src/persistence/PlanPersistence.js';
 import type { PhaseContext } from '../../src/phases/BasePhase.js';
 import type { DemandSpec } from '../../src/demand/DemandSpec.js';
@@ -91,7 +90,7 @@ describe('PlanPhase', () => {
       aiRunner,
       createMockGitOperations() as any,
       plan,
-      createTestConfig({ ai: { mode: 'codex', binary: 'codex', phaseTimeoutMs: 1800000, nvmNodeVersion: '20' } }),
+      createTestConfig({ ai: { mode: 'codex', binary: 'codex', phaseTimeoutMs: 1800000 } }),
     );
     const prompt = (claudePhase as any).buildPrompt(ctx);
     expect(prompt).not.toContain('技术架构师');
@@ -113,7 +112,7 @@ describe('PlanPhase', () => {
       aiRunner,
       createMockGitOperations() as any,
       plan,
-      createTestConfig({ ai: { mode: 'codex', binary: 'codex', phaseTimeoutMs: 1800000, nvmNodeVersion: '20' } }),
+      createTestConfig({ ai: { mode: 'codex', binary: 'codex', phaseTimeoutMs: 1800000 } }),
     );
     const prompt = (claudePhase as any).buildPrompt(ctx);
 
@@ -134,7 +133,7 @@ describe('PlanPhase', () => {
       aiRunner,
       createMockGitOperations() as any,
       plan,
-      createTestConfig({ ai: { mode: 'codex', binary: 'codex', phaseTimeoutMs: 1800000, nvmNodeVersion: '20' } }),
+      createTestConfig({ ai: { mode: 'codex', binary: 'codex', phaseTimeoutMs: 1800000 } }),
     );
     const prompt = (claudePhase as any).buildPrompt(ctx);
 
@@ -154,7 +153,7 @@ describe('PlanPhase', () => {
       aiRunner,
       createMockGitOperations() as any,
       plan,
-      createTestConfig({ ai: { mode: 'codex', binary: 'codex', phaseTimeoutMs: 1800000, nvmNodeVersion: '20' } }),
+      createTestConfig({ ai: { mode: 'codex', binary: 'codex', phaseTimeoutMs: 1800000 } }),
     );
     const prompt = (claudePhase as any).buildPrompt(ctx);
 
@@ -254,35 +253,4 @@ describe('Phase artifact validation', () => {
     expect(intent.kind).toBe('completed');
   });
 
-  it('BuildPhase returns failed when AI succeeds but no git changes', async () => {
-    const git = createMockGitOperations();
-    git.hasChanges.mockResolvedValue(false);
-
-    const buildPhase = new BuildPhase(
-      aiRunner,
-      git as any,
-      plan,
-      createTestConfig(),
-    );
-
-    const intent = await buildPhase.run(ctx);
-    expect(intent.kind).toBe('failed');
-    if (intent.kind !== 'failed') throw new Error('Expected failed intent');
-    expect(intent.error.message).toMatch(/未产生任何代码变更/);
-  });
-
-  it('BuildPhase succeeds when git has changes', async () => {
-    const git = createMockGitOperations();
-    git.hasChanges.mockResolvedValue(true);
-
-    const buildPhase = new BuildPhase(
-      aiRunner,
-      git as any,
-      plan,
-      createTestConfig(),
-    );
-
-    const intent = await buildPhase.run(ctx);
-    expect(intent.kind).toBe('completed');
-  });
 });

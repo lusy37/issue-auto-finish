@@ -95,7 +95,7 @@ vi.mock('../../../src/knowledge/index.js', () => {
 });
 
 // Must import AFTER mocks
-import type { PromptContext, ConflictResolveContext, ReviewRoundForPrompt, E2ePromptPorts } from '../../../src/prompts/templates.js';
+import type { PromptContext, ReviewRoundForPrompt } from '../../../src/prompts/templates.js';
 
 describe('prompt templates', () => {
   let templates: typeof import('../../../src/prompts/templates.js');
@@ -130,9 +130,6 @@ describe('prompt templates', () => {
     expect(templates.planPrompt(ctxNoSupplement)).toMatchSnapshot();
   });
 
-  it('buildPrompt', () => {
-    expect(templates.buildPrompt({ ...baseCtx, planContent: '完整计划：实现登录服务并补充成功、失败和权限边界测试。' })).toMatchSnapshot();
-  });
 
   it('rePlanPrompt with review history', () => {
     const history: ReviewRoundForPrompt[] = [
@@ -181,28 +178,8 @@ describe('prompt templates', () => {
     expect(match![1]).toBe(huge);
   });
 
-  it('e2eVerifyPromptSuffix without ports', () => {
-    expect(templates.e2eVerifyPromptSuffix(baseCtx)).toMatchSnapshot();
-  });
 
-  it('e2eVerifyPromptSuffix with ports', () => {
-    const ports: E2ePromptPorts = {
-      backendPort: 4001,
-      frontendPort: 9001,
-      host: '127.0.0.1',
-    };
-    expect(templates.e2eVerifyPromptSuffix(baseCtx, ports)).toMatchSnapshot();
-  });
 
-  it('conflictResolvePrompt', () => {
-    const ctx: ConflictResolveContext = {
-      issueIid: 42,
-      branchName: 'feat/issue-42',
-      baseBranch: 'master',
-      conflictFiles: ['src/index.ts', 'src/config.ts', 'package.json'],
-    };
-    expect(templates.conflictResolvePrompt(ctx)).toMatchSnapshot();
-  });
 
   it('issueProgressComment - in progress', () => {
     expect(templates.issueProgressComment('analysis', 'in_progress')).toMatchSnapshot();

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { graphFixture, graphDeps, git, task, newTracker } from '../helpers/dag-repository.js';
-import { createMockOrchestratorDeps, createTestConfig } from '../helpers/mock-factories.js';
+import { createMockOrchestratorDeps, createTestConfig, createTestIssue } from '../helpers/mock-factories.js';
 import { TaskGraphExecutor } from '../../src/dag/TaskGraphExecutor.js';
 import { deliverIssue } from '../../src/dag/DeliveryService.js';
 import type { IssueProcessingContext } from '../../src/orchestrator/IssueProcessingContext.js';
@@ -36,8 +36,9 @@ async function prepared(e2eEnabled = false) {
     return platformPr;
   });
   deps.github.listPullRequests = list; deps.github.createPullRequest = create;
-  deps.github.getPullRequestDetail = vi.fn(async () => platformPr!);
-  const ctx = { issue: { number: 1, labels: [] }, demand: f.tracker.get(1)!.demandSpec!, branchName: 'iaf-1', wtCtx: { gitRootDir: f.integration, workDir: f.integration } } as IssueProcessingContext;
+  deps.github.getPullRequestDetail = vi.fn(async () => ({ ...platformPr!, has_conflicts: false, merge_status: 'clean' }));
+  const demand = f.tracker.get(1)!.demandSpec!;
+  const ctx: IssueProcessingContext = { issue: createTestIssue({ number: 1, labels: ['auto-finish-tools', 'bug', 'auto-finish:processing'] }), demand, branchName: 'iaf-1', wtCtx: { issueIid: 1, branchName: 'iaf-1', gitRootDir: f.integration, workDir: f.integration }, record: f.tracker.get(1)!, isRetry: false, pipelineDef: buildPlanModePipeline({ e2eEnabled }), phaseCtx: { demand, branchName: 'iaf-1' } };
   const orchestrator = new IssueService(config, deps.github, new GitOperations(f.repo), runner, f.tracker);
   return { ...f, deps, ctx, create, list, accept, orchestrator, pr: () => platformPr!, deliver: () => deliverIssue(ctx, deps), setContent: (value: string) => { content = value; } };
 }
@@ -99,6 +100,7 @@ describe('验收提交与唯一 PR 交付', { timeout: 300_000 }, () => {
       saved = f.tracker.get(1);
     });
     await expect(deliverIssueStep(f.ctx, f.deps, { serversStarted: false })).rejects.toThrow('交付已中止或执行身份已失效');
+    expect(f.deps.github.updateIssueLabels).toHaveBeenCalledWith(1, ['auto-finish-tools', 'bug', 'auto-finish:done']);
     expect(newTracker(f.data).get(1)).toEqual(saved);
     expect(f.tracker.get(1)!.lifecycle.kind).not.toBe('completed');
     if (action === 'pause') {
@@ -126,7 +128,7 @@ describe('验收提交与唯一 PR 交付', { timeout: 300_000 }, () => {
       context: { issueIid: 1, demand: f.ctx.demand, branchName: f.ctx.branchName, workDir: f.integration },
       deliver: () => deliverIssueStep(f.ctx, f.deps, { serversStarted: false }),
     });
-    f.deps.github.updateIssueLabels.mockImplementationOnce(async () => { await f.orchestrator.abortIssue(1); });
+    vi.mocked(f.deps.github.updateIssueLabels).mockImplementationOnce(async () => { await f.orchestrator.abortIssue(1); });
     await expect(workflow().drive()).rejects.toThrow('交付已中止或执行身份已失效');
     expect(newTracker(f.data).get(1)?.lifecycle.kind).toBe('paused');
     expect(Object.values(f.tracker.get(1)!.run!.workflow.results).some(result => result.phase === 'deliver')).toBe(false);

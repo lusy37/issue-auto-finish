@@ -1,3 +1,4 @@
+import { ISSUE_LABELS, withWorkbenchLabels } from '../../clients/IssueLabels.js';
 import { GitOperations } from '../../git/GitOperations.js';
 import { PlanPersistence } from '../../persistence/PlanPersistence.js';
 import type { IssueProcessingContext, OrchestratorDeps, SetupResult } from '../IssueProcessingContext.js';
@@ -23,10 +24,7 @@ export async function executeSetup(
 
   // 1. 更新标签
   try {
-    await deps.github.updateIssueLabels(issue.number, [
-      ...issue.labels.filter(l => !l.startsWith('auto-finish:')),
-      'auto-finish:processing',
-    ]);
+    await deps.github.updateIssueLabels(issue.number, withWorkbenchLabels(issue.labels, [ISSUE_LABELS.root, ISSUE_LABELS.processing]));
   } catch (err) {
     logger.warn('Failed to update issue labels', { error: (err as Error).message });
   }

@@ -9,7 +9,7 @@ import type { DiaryEntry } from "../../src/distill/types.js";
 describe("BaseTracker 持久化边界", () => {
   let dir: string;
   const entry = (id: string): DiaryEntry => ({
-    id, kind: "phase-summary", issueIid: 1, phase: "plan", title: "测试", content: "内容",
+    id, issueIid: 1, issueTitle: "测试", branchName: "iaf-1", pipelineMode: "plan-mode", outcome: "completed", humanInterventions: [], timing: { startedAt: "2026-09-20T00:00:00Z", finishedAt: "2026-09-20T00:01:00Z", totalDurationMs: 60000, phaseTimings: [] },
     createdAt: new Date().toISOString(), distilled: false,
   });
   beforeEach(() => {

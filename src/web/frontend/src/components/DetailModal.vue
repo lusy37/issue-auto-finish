@@ -2,7 +2,7 @@
 import TaskGraphPanel from "./TaskGraphPanel.vue";
 import { ref, computed } from 'vue';
 import type { IssueRecord, SupplementInfo, AgentLogEntry, SystemStatus, ReviewRound } from '@/types';
-import type { VerifyFixLoopState } from '@/composables/useAgentLogs';
+import type { VerifyFixLoopState } from '@/composables/repairProgress';
 import { getIssueIid, getIssueTitle, getReviewApprovalSource } from '@/types';
 import { usePipeline } from '@/composables/usePipeline';
 import { formatTime } from '@/utils/formatters';

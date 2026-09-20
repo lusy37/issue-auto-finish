@@ -1,3 +1,6 @@
+import { githubIssueToDemandSpec } from '../../src/demand/adapters/GitHubAdapter.js';
+import { demandToPromptContext } from '../../src/prompts/templates.js';
+import { createTestIssue } from '../helpers/mock-factories.js';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -79,7 +82,7 @@ describe('SupplementStore', () => {
       freeText: '',
     });
 
-    const text = store.toPromptText(42);
+    const text = demandToPromptContext(githubIssueToDemandSpec(createTestIssue(), store.get(42))).supplementText;
     expect(text).toContain('## 补充信息');
     expect(text).toContain('### 补充需求说明');
     expect(text).toContain('需要实现搜索功能');
@@ -89,7 +92,7 @@ describe('SupplementStore', () => {
   });
 
   it('returns empty string for prompt text when no supplement', () => {
-    expect(store.toPromptText(999)).toBe('');
+    expect(demandToPromptContext(githubIssueToDemandSpec(createTestIssue(), store.get(999))).supplementText).toBe('');
   });
 
   it('returns empty string for prompt text when all fields empty', () => {
@@ -98,7 +101,7 @@ describe('SupplementStore', () => {
       constraints: '', references: '', freeText: '',
     });
 
-    expect(store.toPromptText(42)).toBe('');
+    expect(demandToPromptContext(githubIssueToDemandSpec(createTestIssue(), store.get(42))).supplementText).toBe('');
   });
 
   it('overwrites existing supplement on save', () => {

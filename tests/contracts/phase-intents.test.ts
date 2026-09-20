@@ -1,40 +1,23 @@
-/**
- * 阶段 Intent 契约测试 — PR2 INT-1~8
- *
- * 锁定每个阶段在典型场景下返回的 Intent 形态。这是 PR3 编排器开发的契约：
- * 编排器只能依赖这些 Intent 形状，不能 dive 到阶段内部数据。
- *
- * INT 编号对应 plan-57159b05.plan.md 中的验证 case：
- *   - INT-1: plan 完成 → CompletedIntent
- *   - INT-2: review 阶段（编排器层概念，不是 BasePhase；由 PR3 GateAction 单测覆盖）
- *   - INT-3: release 检测出能力 → AwaitGateIntent('release-confirm')
- *   - INT-4: verify 失败 → RequestRetryFromIntent('build')
- *   - INT-5: uat 异步 → AwaitAsyncIntent
- *   - INT-6: 超时 + active → FailedIntent.error.retryable === 'soft'
- *   - INT-7: 超时 + 非 active → FailedIntent.error.retryable === 'hard'
- *   - INT-8: ACP 模式走 onInputRequired 回调，不影响 Intent
+/** 阶段意图契约：验证完成、请求集成修复和超时失败的实际返回结构。
+ * 审核 interrupt 与任务图恢复由原生工作流集成测试覆盖。
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync,rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
+import { PlanPersistence } from '../../src/persistence/PlanPersistence.js';
+import type { PhaseContext } from '../../src/phases/BasePhase.js';
 import { PlanPhase } from '../../src/phases/PlanPhase.js';
 import { VerifyPhase } from '../../src/phases/VerifyPhase.js';
-import { UatPhase } from '../../src/phases/UatPhase.js';
-import { PlanPersistence } from '../../src/persistence/PlanPersistence.js';
-import { ReleaseDetectCache } from '../../src/release/index.js';
 import {
-  ScriptedAIRunner,
-  successScript,
-  failureScript,
-  writeArtifact,
-} from '../helpers/scripted-ai-runner.js';
-import {
-  createMockGitOperations,
-  createTestConfig,
+createMockGitOperations,
+createTestConfig,
 } from '../helpers/mock-factories.js';
-import type { PhaseContext } from '../../src/phases/BasePhase.js';
-import type { InputRequest } from '../../src/ai-runner/index.js';
+import {
+ScriptedAIRunner,
+successScript,
+writeArtifact
+} from '../helpers/scripted-ai-runner.js';
 
 vi.mock('../../src/knowledge/index.js', () => ({
   getProjectKnowledge: vi.fn().mockReturnValue(null),
@@ -50,11 +33,11 @@ const MIN_CONTENT = 'A'.repeat(80);
 
 function buildPhaseCtx(overrides?: Partial<PhaseContext>): PhaseContext {
   return {
-    demand: {
+    demand: { createdAt: '2026-09-20T00:00:00Z',
       demandId: String(ISSUE_IID),
       title: 'Test Issue',
       description: 'Implement feature',
-      sourceRef: { displayId: String(ISSUE_IID), source: 'github' as const, externalId: '200' },
+      sourceRef: { displayId: String(ISSUE_IID), source: 'github-issue' as const, externalId: '200' },
     },
     branchName: `feat/issue-${ISSUE_IID}`,
     pipelineMode: 'plan-mode',

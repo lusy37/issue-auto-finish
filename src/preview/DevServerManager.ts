@@ -1,3 +1,5 @@
+import { PREVIEW_DEFAULTS } from '../shared/runtime/defaults.js';
+import { waitForReadiness } from './readiness.js';
 import { spawnProcess as spawn, stopProcess, type ManagedProcess } from '../utils/process.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,6 +11,8 @@ import { resolveDataDir } from '../paths.js';
 const logger = rootLogger.child('DevServerManager');
 
 interface ServerSet {
+  startup: AbortController;
+  ready: boolean;
   backend: ManagedProcess;
   frontend: ManagedProcess;
   ports: PortPair;
@@ -21,7 +25,10 @@ interface ServerSet {
 export interface DevServerManagerOptions {
   onProcessStarted?: (number: number, pid: number, workDir: string) => string;
   onProcessExited?: (number: number, callId: string) => void;
-  startupGraceMs?: number;
+  startupTimeoutMs?: number;
+  readinessIntervalMs?: number;
+  backendReadyUrl?: string;
+  frontendReadyUrl?: string;
   frontendDir?: string;
   backendCommand?: { bin: string; args: string[] };
   frontendCommand?: { bin: string; args: string[] };
@@ -31,9 +38,11 @@ const DEFAULT_OPTIONS: DevServerManagerOptions = {};
 
 export class DevServerManager {
   private servers = new Map<number, ServerSet>();
+  private starting = new Map<number, Promise<void>>();
+  private startups = new Map<number, AbortController>();
   private stopping = new Map<number, Promise<void>>();
   async waitForStopped(issueIid: number): Promise<void> { await this.stopping.get(issueIid); }
-  async stopAllAndWait(): Promise<void> { this.stopAll(); await Promise.all(this.stopping.values()); }
+  async stopAllAndWait(): Promise<void> { this.stopAll(); await Promise.allSettled(this.starting.values()); await Promise.all(this.stopping.values()); }
   private options: DevServerManagerOptions;
   private logDir: string;
 
@@ -50,7 +59,21 @@ export class DevServerManager {
     return fs.existsSync(filePath) ? filePath : null;
   }
 
-  async startServers(wtCtx: WorktreeContext, ports: PortPair): Promise<void> {
+  async startServers(wtCtx: WorktreeContext, ports: PortPair, signal?: AbortSignal): Promise<void> {
+    const pending = this.starting.get(wtCtx.issueIid);
+    if (pending) return pending;
+    signal?.throwIfAborted();
+    const startup = new AbortController();
+    this.startups.set(wtCtx.issueIid, startup);
+    const operation = this.start(wtCtx, ports, signal ? AbortSignal.any([signal, startup.signal]) : startup.signal);
+    this.starting.set(wtCtx.issueIid, operation);
+    try { await operation; }
+    finally { this.starting.delete(wtCtx.issueIid); this.startups.delete(wtCtx.issueIid); }
+  }
+
+  private async start(wtCtx: WorktreeContext, ports: PortPair, signal?: AbortSignal): Promise<void> {
+    await this.waitForStopped(wtCtx.issueIid);
+    signal?.throwIfAborted();
     if (this.servers.has(wtCtx.issueIid)) {
       logger.info('Servers already running for issue', { issueIid: wtCtx.issueIid });
       return;
@@ -137,6 +160,8 @@ export class DevServerManager {
     });
 
     const serverSet: ServerSet = {
+      startup: new AbortController(),
+      ready: false,
       backend,
       frontend,
       ports,
@@ -148,18 +173,32 @@ export class DevServerManager {
     this.servers.set(wtCtx.issueIid, serverSet);
     logger.info('Dev servers spawned, waiting for startup', { issueIid: wtCtx.issueIid, ...ports });
 
-    await new Promise((r) => setTimeout(r, this.options.startupGraceMs ?? 10_000));
-    if(startupError)throw startupError;
-    if(backend.nodeChildProcess.exitCode!==null || frontend.nodeChildProcess.exitCode!==null){this.stopServers(wtCtx.issueIid);throw new Error('预览进程已退出，请查看预览日志');}
-    logger.info('Dev servers startup grace period done', { issueIid: wtCtx.issueIid });
+    const startupSignal = signal ? AbortSignal.any([signal, serverSet.startup.signal]) : serverSet.startup.signal;
+    try {
+      if (startupError) throw startupError;
+      if (backend.nodeChildProcess.exitCode !== null || frontend.nodeChildProcess.exitCode !== null) throw new Error('预览进程已退出，请查看预览日志');
+      await waitForReadiness([
+        { port: ports.backendPort, url: this.options.backendReadyUrl },
+        { port: ports.frontendPort, url: this.options.frontendReadyUrl },
+      ], this.options.startupTimeoutMs ?? PREVIEW_DEFAULTS.startupTimeoutMs, this.options.readinessIntervalMs ?? PREVIEW_DEFAULTS.readinessIntervalMs, startupSignal);
+      startupSignal.throwIfAborted();
+      serverSet.ready = true;
+      logger.info('预览服务已就绪', { issueIid: wtCtx.issueIid, ...ports });
+    } catch (error) {
+      this.stopServers(wtCtx.issueIid);
+      await this.waitForStopped(wtCtx.issueIid);
+      throw startupError ?? error;
+    }
   }
 
   stopServers(issueIid: number): void {
+    this.startups.get(issueIid)?.abort(new Error('预览启动已取消'));
     const set = this.servers.get(issueIid);
     if (!set) return;
 
     logger.info('Stopping dev servers', { issueIid, ports: set.ports });
 
+    set.startup.abort(new Error('预览已停止或进程已退出，请查看预览日志'));
     set.backendLog.end();
     set.frontendLog.end();
 
@@ -171,7 +210,7 @@ export class DevServerManager {
   }
 
   stopAll(): void {
-    for (const [number] of this.servers) {
+    for (const number of new Set([...this.servers.keys(), ...this.startups.keys()])) {
       this.stopServers(number);
     }
   }
@@ -180,7 +219,7 @@ export class DevServerManager {
     const set = this.servers.get(issueIid);
     if (!set) return { running: false };
     return {
-      running: set.backend.nodeChildProcess.exitCode===null && set.frontend.nodeChildProcess.exitCode===null,
+      running: set.ready && set.backend.nodeChildProcess.exitCode===null && set.frontend.nodeChildProcess.exitCode===null,
       ports: set.ports,
       startedAt: set.startedAt,
     };

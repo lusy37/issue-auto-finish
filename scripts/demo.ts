@@ -14,7 +14,7 @@ import type {
 import { main } from "../src/index.js";
 
 /** 可重复操作的本地演示：平台和 AI 使用固定响应，Git、状态机、浏览器验收均真实执行。 */
-const root = path.resolve(process.env.IAF_DEMO_DIR || ".iaf-mini/demo-langgraph-v5");
+const root = path.resolve(process.env.IAF_DEMO_DIR || ".iaf-mini/demo-langgraph-v6");
 const repo = path.join(root, "repo"),
   origin = path.join(root, "origin.git");
 fs.mkdirSync(root, { recursive: true });

@@ -1,11 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe,expect,it } from 'vitest';
 import { AsyncMutex } from '../../src/utils/AsyncMutex.js';
 import {
-  createMockGitOperations,
-  createMockGitHubClient,
-  createMockAIRunner,
-  createTestConfig,
-  createTestIssue,
+createMockGitOperations,
+createTestConfig
 } from '../helpers/mock-factories.js';
 
 function delay(ms: number): Promise<void> {

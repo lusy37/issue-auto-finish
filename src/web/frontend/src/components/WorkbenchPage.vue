@@ -7,10 +7,10 @@ import { usePipeline, loadPipelineMeta } from '@/composables/usePipeline';
 import { useSSE } from '@/composables/useSSE';
 import { useTasks } from '@/composables/useTasks';
 import { useIssueDetail } from '@/composables/useIssueDetail';
+import { repairProgress } from '@/composables/repairProgress';
 import { useAgentLogs } from '@/composables/useAgentLogs';
 import { useBrowse } from '@/composables/useBrowse';
 import { useUrlSync } from '@/composables/useUrlSync';
-import { t } from '@/i18n/index';
 import HeaderBar from '@/components/HeaderBar.vue';
 import StatsCards from '@/components/StatsCards.vue';
 import IssueTable from '@/components/IssueTable.vue';
@@ -41,10 +41,7 @@ const logs = useAgentLogs();
 const browse = useBrowse(refreshIssues);
 
 const selectedIssueIid = computed(() => detail.selectedIssue.value ? getIssueIid(detail.selectedIssue.value) : undefined);
-const currentVerifyFixLoop = computed(() => {
-  const number = selectedIssueIid.value;
-  return number != null ? logs.getVerifyFixLoop(number) : undefined;
-});
+const currentVerifyFixLoop = computed(() => repairProgress(detail.selectedIssue.value, systemStatus.value?.config.verifyFixMaxIterations ?? 0));
 
 async function openIssueByIid(number: number) {
   try {
@@ -97,28 +94,7 @@ const { connected } = useSSE((eventName, rawPayload) => {
     }
   }
 
-  if (eventName.startsWith('verify:')) {
-    const d = payload.data;
-    const number = d?.issueIid as number | undefined;
-    if (number) {
-      logs.updateVerifyFixLoop(number, eventName, d as Record<string, unknown>);
-      if (detail.selectedIssue.value && getIssueIid(detail.selectedIssue.value) === number) {
-        let message = '';
-        if (eventName === 'verify:loopStarted') {
-          message = t('verify.loopStarted', { max: Number(d.maxIterations) });
-        } else if (eventName === 'verify:iterationComplete') {
-          message = d.passed
-            ? t('verify.iterationPassed', { n: Number(d.iteration) })
-            : t('verify.iterationFailed', { n: Number(d.iteration), reasons: ((d.failures as string[]) ?? []).join('; ') });
-        } else if (eventName === 'verify:loopExhausted') {
-          message = t('verify.loopExhausted', { n: Number(d.totalIterations) });
-        }
-        if (message) {
-          logs.pushSystemLog(number, selectedIssueIid, 'verify', message, payload.timestamp);
-        }
-      }
-    }
-  }
+
 });
 
 async function fetchStatus() {

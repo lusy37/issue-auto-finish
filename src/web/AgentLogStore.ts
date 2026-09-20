@@ -1,3 +1,4 @@
+import { summarizeAgentEvent, clampAgentSummary } from '../shared/runtime/agentLogs.js';
 import type { ExecutionIdentity } from '../dag/contracts.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,7 +15,8 @@ export interface AgentLogEntry {
   summary: string;
 }
 
-const MAX_LOGS_PER_ISSUE = 20000;
+export const MAX_LOGS_PER_ISSUE = 20000;
+export const LOG_TRIM_BATCH_SIZE = 1000;
 
 const DEBUG_EVENT_TYPES = new Set([
   'thinking', 'content_block_start', 'content_block_delta',
@@ -25,6 +27,7 @@ const DEBUG_EVENT_TYPES = new Set([
 
 export class AgentLogStore {
   private logDir: string;
+  private counts = new Map<number, number>();
 
   constructor(dataDir: string) {
     this.logDir = path.join(dataDir, 'agent-logs');
@@ -52,7 +55,7 @@ export class AgentLogStore {
     try {
       const raw = fs.readFileSync(filePath, 'utf-8').trim();
       if (!raw) return [];
-      return raw.split('\n').map(line => JSON.parse(line) as AgentLogEntry);
+      return raw.split('\n').slice(-MAX_LOGS_PER_ISSUE).map(line => JSON.parse(line) as AgentLogEntry);
     } catch (err) {
       logger.warn('Failed to read agent logs', { issueIid, error: (err as Error).message });
       return [];
@@ -60,6 +63,7 @@ export class AgentLogStore {
   }
 
   public clearLogs(issueIid: number): void {
+    this.counts.delete(issueIid);
     const filePath = this.logFilePath(issueIid);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
@@ -73,8 +77,14 @@ export class AgentLogStore {
   private appendLog(issueIid: number, entry: AgentLogEntry): void {
     const filePath = this.logFilePath(issueIid);
     try {
-      fs.appendFileSync(filePath, `${JSON.stringify(entry)}\n`, 'utf-8');
-      this.trimIfNeeded(issueIid, filePath);
+      let count = this.counts.get(issueIid);
+      if (count === undefined) {
+        const raw = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8').trim() : '';
+        count = raw ? raw.split('\n').length : 0;
+      }
+      fs.appendFileSync(filePath, `${JSON.stringify({ ...entry, summary: clampAgentSummary(entry.summary) })}\n`, 'utf-8');
+      this.counts.set(issueIid, count + 1);
+      if (count + 1 >= MAX_LOGS_PER_ISSUE + LOG_TRIM_BATCH_SIZE) this.trimIfNeeded(issueIid, filePath);
     } catch (err) {
       logger.warn('Failed to write agent log', { issueIid, error: (err as Error).message });
     }
@@ -88,6 +98,7 @@ export class AgentLogStore {
       if (lines.length > MAX_LOGS_PER_ISSUE) {
         const trimmed = lines.slice(-MAX_LOGS_PER_ISSUE);
         fs.writeFileSync(filePath, `${trimmed.join('\n')}\n`, 'utf-8');
+        this.counts.set(issueIid, trimmed.length);
         logger.info('Agent logs trimmed', { issueIid, from: lines.length, to: trimmed.length });
       }
     } catch {
@@ -107,7 +118,7 @@ export class AgentLogStore {
       identity: d.event.identity,
       phase: d.phase,
       timestamp: d.event.timestamp || payload.timestamp,
-      summary: this.summarizeContent(d.event),
+      summary: summarizeAgentEvent(d.event),
     };
     this.appendLog(d.issueIid, entry);
   }
@@ -125,53 +136,4 @@ export class AgentLogStore {
     this.appendLog(d.issueIid, entry);
   }
 
-  private summarizeContent(event: { type?: string; content?: unknown; timestamp?: string }): string {
-    const { content } = event;
-    if (!content || typeof content === 'string') return String(content || '');
-
-    if (event.type === 'assistant') {
-      return this.extractAssistantText(content);
-    }
-    if (event.type === 'tool_use') {
-      return this.extractToolUseText(content);
-    }
-    if (event.type === 'tool_result') {
-      const text = typeof (content as Record<string, unknown>).content === 'string'
-        ? (content as Record<string, unknown>).content as string
-        : JSON.stringify((content as Record<string, unknown>).content || '');
-      return text.slice(0, 150);
-    }
-    if (event.type === 'result') {
-      const r = content as Record<string, unknown>;
-      return ((r.result as string) || JSON.stringify(content)).slice(0, 200);
-    }
-
-    return JSON.stringify(content).slice(0, 150);
-  }
-
-  private extractAssistantText(content: unknown): string {
-    const msg = (content as Record<string, unknown>).message || content;
-    if (typeof msg === 'string') return msg.slice(0, 200);
-    const m = msg as Record<string, unknown>;
-    if (m.text) return (m.text as string).slice(0, 200);
-    if (m.content) {
-      const parts = Array.isArray(m.content) ? m.content : [m.content];
-      const texts = parts
-        .filter((c: Record<string, unknown>) => c.type === 'text')
-        .map((c: Record<string, unknown>) => c.text)
-        .join(' ');
-      if (texts) return texts.slice(0, 200);
-    }
-    // No meaningful text extracted – treat as protocol metadata
-    return '';
-  }
-
-  private extractToolUseText(content: unknown): string {
-    const c = content as Record<string, unknown>;
-    const tool = c.tool as Record<string, unknown> | undefined;
-    const name = tool?.name || c.name || '?';
-    const input = (tool?.input || c.input || {}) as Record<string, unknown>;
-    const detail = input.path || input.command || input.file_path || '';
-    return name + (detail ? `: ${detail}` : '');
-  }
 }

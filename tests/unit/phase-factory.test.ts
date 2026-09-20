@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createPhase, registerPhase, _resetPhaseRegistry } from '../../src/phases/PhaseFactory.js';
 import { VerifyPhase } from '../../src/phases/VerifyPhase.js';
 import { PlanPhase } from '../../src/phases/PlanPhase.js';
-import { BuildPhase } from '../../src/phases/BuildPhase.js';
 import {
   createMockAIRunner,
   createMockGitOperations,
@@ -21,17 +20,17 @@ describe('PhaseFactory', () => {
 
   const planModeArgs = [
     createMockAIRunner(),
-    createMockGitOperations(),
+    createMockGitOperations() as unknown as import('../../src/git/GitOperations.js').GitOperations,
     new PlanPersistence('/tmp/test', 1),
     createTestConfig(),
-  ] as any;
+  ] as const;
 
   it('creates PlanPhase', () => {
     expect(createPhase('plan', ...planModeArgs)).toBeInstanceOf(PlanPhase);
   });
 
-  it('creates BuildPhase', () => {
-    expect(createPhase('build', ...planModeArgs)).toBeInstanceOf(BuildPhase);
+  it('build 由 DAG 执行，工厂不再注册旧执行器', () => {
+    expect(() => createPhase('build', ...planModeArgs)).toThrow();
   });
 
   it('creates VerifyPhase', () => {
@@ -49,8 +48,8 @@ describe('PhaseFactory', () => {
     });
 
     it('overwrites an existing registration', () => {
-      registerPhase('plan', BuildPhase);
-      expect(createPhase('plan', ...planModeArgs)).toBeInstanceOf(BuildPhase);
+      registerPhase('plan', VerifyPhase);
+      expect(createPhase('plan', ...planModeArgs)).toBeInstanceOf(VerifyPhase);
     });
   });
 });

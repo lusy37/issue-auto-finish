@@ -21,19 +21,16 @@ export class VerifyPhase extends BasePhase {
     if (intent.kind !== 'completed') return intent;
 
     const report = this.readVerifyReport();
-    if (!report || ['Lint', 'Build', 'Test'].some(name => !new RegExp(name + '\\s*(?:结果|Result)\\*{0,2}\\s*[:：]\\s*(?:通过|失败|passed|failed|pass|fail|未通过)', 'i').test(report))) {
+    const parsed = this.reportParser.parse(report ?? '');
+    if (!parsed.valid) {
       return { kind: 'failed', sessionId: intent.sessionId, error: { message: '验证报告缺少本次 Lint、Build 或 Test 的明确结果，请人工检查执行环境', retryable: 'hard-no-auto' } };
     }
-
-    const parsed = this.reportParser.parse(report);
 
     this.logger.info('Verify report parsed', {
       passed: parsed.passed,
       lintPassed: parsed.lintPassed,
       buildPassed: parsed.buildPassed,
       testPassed: parsed.testPassed,
-      todolistComplete: parsed.todolistComplete,
-      todolistStats: parsed.todolistStats,
       failureCount: parsed.failureReasons.length,
     });
 
@@ -58,7 +55,6 @@ export class VerifyPhase extends BasePhase {
       context: {
         verifyFailures: parsed.failureReasons,
         rawReport: parsed.rawReport,
-        todolistStats: parsed.todolistStats,
       },
       sessionId: intent.sessionId,
     };

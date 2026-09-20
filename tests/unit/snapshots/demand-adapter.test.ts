@@ -32,7 +32,7 @@ describe('GitHubAdapter snapshots', () => {
 
   it('converts issue with full supplement', () => {
     const issue = createMockIssue();
-    const result = githubIssueToDemandSpec(issue, {
+    const result = githubIssueToDemandSpec(issue, { updatedAt: "2026-09-20T00:00:00Z",
       requirements: '需要支持邮箱和手机号注册',
       acceptanceCriteria: '注册后自动登录',
       scope: '仅涉及 /auth 路由',
@@ -45,11 +45,11 @@ describe('GitHubAdapter snapshots', () => {
 
   it('converts issue with partial supplement (empty strings filtered)', () => {
     const issue = createMockIssue();
-    const result = githubIssueToDemandSpec(issue, {
+    const result = githubIssueToDemandSpec(issue, { updatedAt: "2026-09-20T00:00:00Z",
       requirements: '基本需求',
       acceptanceCriteria: '',
       scope: '  ',
-      freeText: undefined as unknown as string,
+      constraints: '', references: '', freeText: '',
     });
     expect(result).toMatchSnapshot();
   });

@@ -101,7 +101,7 @@ describe('Config', () => {
       } catch (err) {
         const validationErr = err as InstanceType<typeof ConfigValidationError>;
         expect(validationErr.issues.length).toBeGreaterThanOrEqual(3);
-        const paths = validationErr.issues.map((i: { path: string[] }) => i.path[0]);
+        const paths = validationErr.issues.map((i) => i.path[0]);
         expect(paths).toContain('GITHUB_TOKEN');
         expect(paths).toContain('GITHUB_REPOSITORY');
         expect(paths).toContain('PROJECT_WORK_DIR');
@@ -122,7 +122,7 @@ describe('Config', () => {
       } catch (err) {
         const validationErr = err as InstanceType<typeof ConfigValidationError>;
         const urlIssue = validationErr.issues.find(
-          (i: { path: string[] }) => i.path[0] === 'GITHUB_API_URL',
+          (i) => i.path[0] === 'GITHUB_API_URL',
         );
         expect(urlIssue).toBeDefined();
       }
@@ -140,7 +140,7 @@ describe('Config', () => {
       } catch (err) {
         const validationErr = err as InstanceType<typeof ConfigValidationError>;
         const portIssue = validationErr.issues.find(
-          (i: { path: string[] }) => i.path[0] === 'WEB_PORT',
+          (i) => i.path[0] === 'WEB_PORT',
         );
         expect(portIssue).toBeDefined();
       }

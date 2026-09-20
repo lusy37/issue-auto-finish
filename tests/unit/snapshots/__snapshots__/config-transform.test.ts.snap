@@ -50,12 +50,16 @@ exports[`裁剪版配置 > 只有公开执行器及当前模块 1`] = `
   },
   "preview": {
     "backendCommand": "npm run dev:backend",
+    "backendReadyUrl": "",
     "enabled": true,
     "frontendCommand": "npm run dev:frontend -- --port {port}",
     "frontendDir": ".",
+    "frontendReadyUrl": "",
     "host": "127.0.0.1",
     "keepAfterComplete": false,
+    "readinessIntervalMs": 200,
     "reapIntervalMs": 300000,
+    "startupTimeoutMs": 60000,
     "ttlMs": 86400000,
   },
   "project": {
@@ -73,7 +77,6 @@ exports[`裁剪版配置 > 只有公开执行器及当前模块 1`] = `
   "verifyFixLoop": {
     "enabled": true,
     "maxIterations": 3,
-    "todolistCheckEnabled": true,
   },
   "web": {
     "frontendDistDir": "<frontend>/dist",

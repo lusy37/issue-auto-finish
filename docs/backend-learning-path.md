@@ -4,6 +4,43 @@
 
 项目后端是 Node.js + TypeScript + Express。运行数据使用本地 JSON，AI 执行使用官方 Codex SDK，工作流使用 LangGraph，平台访问使用 GitHub REST API。当前服务保持单用户、单实例、单仓库模型。
 
+这份文档适合作为当前后端的主阅读入口，但不是产品运维手册。当前 Web 工作台没有内置用户认证，设置接口可以修改 GitHub、项目目录和 AI 配置；部署时只能在本机或受保护的内网、VPN 后使用。自动回归中的 AI 和 GitHub 通常是模拟实现，真实 Codex、真实 GitHub 写入、真实 Git 和真实浏览器必须分开验证。
+
+### 0. 先看一条正常路径
+
+第一次阅读不要从恢复和异常场景开始，先只跟读一个成功的 Issue：
+
+```text
+run.ts
+    -> index.ts 装配服务
+    -> IssuePoller 发现并登记 Issue
+    -> IssueService 准备工作区并启动执行
+    -> RunWorkflowStep 装配 IssueWorkflow
+    -> plan -> review -> build -> verify -> uat（可选）-> deliver
+    -> DiaryCollector / Analytics / WorktreeReaper 做附加处理
+```
+
+第一遍只回答三个问题：谁调用谁、每个阶段产生什么结果、结果保存在哪里。第二遍再阅读重试、暂停、崩溃恢复和外部请求结果未知等复杂场景。
+
+### 1. 最小术语表
+
+| 术语 | 含义 | 主要来源 |
+| --- | --- | --- |
+| `IssueLifecycle` | 面向调度、人工操作和交付的业务生命周期 | `src/tracker/IssueLifecycle.ts` |
+| checkpoint | LangGraph 保存的下一节点、interrupt 和待提交写入 | `src/orchestrator/IssueCheckpointer.ts` |
+| `phaseProgress` | 阶段审计和 AI 会话恢复信息，不决定下一节点 | `IssueRecord.phaseProgress` |
+| receipt | 已确认的任务、验证、UAT 或交付凭证 | `src/dag/contracts.ts` |
+| `planRevision` | 不可变计划版本号 | `IssueRun.planRevision` |
+| `buildGeneration` | 完整重做后区分新构建轮次 | `IssueRun.buildGeneration` |
+| `workflow.generation` | 阶段重做后区分新 LangGraph 图轮次 | `IssueRun.workflow` |
+| `dispatchId` / `callId` | 区分一次派发和一次具体外部调用，隔离迟到结果 | `ExecutionIdentity`、`ScopedRunner` |
+
+### 2. 先理解三条调用链
+
+- **发现链：** `IssuePoller` 查询 GitHub、过滤标签并直接登记本地记录；手动启动或记录缺失时，`IssueService` 也可以补建记录。
+- **执行链：** `IssueService` 管理资源生命周期，`RunWorkflowStep` 装配 `IssueWorkflow`，`DagPhaseRunner` 把图节点适配到具体阶段和 DAG。
+- **展示链：** Web 路由调用服务入口，`IssueLifecycle` 和 `src/shared/workbench.ts` 提供前后端契约，SSE 只通知变化，不能作为状态权威来源。
+
 ## 一、先建立全局地图
 
 ### 1. 先读的文档
@@ -35,7 +72,7 @@
 
 ## 二、推荐学习顺序
 
-下面分为 12 个模块。每个模块都包含阅读目标、具体文件、需要回答的问题和验证入口。建议一次只学习一个模块，并在完成后用测试验证自己的理解。
+下面分为 12 个模块。每个模块都包含阅读目标、具体文件、需要回答的问题和验证入口。建议先完成模块 0、1、2 的正常路径，再一次只学习一个专题模块，并在完成后用测试验证自己的理解。
 
 ### 模块 0：运行时入口与依赖装配
 
@@ -68,13 +105,14 @@
 1. [src/clients/GitHubClient.ts](../src/clients/GitHubClient.ts)：HTTP 请求、Issue、评论、标签、PR 的平台边界。
 2. [src/demand/DemandSpec.ts](../src/demand/DemandSpec.ts)：平台无关的需求契约。
 3. `src/demand/adapters/` 下的 GitHub 适配器：外部数据到 `DemandSpec` 的归一化。
-4. [src/poller/IssuePoller.ts](../src/poller/IssuePoller.ts)：轮询、标签筛选、领取和调度入口。
+4. [src/poller/IssuePoller.ts](../src/poller/IssuePoller.ts)：轮询、标签筛选、登记、处理锁和调度入口。
 5. [src/supplement/SupplementStore.ts](../src/supplement/SupplementStore.ts)：用户补充需求如何进入后续计划。
+6. [src/shared/workbench.ts](../src/shared/workbench.ts)：需求草稿、UAT、统计和前后端共享类型。
 
 **需要回答：**
 
 - 外部 Issue 的编号、标题、描述和标签分别在哪里进入内部模型？
-- 如何避免轮询器重复领取同一个 Issue？
+- IssuePoller 如何避免重复登记和并发驱动同一个 Issue？IssueService 的手动入口又有什么不同？
 - GitHub 请求失败时，哪些错误可以重试，哪些状态必须保留给人工处理？
 - 为什么“审核反馈同步到 Issue 评论”是附加副作用，而不是流程成功的必要条件？
 
@@ -92,16 +130,17 @@
 4. [src/orchestration/WorkflowState.ts](../src/orchestration/WorkflowState.ts)：固定阶段、审核决定、checkpoint 序列化结构。
 5. `src/dag/codecs/`、`src/orchestration/codecs/` 与 [src/dag/invariants.ts](../src/dag/invariants.ts)：区分输入字段校验和跨字段业务约束。
 6. [src/dag/IssueRunStore.ts](../src/dag/IssueRunStore.ts)：加载、校验、版本、原子写入和事务。
-7. [src/tracker/IssueTracker.ts](../src/tracker/IssueTracker.ts)：生命周期操作、事件发布、处理锁和执行身份检查。
+7. [src/tracker/IssueTracker.ts](../src/tracker/IssueTracker.ts)：聚合访问、生命周期操作、事件发布和处理锁。
 8. [src/pipeline/PipelineProjection.ts](../src/pipeline/PipelineProjection.ts)：把生命周期投影成页面动作、文字和阶段回退展示。
+9. [src/dag/ScopedRunner.ts](../src/dag/ScopedRunner.ts)：具体外部调用的执行身份和迟到结果隔离。
 
 **必须掌握的概念：**
 
 - 每个 Issue 是一个聚合，`run.json` 是该聚合的权威运行文件。
-- 当前聚合格式是 `iaf-mini/issue-run/v5-langgraph`；旧格式、缺失 `lifecycle` 或仍包含已删除状态字段的数据会被明确拒绝，不迁移、不回填，也不进入兼容读取路径。
+- 当前聚合格式是 `iaf-mini/issue-run/v6-langgraph`；旧格式、缺失 `lifecycle` 或仍包含已删除状态字段的数据会被明确拒绝，不迁移、不回填，也不进入兼容读取路径。
 - `IssueRunStore.transaction()` 每次从磁盘重新读取、修改并原子替换；写入失败后该 Issue 会被阻断，避免继续调度。
 - 计划是不可变版本，计划内容通过 digest 校验；审核、任务和验证必须绑定同一计划版本。
-- `planRevision`、`buildGeneration`、`workflow.generation`、`dispatchId` 和 `callId` 共同防止旧协程的迟到结果覆盖新执行。
+- `planRevision`、`buildGeneration`、`workflow.generation`、`dispatchId` 和 `callId` 共同防止旧协程的迟到结果覆盖新执行；其中 Tracker 负责聚合事务，ScopedRunner 负责调用身份，IssueWorkflow 负责图轮次。
 - `phaseProgress` 保存阶段审计和会话恢复信息；它不是流程位置，也不再承担 UAT 配置语义。
 - 聚合文件和 API 都使用 `lifecycle`；页面展示不得反向写入或推导流程位置。
 - 每轮是否包含 UAT 由 `run.workflow.definition.phaseIds` 固化，不能被之后的全局设置改写。
@@ -245,10 +284,10 @@ flowchart LR
 
 **阅读顺序：**
 
-1. [src/phases/BuildPhase.ts](../src/phases/BuildPhase.ts)：构建阶段至少必须产生代码变化。
+1. [src/orchestrator/DagPhaseRunner.ts](../src/orchestrator/DagPhaseRunner.ts)：构建使用任务 DAG 或集成修复，并校验候选提交。
 2. [src/phases/VerifyPhase.ts](../src/phases/VerifyPhase.ts)：报告格式检查和 `requestRetryFrom('build')`。
-3. [src/verify/VerifyReportParser.ts](../src/verify/VerifyReportParser.ts)：Lint、Build、Test、Todolist 和总结判定。
-4. [src/persistence/TodolistExtractor.ts](../src/persistence/TodolistExtractor.ts)：统一的 Markdown checkbox 解析。
+3. [src/verify/VerifyReportParser.ts](../src/verify/VerifyReportParser.ts)：Lint、Build、Test 的完整结果和总结判定。
+4. [src/dag/TaskGraphExecutor.ts](../src/dag/TaskGraphExecutor.ts)：任务完成依据成功与合并凭证，不依据计划 checkbox。
 5. [src/phases/UatPhase.ts](../src/phases/UatPhase.ts)：真实 Playwright 运行、有效 run ID 和报告。
 6. [src/e2e/PlaywrightRunner.ts](../src/e2e/PlaywrightRunner.ts)：浏览器进程、退出码、报告和取消。
 7. [src/preview/PortAllocator.ts](../src/preview/PortAllocator.ts)、[src/preview/DevServerManager.ts](../src/preview/DevServerManager.ts)：UAT 前后的预览进程。
@@ -286,12 +325,13 @@ flowchart LR
 
 1. [src/web/WebServer.ts](../src/web/WebServer.ts)：Express 应用和路由装配。
 2. `src/web/createApp.ts`：静态资源、错误处理和公共中间件。
-3. `src/web/routes/api.ts`：Issue 列表、详情、审核、暂停、继续、重试和报告接口。
-4. `src/web/routes/setup.ts`：初始化和配置检查。
-5. `src/web/routes/drafts.ts`：AI 需求草稿与创建 Issue。
-6. `src/web/routes/knowledge.ts`、`distill.ts`、`analytics.ts`、`uat.ts`：其他后端入口。
-7. [src/events/EventBus.ts](../src/events/EventBus.ts)、`src/web/AgentLogStore.ts`：状态和 AI 输出如何进入 SSE。
-8. `src/analytics/TaskAnalytics.ts`：从持久化记录计算统计，而不是维护易失计数器。
+3. [src/shared/workbench.ts](../src/shared/workbench.ts)：先看前后端共享的生命周期、草稿、UAT 和统计契约。
+4. `src/web/routes/api.ts`：Issue 列表、详情、审核、暂停、继续、重试和报告接口。
+5. `src/web/routes/setup.ts`：初始化和配置检查；同时注意当前没有认证中间件。
+6. `src/web/routes/drafts.ts`：AI 需求草稿与创建 Issue。
+7. `src/web/routes/knowledge.ts`、`distill.ts`、`analytics.ts`、`uat.ts`：其他后端入口。
+8. [src/events/EventBus.ts](../src/events/EventBus.ts)、`src/web/AgentLogStore.ts`：状态和 AI 输出如何进入 SSE。
+9. `src/analytics/TaskAnalytics.ts`：从持久化记录计算统计，而不是维护易失计数器。
 
 **需要回答：**
 
@@ -328,8 +368,8 @@ flowchart LR
 3. `IssuePoller` 发现带目标标签的 GitHub Issue，并通过 `IssueService` 创建或恢复本地记录。
 4. `IssueService` 准备主 worktree、`PlanPersistence` 和 `IssueProcessingContext`。
 5. `RunWorkflowStep` 创建 `DagPhaseRunner` 与 `IssueWorkflow`，调用 `workflow.drive()`。
-6. `IssueWorkflow` 执行 `plan`，由 `DagPhaseRunner` 创建 `PlanPhase`。
-7. `BasePhase` 通过 scoped AI Runner 调用 Codex，`PlanPhase` 校验结构化计划，`IssueRunStore.savePlan()` 保存不可变版本。
+6. `IssueWorkflow` 执行 `plan`，通过 `DagPhaseRunner` 调用 `PhaseFactory` 创建 `PlanPhase`。
+7. `BasePhase` 通过 `ScopedRunner` 调用 Codex，`PlanPhase` 校验结构化计划，`IssueRunStore.savePlan()` 保存不可变版本。
 8. `IssueWorkflow.review()` 保存 interrupt；Web 审核 API 使用 `resumeReview()` 提交批准或驳回。
 9. 批准后 `build` 进入 `TaskGraphExecutor`，内部任务在独立 worktree 执行，成功后串行 rebase 和合并。
 10. `DagPhaseRunner` 为 build 创建候选提交；`verify` 生成并解析验证报告。
@@ -362,6 +402,26 @@ flowchart LR
 ### 练习 1：只读状态浏览器
 
 不修改业务代码，写一个脚本读取 `DATA_DIR/issues/<number>/run.json`，输出：当前状态、计划版本、workflow generation、下一 checkpoint、当前任务状态、候选提交和交付状态。目标是熟悉数据模型，而不是增加新的运行数据格式。
+
+建议先按下面的顺序阅读一个脱敏的 `run.json`，再回到 [src/dag/contracts.ts](../src/dag/contracts.ts) 对照字段：
+
+```text
+record
+├─ lifecycle                 # 页面和调度使用的业务生命周期
+├─ demandSpec                # Issue 归一后的需求
+├─ phaseProgress             # 阶段审计和会话恢复信息
+├─ phaseHistory              # 面向审计的阶段结果历史
+└─ run
+    ├─ workflow                # LangGraph definition、checkpoints、results、effects
+    ├─ planRevision / planDigest
+    ├─ buildGeneration / dispatchId
+    ├─ tasks / calls           # DAG 任务和外部调用凭证
+    ├─ candidateCommit
+    ├─ verify / uat            # 绑定候选提交的验收凭证
+    └─ delivery                # push、PR 和 Issue 回写的幂等身份
+```
+
+不要把 `phaseProgress` 当成图的当前位置，也不要把 `lifecycle.phase` 当成 checkpoint 的替代品；它们分别服务于审计展示和业务准入。
 
 ### 练习 2：模拟审核恢复
 

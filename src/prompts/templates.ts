@@ -17,8 +17,6 @@ export interface PromptContext {
   supplementText?: string;
   workspace?: WorkspaceLayout;
   knowledgeEnabled?: boolean;
-  /** 完整计划由调用方提供，不从项目仓库猜测内部产物路径。 */
-  planContent?: string;
 }
 
 const PLAN_OUTPUT_CONSTRAINT = [
@@ -79,12 +77,12 @@ export function demandToPromptContext(demand: DemandSpec): {
 } {
   const parts: string[] = [];
   const s = demand.supplement;
-  if (s?.requirements) parts.push(`### 补充需求说明\n${s.requirements}`);
-  if (s?.acceptanceCriteria) parts.push(`### 验收标准\n${s.acceptanceCriteria}`);
-  if (s?.scope) parts.push(`### 变更范围\n${s.scope}`);
-  if (s?.constraints) parts.push(`### 约束条件\n${s.constraints}`);
-  if (s?.references) parts.push(`### 参考链接\n${s.references}`);
-  if (s?.freeText) parts.push(`### 其他补充\n${s.freeText}`);
+  if (s?.requirements?.trim()) parts.push(`### 补充需求说明\n${s.requirements.trim()}`);
+  if (s?.acceptanceCriteria?.trim()) parts.push(`### 验收标准\n${s.acceptanceCriteria.trim()}`);
+  if (s?.scope?.trim()) parts.push(`### 变更范围\n${s.scope.trim()}`);
+  if (s?.constraints?.trim()) parts.push(`### 约束条件\n${s.constraints.trim()}`);
+  if (s?.references?.trim()) parts.push(`### 参考链接\n${s.references.trim()}`);
+  if (s?.freeText?.trim()) parts.push(`### 其他补充\n${s.freeText.trim()}`);
   return {
     title: demand.title,
     description: demand.description,
@@ -111,17 +109,6 @@ export function planPrompt(ctx: PromptContext): string {
     supplement: supplementSection,
     outputInstruction,
     outputConstraint,
-  });
-  return base;
-}
-
-export function buildPrompt(ctx: PromptContext): string {
-  const kv = getKnowledgeForPrompt(ctx.knowledgeEnabled);
-  const base = t('prompt.build', {
-    planContent: ctx.planContent ?? ctx.issueDescription,
-    number: ctx.issueIid,
-    title: ctx.issueTitle,
-    ...kv,
   });
   return base;
 }
@@ -156,7 +143,7 @@ export function buildReviewFeedbackResumePrompt(
     allRoundsLines,
     supplement: supplementSection,
   });
-  return `${prompt}\n\n${PLAN_OUTPUT_CONSTRAINT}`;
+  return `${prompt}\n\n${buildRejectedPlanSection(latest.planSnapshot)}\n\n${PLAN_OUTPUT_CONSTRAINT}`;
 }
 
 export function rePlanPrompt(ctx: PromptContext, history: ReviewRoundForPrompt[]): string {
@@ -189,29 +176,6 @@ export function rePlanPrompt(ctx: PromptContext, history: ReviewRoundForPrompt[]
   return base;
 }
 
-export interface E2ePromptPorts {
-  backendPort: number;
-  frontendPort: number;
-  host: string;
-}
-
-export interface ConflictResolveContext {
-  issueIid: number;
-  branchName: string;
-  baseBranch: string;
-  conflictFiles: string[];
-}
-
-export function conflictResolvePrompt(ctx: ConflictResolveContext): string {
-  const conflictFilesList = ctx.conflictFiles.map(f => `- \`${f}\``).join('\n');
-  return t('prompt.conflictResolve', {
-    number: ctx.issueIid,
-    branch: ctx.branchName,
-    baseBranch: ctx.baseBranch,
-    conflictFilesList,
-  });
-}
-
 export function issueProgressComment(phase: string, status: string, detail?: string): string {
   const emoji: Record<string, string> = {
     analysis: '🔍', design: '📐', implement: '💻', verify: '✅',
@@ -225,9 +189,4 @@ export function issueProgressComment(phase: string, status: string, detail?: str
     msg += `\n\n${detail}`;
   }
   return msg;
-}
-
-/** 浏览器测试由服务端执行，AI 只负责维护验收脚本。 */
-export function e2eVerifyPromptSuffix(ctx: PromptContext, ports?: E2ePromptPorts): string {
- return '\n\n## 浏览器验收\n请用公开 Playwright Test 补齐 Chromium 测试，覆盖 Issue #'+ctx.issueIid+' 的验收标准。'+(ports?'\n预览地址：http://'+ports.host+':'+ports.frontendPort:'')+'\n服务端会独立运行测试，并依据实际退出码及报告判定通过。请勿用文字声明代替测试结果。';
 }

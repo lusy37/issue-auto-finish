@@ -1,3 +1,4 @@
+import { ISSUE_LABELS, withWorkbenchLabels } from '../../clients/IssueLabels.js';
 import type { IssueRecord } from '../../tracker/IssueRecord.js';
 import { applyIssueLifecycleEvent } from '../../tracker/IssueLifecycle.js';
 import type { IssueProcessingContext, OrchestratorDeps, WorkflowRunResult } from '../IssueProcessingContext.js';
@@ -25,7 +26,7 @@ export async function deliverIssueStep(ctx: IssueProcessingContext, deps: Orches
   assertActive(record);
   const url = await deliverIssue(ctx, deps);
   assertActive(deps.tracker.get(number));
-  await deps.github.updateIssueLabels(number, [...ctx.issue.labels.filter(l => !l.startsWith('auto-finish')), 'auto-finish:done']);
+  await deps.github.updateIssueLabels(number, withWorkbenchLabels(ctx.issue.labels, [ISSUE_LABELS.done]));
   // 外部请求返回后，在同一次落盘事务中复核停止意图与图轮次，避免迟到结果覆盖用户操作。
   deps.tracker.transaction(number, current => {
     assertActive(current);

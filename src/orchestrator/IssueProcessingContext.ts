@@ -73,7 +73,6 @@ export interface AIDeps {
 
 /** 预览服务器依赖 — Workflow / Delivery / Failure */
 export interface PreviewDeps {
-  shouldDeployServers(issueIid: number): boolean;
   startPreviewServers(wtCtx: WorktreeContext, issue: GitHubIssue): Promise<import('../preview/PortAllocator.js').PortPair | null>;
   stopPreviewServers(issueIid: number): Promise<void>;
   buildPreviewUrl(issueIid: number): string | null;

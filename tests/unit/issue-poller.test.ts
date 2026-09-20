@@ -22,7 +22,7 @@ describe('IssuePoller', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     config = createTestConfig({
-      poll: { intervalMs: 60000, discoveryIntervalMs: 60000, driveIntervalMs: 15000, maxRetries: 3, maxConcurrent: 3 },
+      poll: { discoveryIntervalMs: 60000, driveIntervalMs: 15000, maxRetries: 3, maxConcurrent: 3 },
     });
     github = createMockGitHubClient();
     tracker = createMockIssueTracker();
@@ -154,7 +154,7 @@ describe('IssuePoller', () => {
       tracker.getDrivableIssues.mockReturnValue([]);
       tracker.get.mockReturnValue(undefined);
 
-      let resolveList: (value: unknown) => void = () => {};
+      let resolveList: (value: import('../../src/clients/GitHubClient.js').GitHubIssue[]) => void = () => {};
       github.listIssues.mockReturnValue(
         new Promise((resolve) => { resolveList = resolve; }),
       );
@@ -410,7 +410,7 @@ describe('IssuePoller', () => {
   describe('auto-approve waiting issues', () => {
     it.each([true, false])('审核开关为 %s 时，已等待任务的标签规则只在开启时执行', async enabled => {
       const cfg = createTestConfig({
-        poll: { intervalMs: 60000, discoveryIntervalMs: 60000, driveIntervalMs: 15000, maxRetries: 3, maxConcurrent: 3 },
+        poll: { discoveryIntervalMs: 60000, driveIntervalMs: 15000, maxRetries: 3, maxConcurrent: 3 },
         review: { enabled, autoApproveLabels: ['skip-review'] },
       });
       const waitingRecord = {
@@ -446,7 +446,7 @@ describe('IssuePoller', () => {
 
     it('非 review gate 不自动批准', async () => {
       const cfg = createTestConfig({
-        poll: { intervalMs: 60000, discoveryIntervalMs: 60000, driveIntervalMs: 15000, maxRetries: 3, maxConcurrent: 3 },
+        poll: { discoveryIntervalMs: 60000, driveIntervalMs: 15000, maxRetries: 3, maxConcurrent: 3 },
         review: { enabled: true, autoApproveLabels: ['skip-review'] },
       });
       const waitingAtReleaseGate = {
@@ -480,7 +480,7 @@ describe('IssuePoller', () => {
 
     it('does not auto-approve when labels do not match', async () => {
       const cfg = createTestConfig({
-        poll: { intervalMs: 60000, discoveryIntervalMs: 60000, driveIntervalMs: 15000, maxRetries: 3, maxConcurrent: 3 },
+        poll: { discoveryIntervalMs: 60000, driveIntervalMs: 15000, maxRetries: 3, maxConcurrent: 3 },
         review: { enabled: true, autoApproveLabels: ['skip-review'] },
       });
       const waitingRecord = {
@@ -540,7 +540,7 @@ describe('IssuePoller', () => {
 
     it('throttles auto-approve checks to 30s interval', async () => {
       const cfg = createTestConfig({
-        poll: { intervalMs: 60000, discoveryIntervalMs: 60000, driveIntervalMs: 1000, maxRetries: 3, maxConcurrent: 3 },
+        poll: { discoveryIntervalMs: 60000, driveIntervalMs: 1000, maxRetries: 3, maxConcurrent: 3 },
         review: { enabled: true, autoApproveLabels: ['skip-review'] },
       });
       const waitingRecord = {

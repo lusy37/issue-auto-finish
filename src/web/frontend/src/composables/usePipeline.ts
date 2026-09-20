@@ -4,7 +4,7 @@ import type { IssueLifecycle, IssueRecord, PipelineMode, PhaseStatus, PlanFileSp
 import { fetchPipelineMeta } from '@/api/client';
 import { t } from '@/i18n/index';
 
-const FALLBACK_PLAN_MODE_PHASES = ['plan', 'review', 'build', 'verify', 'uat'];
+const FALLBACK_PLAN_MODE_PHASES = ['plan', 'review', 'build', 'verify'];
 
 const CATEGORY_CLASS_MAP: Record<string, string> = {
   idle: 'bg-gray-100 text-gray-600',
@@ -25,7 +25,8 @@ export async function loadPipelineMeta(): Promise<void> {
   if (loadPromise) return loadPromise;
   loadPromise = fetchPipelineMeta()
     .then(data => { meta.value = data; })
-    .catch(err => { console.warn('Failed to load pipeline meta, using fallback', err); });
+    .catch(err => { console.warn('Failed to load pipeline meta, using fallback', err); })
+    .finally(() => { loadPromise = null; });
   return loadPromise;
 }
 
@@ -55,6 +56,7 @@ export function usePipeline() {
   function getPlanDocs(issue?: IssueRecord | null): PlanFileSpec[] {
     if (issue?.planDocs) return issue.planDocs;
     const mode = issue?.pipelineMode ?? pipelineMode.value;
+    if (issue?.run?.workflow.definition) return issue.run.workflow.definition.phaseIds.flatMap(getPhaseArtifacts).map(artifact => ({ file: artifact.filename, label: t(`planFile.${artifact.filename}`) }));
     if (meta.value?.modes[mode]) {
       return meta.value.modes[mode].artifacts.map(a => ({ file: a.filename, label: a.label }));
     }
@@ -65,6 +67,7 @@ export function usePipeline() {
   }
 
   function getPhaseNames(issue?: IssueRecord | null): string[] {
+    if (issue?.run?.workflow.definition) return [...issue.run.workflow.definition.phaseIds];
     if (issue?.phaseProgress) return Object.keys(issue.phaseProgress);
     const mode = issue?.pipelineMode ?? pipelineMode.value;
     return meta.value?.modes[mode]?.phases.map(p => p.name) ?? [...FALLBACK_PLAN_MODE_PHASES];

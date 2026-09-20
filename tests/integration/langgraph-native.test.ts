@@ -267,9 +267,10 @@ describe('LangGraph 原生持久化和人工介入', () => {
     const f = fixture();
     const transaction = f.tracker().transaction.bind(f.tracker());
     vi.spyOn(f.tracker(), 'transaction').mockImplementation((number, update) => transaction(number, record => {
-      const before = record.lifecycle.kind;
+      const kind = () => record.lifecycle.kind;
+      const before = kind();
       update(record);
-      if (before !== 'waiting' && record.lifecycle.kind === 'waiting') throw new Error('模拟等待生命周期写入失败');
+      if (before !== 'waiting' && kind() === 'waiting') throw new Error('模拟等待生命周期写入失败');
     }));
     await expect(f.workflow().drive()).rejects.toThrow('等待生命周期写入失败');
     f.restart();

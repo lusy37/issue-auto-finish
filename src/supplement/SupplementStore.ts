@@ -71,32 +71,4 @@ export class SupplementStore {
     }
   }
 
-  toPromptText(issueIid: number): string {
-    const info = this.get(issueIid);
-    if (!info) return '';
-
-    const sections: string[] = [];
-
-    if (info.requirements.trim()) {
-      sections.push(`### 补充需求说明\n${info.requirements.trim()}`);
-    }
-    if (info.acceptanceCriteria.trim()) {
-      sections.push(`### 验收标准\n${info.acceptanceCriteria.trim()}`);
-    }
-    if (info.scope.trim()) {
-      sections.push(`### 变更范围\n${info.scope.trim()}`);
-    }
-    if (info.constraints.trim()) {
-      sections.push(`### 约束条件\n${info.constraints.trim()}`);
-    }
-    if (info.references.trim()) {
-      sections.push(`### 参考链接\n${info.references.trim()}`);
-    }
-    if (info.freeText.trim()) {
-      sections.push(`### 其他补充\n${info.freeText.trim()}`);
-    }
-
-    if (sections.length === 0) return '';
-    return `## 补充信息\n\n${sections.join('\n\n')}`;
-  }
 }

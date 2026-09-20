@@ -18,9 +18,13 @@ export class IssueCheckpointer extends BaseCheckpointSaver {
   }
   private async encode(value: unknown): Promise<SerializedValue> {
     const [type, data] = await this.serde.dumpsTyped(value);
-    return { type, data: Buffer.from(data).toString('base64') };
+    if (type !== 'json') throw new Error(`工作流检查点不支持序列化类型：${type}`);
+    return { type, data: new TextDecoder().decode(data) };
   }
-  private decode(value: SerializedValue): Promise<any> { return this.serde.loadsTyped(value.type, Buffer.from(value.data, 'base64')); }
+  private decode<T = unknown>(value: SerializedValue): Promise<T> {
+    if (value.type !== 'json') throw new Error(`工作流检查点包含不支持的序列化类型：${value.type}`);
+    return this.serde.loadsTyped(value.type, value.data) as Promise<T>;
+  }
   private config(namespace: string, checkpointId: string): RunnableConfig {
     return { configurable: { thread_id: this.threadId, checkpoint_ns: namespace, checkpoint_id: checkpointId } };
   }

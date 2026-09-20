@@ -3,24 +3,23 @@
  *
  * 测试阶段逻辑对不同 AI 结果的处理，不涉及编排层。
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync,rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { PlanPhase } from '../../../src/phases/PlanPhase.js';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { PlanPersistence } from '../../../src/persistence/PlanPersistence.js';
-import {
-  ScriptedAIRunner,
-  successScript,
-  failureScript,
-  timeoutScript,
-  writeArtifact,
-} from '../../helpers/scripted-ai-runner.js';
-import {
-  createMockGitOperations,
-  createTestConfig,
-} from '../../helpers/mock-factories.js';
 import type { PhaseContext } from '../../../src/phases/BasePhase.js';
+import { PlanPhase } from '../../../src/phases/PlanPhase.js';
+import {
+createMockGitOperations,
+createTestConfig,
+} from '../../helpers/mock-factories.js';
+import {
+failureScript,
+ScriptedAIRunner,
+successScript,
+timeoutScript
+} from '../../helpers/scripted-ai-runner.js';
 
 // Mock knowledge (avoid file system side effects)
 vi.mock('../../../src/knowledge/index.js', () => ({
@@ -31,11 +30,11 @@ const ISSUE_IID = 42;
 
 function buildPhaseCtx(): PhaseContext {
   return {
-    demand: {
+    demand: { createdAt: '2026-09-20T00:00:00Z',
       demandId: '42',
       title: 'Test Issue',
       description: 'Add new feature X',
-      sourceRef: { displayId: String(ISSUE_IID), source: 'github' as const, externalId: '200' },
+      sourceRef: { displayId: String(ISSUE_IID), source: 'github-issue' as const, externalId: '200' },
     },
     branchName: 'feat/issue-42',
     pipelineMode: 'plan-mode',

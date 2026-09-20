@@ -40,9 +40,7 @@ function createMinimalHarness() {
   const github = {
     updateIssueLabels: recordCall('github.updateIssueLabels').mockResolvedValue(undefined),
     createIssueNote: recordCall('github.createIssueNote').mockResolvedValue(undefined),
-    createPullRequest: recordCall('github.createPullRequest').mockResolvedValue({
-      id: 1, number: 1, title: 'PR', html_url: 'https://example.com/pr/1', state: 'open',
-    }),
+    createPullRequest: vi.fn(async (...args: unknown[]) => { recordCall('github.createPullRequest')(...args); return { id: 1, number: 1, title: 'PR', html_url: 'https://example.com/pr/1', state: 'open' }; }),
     findPullRequestByBranch: vi.fn().mockResolvedValue(null),
     cleanupAgentNotes: vi.fn().mockResolvedValue(0),
   };
@@ -132,7 +130,8 @@ describe('Back-to-Back: tracker state update sequences', () => {
     // Failure
     tracker.markFailed(2, 'AI timeout');
     stateLog.push(tracker.get(2)!.lifecycle.kind);
-    stateLog.push(`failedAt:${tracker.get(2)!.lifecycle.kind === 'failed' ? tracker.get(2)!.lifecycle.phase : undefined}`);
+    const failedLifecycle = tracker.get(2)!.lifecycle;
+    stateLog.push(`failedAt:${failedLifecycle.kind === 'failed' ? failedLifecycle.phase : undefined}`);
 
     // Retry (reset for retry)
     tracker.resetForRetry(2);

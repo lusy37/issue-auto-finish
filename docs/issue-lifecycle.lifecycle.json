@@ -1,0 +1,303 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Issue 业务生命周期",
+    "subtitle": "业务状态与恢复资格；LangGraph 检查点独立决定执行位置",
+    "locale": "zh-CN",
+    "output": "docs/issue-lifecycle.html",
+    "quality_profile": "showcase",
+    "animation": "none",
+    "viewBox": [
+      1080,
+      630
+    ],
+    "views": [
+      {
+        "id": "main-path",
+        "label": "正常交付",
+        "focus": [
+          "pending",
+          "ready",
+          "running",
+          "delivering",
+          "completed"
+        ],
+        "note": "就绪与运行会在每个阶段交替；这里展示一次阶段执行和交付主线。"
+      },
+      {
+        "id": "recover",
+        "label": "人工介入与恢复",
+        "focus": [
+          "running",
+          "waiting",
+          "paused",
+          "failed",
+          "ready"
+        ],
+        "note": "审核等待、暂停和失败都有独立恢复条件，详见说明文档。"
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "执行与交付"
+    },
+    {
+      "id": "human",
+      "label": "人工介入"
+    },
+    {
+      "id": "recovery",
+      "label": "失败恢复"
+    },
+    {
+      "id": "terminal",
+      "label": "取消退出"
+    }
+  ],
+  "states": [
+    {
+      "id": "pending",
+      "type": "start",
+      "label": "待处理",
+      "sublabel": "pending",
+      "lane": "main",
+      "col": 0,
+      "step": "01"
+    },
+    {
+      "id": "ready",
+      "type": "active",
+      "label": "就绪",
+      "sublabel": "ready",
+      "lane": "main",
+      "col": 1,
+      "step": "02"
+    },
+    {
+      "id": "running",
+      "type": "active",
+      "label": "阶段运行",
+      "sublabel": "running · phase",
+      "lane": "main",
+      "col": 2,
+      "step": "03"
+    },
+    {
+      "id": "delivering",
+      "type": "active",
+      "label": "交付中",
+      "sublabel": "delivering",
+      "lane": "main",
+      "col": 3,
+      "step": "04"
+    },
+    {
+      "id": "completed",
+      "type": "success",
+      "label": "已完成",
+      "sublabel": "completed",
+      "lane": "main",
+      "col": 4,
+      "step": "05"
+    },
+    {
+      "id": "waiting",
+      "type": "waiting",
+      "label": "等待审核",
+      "sublabel": "waiting · 计划版本",
+      "lane": "human",
+      "col": 0
+    },
+    {
+      "id": "paused",
+      "type": "waiting",
+      "label": "已暂停",
+      "sublabel": "paused · 原阶段",
+      "lane": "human",
+      "col": 1
+    },
+    {
+      "id": "failed",
+      "type": "failure",
+      "label": "执行失败",
+      "sublabel": "failed · 重试策略",
+      "lane": "recovery",
+      "col": 0,
+      "yOffset": 78
+    },
+    {
+      "id": "cancelled",
+      "type": "neutral",
+      "label": "已取消",
+      "sublabel": "cancelled",
+      "lane": "terminal",
+      "col": 1
+    }
+  ],
+  "transitions": [
+    {
+      "id": "stage-done",
+      "from": "running",
+      "to": "ready",
+      "note": "阶段完成后回到就绪",
+      "fromSide": "top",
+      "toSide": "top",
+      "via": [
+        [
+          402,
+          100
+        ],
+        [
+          248,
+          100
+        ]
+      ]
+    },
+    {
+      "id": "review-wait",
+      "from": "running",
+      "to": "waiting",
+      "note": "审核节点保存中断",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight"
+    },
+    {
+      "id": "approve",
+      "from": "waiting",
+      "to": "ready",
+      "note": "计划版本一致且批准",
+      "variant": "emphasis",
+      "fromSide": "left",
+      "toSide": "bottom",
+      "via": [
+        [
+          290,
+          307
+        ],
+        [
+          290,
+          220
+        ],
+        [
+          248,
+          220
+        ]
+      ]
+    },
+    {
+      "id": "pause",
+      "from": "delivering",
+      "to": "paused",
+      "note": "执行阶段也允许暂停，完整来源见状态表",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight"
+    },
+    {
+      "id": "continue",
+      "from": "paused",
+      "to": "ready",
+      "note": "继续回到就绪，图检查点决定恢复节点",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [
+        [
+          835,
+          307
+        ],
+        [
+          835,
+          60
+        ],
+        [
+          248,
+          60
+        ]
+      ]
+    },
+    {
+      "id": "failure",
+      "from": "running",
+      "to": "failed",
+      "note": "阶段失败保存错误与重试策略",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "right",
+      "via": [
+        [
+          480,
+          157
+        ],
+        [
+          480,
+          385
+        ]
+      ]
+    },
+    {
+      "id": "retry",
+      "from": "failed",
+      "to": "ready",
+      "note": "重试需符合业务预算和调度资格",
+      "variant": "emphasis",
+      "fromSide": "left",
+      "toSide": "top",
+      "via": [
+        [
+          20,
+          385
+        ],
+        [
+          20,
+          80
+        ],
+        [
+          248,
+          80
+        ]
+      ]
+    },
+    {
+      "id": "cancel",
+      "from": "paused",
+      "to": "cancelled",
+      "note": "非完成与非取消状态允许取消",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "图的位置另有来源",
+      "items": [
+        "此图解释业务生命周期，不驱动任务调度。",
+        "页面主图读取 checkpoint.next 与中断任务。"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "审核与恢复约束",
+      "items": [
+        "审核携带计划版本；驳回回到待处理。",
+        "自动重试受预算约束；失败不会自动完成。"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "重做与交付修复",
+      "items": [
+        "完整重做回待处理；已跳过可手动启动。",
+        "已完成的 PR 冲突修复回就绪；详见状态表。"
+      ]
+    }
+  ]
+}

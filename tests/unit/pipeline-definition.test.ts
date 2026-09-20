@@ -110,10 +110,10 @@ describe('PipelineDefinition', () => {
     it.each([false, true])('展示与执行阶段一致，且展示修改不污染执行定义：e2e=%s', (e2eEnabled) => {
       const view = buildPlanModePipeline({ e2eEnabled });
       const execution = { phases: getPlanModePhases(e2eEnabled) };
-      expect(view.phases.map(({ name, label, kind, artifacts, retryable, deploysPreview }) => ({
-        id: name, label, kind, artifacts, retryable, deploysPreview,
-      }))).toEqual(execution.phases.map(({ id, label, kind, artifacts, retryable, deploysPreview }) => ({
-        id, label, kind, artifacts, retryable, deploysPreview,
+      expect(view.phases.map(({ name, label, kind, artifacts, retryable }) => ({
+        id: name, label, kind, artifacts, retryable,
+      }))).toEqual(execution.phases.map(({ id, label, kind, artifacts, retryable }) => ({
+        id, label, kind, artifacts, retryable,
       })));
       view.phases[0].artifacts![0].label = '局部展示修改';
       expect(execution.phases[0].artifacts![0].label).toBe('实施计划');

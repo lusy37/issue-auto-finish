@@ -1,57 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`prompt templates > buildPrompt 1`] = `
-"你是开发工程师。请按照实施计划完成代码变更。
-
-## Issue 信息
-- IID: #42
-- 标题: 实现用户登录功能
-
-请先阅读:
-- AGENTS.md (项目架构和代码规范)
-
-## 完整实施计划
-完整计划：实现登录服务并补充成功、失败和权限边界测试。
-
-## 实施要求
-1. 按照完整计划实现任务，并逐项核对验收标准
-2. 计划和运行产物由服务端保存，不修改计划勾选状态或创建内部产物目录
-3. 严格遵循 AGENTS.md 中的代码规范（2空格缩进、120字符行宽、命名规范等）
-4. 不要过度工程化，只实现计划中要求的内容
-5. 确保代码安全，避免 OWASP Top 10 漏洞"
-`;
-
-exports[`prompt templates > conflictResolvePrompt 1`] = `
-"你是一名资深开发工程师，正在处理 Git rebase 过程中产生的合并冲突。
-
-## 背景
-- Issue IID: #42
-- 分支: \`feat/issue-42\` 正在 rebase 到 \`master\`
-- 冲突文件列表:
-- \`src/index.ts\`
-- \`src/config.ts\`
-- \`package.json\`
-
-## 任务
-请逐一解决上述冲突文件：
-
-1. 打开每个冲突文件，仔细阅读冲突标记（<<<<<<< HEAD / ======= / >>>>>>> ...）
-2. 理解双方修改的意图：
-   - HEAD（当前分支）的修改目的
-   - 对方分支的修改目的
-3. 正确合并代码，确保：
-   - 保留双方有意义的修改
-   - 完全移除所有冲突标记（<<<<<<<, =======, >>>>>>>）
-   - 合并后的代码逻辑完整、可编译、可运行
-4. 如果某个文件的冲突涉及结构性变更（如函数签名变化），确保所有引用处也同步更新
-
-## 注意事项
-- 不要遗漏任何冲突标记
-- 不要引入新的 bug
-- 保持代码风格一致
-- 只修改冲突文件，不要做额外的代码改动"
-`;
-
 exports[`prompt templates > demandToPromptContext with full supplement 1`] = `
 {
   "description": "实现用户登录功能",
@@ -86,23 +34,6 @@ exports[`prompt templates > demandToPromptContext without supplement 1`] = `
   "supplementText": "",
   "title": "修复 Bug",
 }
-`;
-
-exports[`prompt templates > e2eVerifyPromptSuffix with ports 1`] = `
-"
-
-## 浏览器验收
-请用公开 Playwright Test 补齐 Chromium 测试，覆盖 Issue #42 的验收标准。
-预览地址：http://127.0.0.1:9001
-服务端会独立运行测试，并依据实际退出码及报告判定通过。请勿用文字声明代替测试结果。"
-`;
-
-exports[`prompt templates > e2eVerifyPromptSuffix without ports 1`] = `
-"
-
-## 浏览器验收
-请用公开 Playwright Test 补齐 Chromium 测试，覆盖 Issue #42 的验收标准。
-服务端会独立运行测试，并依据实际退出码及报告判定通过。请勿用文字声明代替测试结果。"
 `;
 
 exports[`prompt templates > getKnowledgeForPrompt returns deterministic map 1`] = `

@@ -9,7 +9,7 @@ describe('AGENT_NOTE_MARKER', () => {
 
 describe('GitHubClient agent note marker', () => {
   let client: GitHubClient;
-  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  let fetchSpy: import('vitest').MockInstance<typeof fetch>;
 
   beforeEach(() => {
     client = new GitHubClient({
@@ -54,7 +54,7 @@ describe('GitHubClient agent note marker', () => {
 
 describe('GitHubClient.cleanupAgentNotes', () => {
   let client: GitHubClient;
-  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  let fetchSpy: import('vitest').MockInstance<typeof fetch>;
 
   beforeEach(() => {
     client = new GitHubClient({

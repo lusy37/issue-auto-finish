@@ -1,3 +1,4 @@
+import { AI_DEFAULTS, PROJECT_DEFAULTS, PREVIEW_DEFAULTS } from './shared/runtime/defaults.js';
 /**
  * Zod-based configuration schema and transformation layer.
  *
@@ -66,7 +67,7 @@ export const envSchema = z.object({
   GITHUB_API_URL: z
     .string()
     .url("GITHUB_API_URL must be a valid URL")
-    .default("https://api.github.com"),
+    .default(PROJECT_DEFAULTS.githubApiUrl),
   GITHUB_TOKEN: z.string().min(1, "GITHUB_TOKEN is required"),
   GITHUB_REPOSITORY: z
     .string()
@@ -82,7 +83,7 @@ export const envSchema = z.object({
 
   // --- Project ---
   GIT_ROOT_DIR: z.string().optional(),
-  BASE_BRANCH: z.string().optional().default("main"),
+  BASE_BRANCH: z.string().optional().default(PROJECT_DEFAULTS.baseBranch),
   BRANCH_PREFIX: z.string().optional().default("feat/issue"),
   WORKTREE_BASE_DIR: z.string().optional().default(""),
   PROJECT_SUBDIR: z.string().optional().default(""),
@@ -91,7 +92,7 @@ export const envSchema = z.object({
   AI_RUNNER_MODE: z.enum(["codex"]).optional().default("codex"),
   AI_MODEL: z.string().optional().default(""),
   CODEX_BINARY: z.string().optional(),
-  AI_PHASE_TIMEOUT_MS: envMs("2700000"),
+  AI_PHASE_TIMEOUT_MS: envMs(String(AI_DEFAULTS.phaseTimeoutMs)),
   AI_IDLE_TIMEOUT_MS: z.coerce
     .number()
     .int()
@@ -114,8 +115,8 @@ export const envSchema = z.object({
   POLL_DISCOVERY_INTERVAL_MS: envMs("60000"),
   POLL_DRIVE_INTERVAL_MS: envMs("15000"),
   MAX_RETRIES: envInt("3", { min: 0, max: 100 }),
-  AI_MAX_CONCURRENCY: envInt("4", { min: 1, max: 32 }),
-  MAX_CONCURRENT_ISSUES: envInt("1", { min: 1 }),
+  AI_MAX_CONCURRENCY: envInt(String(AI_DEFAULTS.maxConcurrency), { min: 1, max: AI_DEFAULTS.maxConcurrencyLimit }),
+  MAX_CONCURRENT_ISSUES: envInt(String(PROJECT_DEFAULTS.maxConcurrentIssues), { min: 1 }),
 
   // --- Review ---
   REVIEW_ENABLED: featureToggle(),
@@ -132,13 +133,17 @@ export const envSchema = z.object({
 
   // --- E2E ---
   E2E_UI_ENABLED: featureToggle(),
-  E2E_BASE_URL: z.string().optional().default("http://127.0.0.1:9000"),
-  E2E_BACKEND_PORT_BASE: envPort("4000"),
-  E2E_FRONTEND_PORT_BASE: envPort("9000"),
+  E2E_BASE_URL: z.string().optional().default(`http://127.0.0.1:${PREVIEW_DEFAULTS.frontendPortBase}`),
+  E2E_BACKEND_PORT_BASE: envPort(String(PREVIEW_DEFAULTS.backendPortBase)),
+  E2E_FRONTEND_PORT_BASE: envPort(String(PREVIEW_DEFAULTS.frontendPortBase)),
 
   UAT_CONFIG_FILE: z.string().default("playwright.config.ts"),
   UAT_TIMEOUT_MS: envMs("300000"),
   // --- Preview ---
+  PREVIEW_STARTUP_TIMEOUT_MS: envMs(String(PREVIEW_DEFAULTS.startupTimeoutMs)),
+  PREVIEW_READINESS_INTERVAL_MS: envInt(String(PREVIEW_DEFAULTS.readinessIntervalMs), { min: 10 }),
+  PREVIEW_BACKEND_READY_URL: z.string().default(""),
+  PREVIEW_FRONTEND_READY_URL: z.string().default(""),
   PREVIEW_ENABLED: envBoolean("true"),
   PREVIEW_HOST: z.string().optional().default("127.0.0.1"),
   PREVIEW_BACKEND_COMMAND: z.string().default("npm run dev:backend"),
@@ -178,7 +183,6 @@ export const envSchema = z.object({
   // --- Verify-Fix Loop (验证-修复循环) ---
   VERIFY_FIX_LOOP_ENABLED: featureToggle(),
   VERIFY_FIX_MAX_ITERATIONS: envInt("3", { min: 1, max: 10 }),
-  VERIFY_TODOLIST_CHECK_ENABLED: envBoolean("true"),
 });
 
 export type ParsedEnv = z.infer<typeof envSchema>;
@@ -291,6 +295,10 @@ export function transformEnvToConfig(env: ParsedEnv, dirname: string) {
     },
     preview: {
       enabled: env.PREVIEW_ENABLED,
+      startupTimeoutMs: env.PREVIEW_STARTUP_TIMEOUT_MS,
+      readinessIntervalMs: env.PREVIEW_READINESS_INTERVAL_MS,
+      backendReadyUrl: env.PREVIEW_BACKEND_READY_URL,
+      frontendReadyUrl: env.PREVIEW_FRONTEND_READY_URL,
       host: env.PREVIEW_HOST,
       backendCommand: env.PREVIEW_BACKEND_COMMAND,
       frontendCommand: env.PREVIEW_FRONTEND_COMMAND,
@@ -317,7 +325,6 @@ export function transformEnvToConfig(env: ParsedEnv, dirname: string) {
     verifyFixLoop: {
       enabled: env.VERIFY_FIX_LOOP_ENABLED,
       maxIterations: env.VERIFY_FIX_MAX_ITERATIONS,
-      todolistCheckEnabled: env.VERIFY_TODOLIST_CHECK_ENABLED,
     },
   } as const;
 }

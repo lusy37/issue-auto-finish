@@ -1,17 +1,22 @@
+import type { AIRunner } from '../ai-runner/AIRunner.js';
+import type { GitOperations } from '../git/GitOperations.js';
+import type { PlanPersistence } from '../persistence/PlanPersistence.js';
+import type { Config } from '../config.js';
+import type { PhaseSessionStore } from './PhaseSessionStore.js';
+import { getPhaseArtifacts } from '../shared/runtime/artifacts.js';
 import fs from "node:fs";
 import path from "node:path";
-import { BasePhase, type PhaseContext } from "./BasePhase.js";
+import { type PhaseContext } from "./BasePhase.js";
 import type { PhaseCallbacks } from "./PhaseCallbacks.js";
 import type { PhaseResult } from "../orchestration/PhaseResult.js";
 import { executeUat } from "../e2e/PlaywrightRunner.js";
 import { getIssueContext } from '../context/IssueContext.js';
 import { ARTIFACTS } from '../shared/runtime/artifacts.js';
 /** 每次重试执行真实浏览器测试，不复用遗留 Markdown 报告。 */
-export class UatPhase extends BasePhase {
+export class UatPhase {
   readonly phaseName = "uat";
-  protected buildPrompt(ctx: PhaseContext): string {
-    return `请为当前需求补充 Playwright Chromium 浏览器验收测试和配置 ${this.config.e2e.configFile}。\n需求：${ctx.demand.title}\n${ctx.demand.description}\n通过 process.env.UAT_BASE_URL 读取预览地址。服务端将实际执行测试，请勿生成验收结论。`;
-  }
+  constructor(_runner: AIRunner, _git: GitOperations, private plan: PlanPersistence, private config: Config, _sessions?: PhaseSessionStore) {}
+  getResultFiles() { return getPhaseArtifacts('uat').map(({ filename, label }) => ({ filename, label })); }
   async run(
     ctx: PhaseContext,
     callbacks?: PhaseCallbacks,
@@ -44,7 +49,7 @@ export class UatPhase extends BasePhase {
       ? {
           kind: "completed",
           output: markdown,
-          artifacts: this.toArtifactRefs(this.getResultFiles()),
+          artifacts: this.getResultFiles(),
         }
       : {
           kind: "failed",

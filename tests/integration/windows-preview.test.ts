@@ -51,7 +51,7 @@ it("中文空格目录中通过 cmd 启动预览，取消后清除进程树并�
       ? { bin: path.join(dir, "启动.cmd"), args: ["{port}"] }
       : { bin: process.execPath, args: ["启动.mjs", "{port}"] };
   const manager = new DevServerManager({
-    startupGraceMs: 1000,
+    startupTimeoutMs: 10000,
     backendCommand: command,
     frontendCommand: command,
   });

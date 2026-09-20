@@ -1,3 +1,4 @@
+import { MAX_CONFLICT_REPAIR_CALLS } from '../limits.js';
 import { z } from 'zod';
 import { assertWorkflowStorageShape } from '../../orchestration/codecs/WorkflowCodec.js';
 import type { IssueRun } from '../contracts.js';
@@ -32,7 +33,7 @@ const taskSchema = z.object({
   taskId: text,
   status: z.enum(['pending', 'running', 'waiting-merge', 'merging', 'merged', 'failed', 'uncertain']),
   attemptNo: counter,
-  conflictCallsUsed: counter.max(2),
+  conflictCallsUsed: counter.max(MAX_CONFLICT_REPAIR_CALLS),
   identity: identitySchema.optional(),
   startCommit: text.optional(),
   branch: text.optional(),

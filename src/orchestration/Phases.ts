@@ -10,10 +10,8 @@ export interface PhaseSpec {
   readonly kind: 'ai' | 'gate';
   /** 该阶段产出的产物文件 */
   readonly artifacts?: readonly ArtifactSpec[];
-  /** 是否可被用户单独重试。默认：kind === 'ai' */
+  /** 是否可被用户单独重试 */
   readonly retryable?: boolean;
-  /** 此阶段完成后是否启动预览服务器 */
-  readonly deploysPreview?: boolean;
 }
 
 const PHASE_PLAN: PhaseSpec = {
@@ -35,7 +33,6 @@ const PHASE_BUILD: PhaseSpec = {
   id: 'build',
   label: '实施',
   kind: 'ai',
-  deploysPreview: true,
 };
 
 const PHASE_VERIFY: PhaseSpec = {

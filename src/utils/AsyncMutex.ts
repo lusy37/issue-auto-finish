@@ -1,4 +1,5 @@
 /** 进程内局部互斥；等待者取消时立即撤销排队，不影响当前持锁者。 */
+// 保留此实现以支持 FIFO 排队和单个等待者取消；不能以取消整个队列的锁替换。
 export class AsyncMutex {
   private queue: Array<{ grant: () => void; cancel: () => void }> = [];
   private locked = false;

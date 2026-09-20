@@ -1,23 +1,13 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach,beforeEach,describe,expect,it } from 'vitest';
 import { DevServerManager } from '../../src/preview/DevServerManager.js';
-import type { WorktreeContext } from '../../src/git/WorktreeContext.js';
-
-function makeWtCtx(number: number): WorktreeContext {
-  return {
-    gitRootDir: `/tmp/wt-${number}`,
-    workDir: `/tmp/wt-${number}/app/project`,
-    branchName: `feat/issue-${number}`,
-    issueIid: number,
-  };
-}
 
 describe('DevServerManager', () => {
   let manager: DevServerManager;
 
   beforeEach(() => {
     manager = new DevServerManager({
-      healthCheckTimeoutMs: 5_000,
-      healthCheckIntervalMs: 500,
+      startupTimeoutMs: 5_000,
+      readinessIntervalMs: 500,
     });
   });
 

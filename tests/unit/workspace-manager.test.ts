@@ -30,7 +30,7 @@ describe('WorkspaceManager — baseBranch validation', () => {
         gitRootDir: fixture.cloneDir,
         projectSubDir: '',
         baseBranch,
-        branchPrefix: 'feat/issue',
+        branchPrefix: 'feat/issue', worktreeBaseDir: '/tmp/worktrees',
       },
       'test/project',
     );

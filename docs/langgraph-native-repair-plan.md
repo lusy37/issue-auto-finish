@@ -1,10 +1,10 @@
 # LangGraph Native 修复与双图展示计划
 
-日期：2026-09-20。状态：部分实施；产物名称与路径约定修复见第 9 节。
+日期：2026-09-20。状态：A～F 已实施；此前产物修复见第 9 节，本轮记录见第 10 节。
 
 适用分支：`codex/langgraph-native`，工作树：`E:\Edge_Load\issue-auto-finish\.iaf-mini\worktrees\langgraph-native`。依据为该工作树当前未提交变更、TODO 审查和全仓检索结果。实施前重新确认差异，保留用户正在补充的注释和已有修改。
 
-目标：先修正影响执行、验证和页面判断的问题，再统一重复规则、清理旧调用路径，最后增加 Issue 主流程与 build 任务 DAG 的展示。优先级表示影响程度，批次表示建议实施顺序；除第 9 节列出的已实施部分，其余条目待实施。
+目标：先修正影响执行、验证和页面判断的问题，再统一重复规则、清理旧调用路径，最后增加 Issue 主流程与 build 任务 DAG 的展示。优先级表示影响程度，批次表示建议实施顺序；下表保留审查时的依据和验收目标，当前完成状态以第 10 节为准。
 
 ## 1. 总体计划表
 
@@ -50,8 +50,8 @@ A3 同步检查中英文提示词的实际引用。历史模板只有确认不�
 
 | 编号 | 清理对象 | 判断与实施顺序 | 验收标准 |
 | --- | --- | --- | --- |
-| D1 · P2 | [BuildPhase](../src/phases/BuildPhase.ts)、[PhaseFactory](../src/phases/PhaseFactory.ts)、[UatPhase](../src/phases/UatPhase.ts) 的失效方法 | 主流程 build 已由 DagPhaseRunner 接管，但 [RunWorkflowStep](../src/orchestrator/steps/RunWorkflowStep.ts) 发布阶段仍创建阶段实例。先完成 C4，迁移有效行为测试到 DagPhaseRunner/TaskGraphExecutor，再删除旧 Build 执行路径和无用工厂注册。UAT 只删除确认未使用的提示词入口，保留真实执行与报告判定。 | 正常构建、任务恢复、知识注入、验证修复和产物同步覆盖仍在；不存在为获取元数据而构造旧执行器的路径；真实 UAT 行为不退化。 |
-| D2 · P3 | [SupplementStore.toPromptText](../src/supplement/SupplementStore.ts)、[ConflictResolver](../src/git/ConflictResolver.ts)、`PullRequestHelper`（已删除）、`PlanPersistence.ensureGitignore` | 前者仅见测试调用，实际补充资料走需求上下文生成；旧冲突处理和 PR 文案工具无当前生产调用；ensureGitignore 是空方法。先统一补充资料空白处理并迁移到真实入口测试，再删除孤立方法、工具、模板和只验证空行为的测试。 | 补充资料仍通过真实需求链路进入上下文；删除的工具不再承担任何公开接口；运行路径不依赖 `.claude-plan` 旧目录；保留“不向目标仓库写内部产物”的真实集成断言。 |
+| D1 · P2 | `BuildPhase`（已删除）、[PhaseFactory](../src/phases/PhaseFactory.ts)、[UatPhase](../src/phases/UatPhase.ts) 的失效方法 | 主流程 build 已由 DagPhaseRunner 接管，但 [RunWorkflowStep](../src/orchestrator/steps/RunWorkflowStep.ts) 发布阶段仍创建阶段实例。先完成 C4，迁移有效行为测试到 DagPhaseRunner/TaskGraphExecutor，再删除旧 Build 执行路径和无用工厂注册。UAT 只删除确认未使用的提示词入口，保留真实执行与报告判定。 | 正常构建、任务恢复、知识注入、验证修复和产物同步覆盖仍在；不存在为获取元数据而构造旧执行器的路径；真实 UAT 行为不退化。 |
+| D2 · P3 | [SupplementStore.toPromptText](../src/supplement/SupplementStore.ts)、`ConflictResolver`（已删除）、`PullRequestHelper`（已删除）、`PlanPersistence.ensureGitignore` | 前者仅见测试调用，实际补充资料走需求上下文生成；旧冲突处理和 PR 文案工具无当前生产调用；ensureGitignore 是空方法。先统一补充资料空白处理并迁移到真实入口测试，再删除孤立方法、工具、模板和只验证空行为的测试。 | 补充资料仍通过真实需求链路进入上下文；删除的工具不再承担任何公开接口；运行路径不依赖 `.claude-plan` 旧目录；保留“不向目标仓库写内部产物”的真实集成断言。 |
 | D3 · P2 | `verify:loopStarted` / `verify:iterationComplete` / `verify:loopExhausted` 旧事件链；`shouldDeployServers`、`deploysPreview` 旧预览标记 | 后端没有相应修复事件生产者，前端仍注册和处理；预览实际由进入 UAT 且配置开启时启动。清理旧 EventBus/SSE/页面分支；修复轮次展示直接投影持久化 `repairRounds`、`repairs`。删除失效预览依赖并同步元数据与测试。 | 刷新或重启后修复轮次仍准确；不新增另一份仅靠事件累加的状态；预览开启、关闭、修复后重启、暂停继续均按真实入口工作。 |
 | D4 · P3 | 遗留提示词、代码注释、阅读文档和快照 | 随相关模块清理，纠正“生命周期等于图执行位置”、阶段预算写成任务预算、计划可直接编辑、旧目录和 build 自动启动预览等误导描述。 | 描述与原生调用链一致；快照只更新实际变化，历史验收记录不改写成当前行为说明。 |
 
@@ -135,3 +135,39 @@ E3 增加的 tests 类型检查同时加入验证。模拟端到端验收与真�
 - B1：已修正产物降级列表、UAT 报告展示与默认只读；元数据加载失败后的请求重试仍待实施。
 - 已删除旧目录读写和特殊 Git 排除规则；审核展示只使用当前聚合记录。提示词和录制回放测试不再使用旧目录。
 - 验收完成：typecheck、前后端构建通过；完整保留测试集 104 个文件、871 项通过。测试在正常 Windows 权限下使用本机 Chrome；AI/平台为模拟实现，未执行真实 Codex 或 GitHub 写入。第 8 节的此前测试数字仅为审查历史。
+
+## 10. 本轮落地记录
+
+本轮不添加任何旧格式迁移或历史目录后备路径；保留原有检查点 UTF-8 JSON 与 v6 运行格式。已完成的用户 TODO 已删除或改成结论性说明，辅助说明注释保留。
+
+| 条目 | 已实施行为 | 主要验证归属 |
+| --- | --- | --- |
+| A1、A2 | CallPolicy 统一完整超时、延期、模型和读写选项；两条蒸馏只读 | build-phase-scenarios、dag-execution、distill 测试 |
+| A3 | Verify 不再依赖 checkbox；Lint/Build/Test 任一缺失或失败均不通过 | verify-report-parser、verify-phase-scenarios |
+| B1、B2 | 元数据失败后可重新加载且并发合并；固化阶段优先；精确标签归属 | frontend-graph-state、frontend-artifacts、repair-contracts、dag-delivery |
+| C1、C2、C5 | 分领域格式、任务/冲突额度、递归上界与标识解析统一 | Codec、current-state-contract、repair-contracts、dag-execution |
+| C3 | 提示词纯函数与共用 JSON 提取；驳回恢复会话也携带完整旧计划 | repair-contracts、plan-phase、prompt-templates、distill |
+| C4 | 延续上次产物约定，无旧目录兼容 | artifact-paths、审核 API 与完整回归 |
+| D1、D2 | 删除旧 BuildPhase、ConflictResolver、孤立补充资料转换及旧模板；UAT 保留真实报告判定 | 旧 Build 有效行为已迁移至真实 DagPhaseRunner；恢复、合并及 UAT 集成测试保留 |
+| D3、D4 | 删除无生产者的修复事件和预览标记；修复轮次来自持久化记录；更新阅读文档 | frontend-graph-state、原生恢复与预览测试 |
+| E1 | 日志按每 1000 条余量批裁剪；摘要前后端共用、单条最多 2000 字符 | agent-log-retention：已有 20000 条上追加 1000 条，只读全文件 2 次、裁剪 1 次；样本约 410ms，不作为性能 SLA |
+| E2 | TCP/可配置 HTTP 就绪探测、总超时和取消；修复启动后立即停止的竞态 | preview-readiness、preview-startup、windows-preview |
+| E3 | 所有保留 tests 加入 vue-tsc；修正失效配置、夹具、旧字段和匿名类导出类型 | npm run typecheck 包含 typecheck:tests |
+| E4 | GitHub 短等待上限共用；配置、CLI、页面和预览共享同义默认值 | repair-contracts、config、setup 与完整回归 |
+| F1～F3 | 只读双图接口；真实 checkpoint 与共用任务拓扑；build 联动、修复入口说明、轮次防乱序 | workflow-graphs、frontend-graph-state、workbench 浏览器验收；[生命周期说明图](issue-lifecycle.md) |
+
+双图额外修复：完整重做时虽然保留历史计划快照，图只展示新轮次聚合记录中的任务，避免把旧计划误显示成当前执行。图接口读取期间若记录变化会重新取样，持续变化返回可重试的 409。
+
+预览配置新增 `PREVIEW_STARTUP_TIMEOUT_MS`（默认 60000）、`PREVIEW_READINESS_INTERVAL_MS`（默认 200）、前后端 `PREVIEW_*_READY_URL`。HTTP 地址支持 `{port}`，留空时探测实际分配端口；TCP 成功只证明端口监听。设置页保存后需重启生效。
+
+测试迁移说明：旧 Build 的候选提交、无变更失败、AI 失败、集成修复与 UAT 准备迁到 `tests/unit/phases/build-phase-scenarios.test.ts` 的真实 DagPhaseRunner；任务依赖/恢复/冲突预算继续由真实 Git 的 `dag-execution` 覆盖；知识注入迁到 `knowledge-feature-switches` 的真实构建入口。仅描述不存在 API 或验证空方法的重复用例已删除；Plan/Verify 的 SDK 会话恢复、完整审核快照和 UAT 原始凭证覆盖保留。
+
+最终验证结果（2026-09-20）：
+
+- `npm run typecheck`：后端、脚本、前端及全部保留测试类型检查通过。
+- `npm run build`、`npm run web:build`：通过。
+- `IAF_TEST_BROWSER_CHANNEL=chrome npm run test:all -- --silent --reporter=dot`：111 个文件、880 项全部通过，包含 Chrome 工作台端到端、真实临时 Git、取消与进程树清理；耗时约 353 秒。
+- `git diff --cached --check`：通过；变更文档的本地链接检查通过。
+- 生命周期说明图：Archify showcase 9/9、零错误零警告；四种桌面尺寸无溢出；深浅主题截图复核及搜索、聚焦关闭、SVG 导出验证通过。
+
+AI 与 GitHub 全部使用模拟实现；本轮未调用真实 Codex，也未写入真实 GitHub。第 8、9 节和其他文档中的旧测试数量保留为历史记录，不用于替代本轮验收结果。

@@ -9,7 +9,6 @@ const SSE_EVENTS = [
 
   'gate:requested', 'gate:approved', 'gate:rejected', 'gate:supplemented',
   'agent:output', 'pipeline:progress',
-  'verify:loopStarted', 'verify:iterationComplete', 'verify:loopExhausted',
 ] as const;
 
 const connected = ref(false);

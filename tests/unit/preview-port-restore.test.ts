@@ -58,7 +58,7 @@ describe('Preview port restore on retry', () => {
     config = createTestConfig({
       e2e: { enabled: true },
       preview: { enabled: true },
-      verifyFixLoop: { enabled: false, maxIterations: 3, todolistCheckEnabled: false },
+      verifyFixLoop: { enabled: false, maxIterations: 3 },
     });
     mockTracker = createMockIssueTracker();
   });
@@ -67,7 +67,6 @@ describe('Preview port restore on retry', () => {
     return createMockOrchestratorDeps({
       config,
       tracker: mockTracker as any,
-      shouldDeployServers: vi.fn().mockReturnValue(true),
       startPreviewServers: vi.fn().mockResolvedValue(MOCK_PORTS),
       buildPreviewUrl: vi.fn().mockReturnValue('https://10.0.0.1:9001'),
       ...overrides,
@@ -77,7 +76,7 @@ describe('Preview port restore on retry', () => {
   function bindTrackerToRecord(ctx: IssueProcessingContext): void {
     ctx.record.run ??= newIssueRun();
     ctx.record.run.workflow.definition ??= {
-      phaseIds: ctx.pipelineDef.phases.map(phase => phase.name),
+      phaseIds: ctx.pipelineDef.phases.map(phase => phase.name as import('../../src/orchestration/WorkflowState.js').PhaseId),
     };
     ctx.record.run.workflow.entry = (ctx.isRetry ? 'uat' : 'plan') as any;
     mockTracker.get.mockImplementation(() => ctx.record as any);
@@ -89,7 +88,7 @@ describe('Preview port restore on retry', () => {
     const wtCtx = createMockWtCtx();
 
     const phaseCtx: PhaseContext = {
-      demand: { demandId: 'gh-42', sourceRef: { source: 'github-issue', externalId: '100', displayId: '42' }, title: 'Test', description: 'desc' },
+      demand: { createdAt: '2026-09-20T00:00:00Z', demandId: 'gh-42', sourceRef: { source: 'github-issue', externalId: '100', displayId: '42' }, title: 'Test', description: 'desc' },
       branchName: 'feat/issue-42',
       pipelineMode: 'plan-mode',
     };
@@ -123,13 +122,13 @@ describe('Preview port restore on retry', () => {
     expect(vi.mocked(deps.stopPreviewServers).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(deps.startPreviewServers).mock.invocationCallOrder[0]);
   });
 
-  it('auto-starts preview when resuming past deploysPreview with no existing allocation', async () => {
+  it('恢复 UAT 且没有端口分配时启动预览', async () => {
     const pipelineDef = buildPlanModePipeline({ e2eEnabled: true });
     const issue = createTestIssue();
     const wtCtx = createMockWtCtx();
 
     const phaseCtx: PhaseContext = {
-      demand: { demandId: 'gh-42', sourceRef: { source: 'github-issue', externalId: '100', displayId: '42' }, title: 'Test', description: 'desc' },
+      demand: { createdAt: '2026-09-20T00:00:00Z', demandId: 'gh-42', sourceRef: { source: 'github-issue', externalId: '100', displayId: '42' }, title: 'Test', description: 'desc' },
       branchName: 'feat/issue-42',
       pipelineMode: 'plan-mode',
     };
@@ -165,7 +164,7 @@ describe('Preview port restore on retry', () => {
     const wtCtx = createMockWtCtx();
 
     const phaseCtx: PhaseContext = {
-      demand: { demandId: 'gh-42', sourceRef: { source: 'github-issue', externalId: '100', displayId: '42' }, title: 'Test', description: 'desc' },
+      demand: { createdAt: '2026-09-20T00:00:00Z', demandId: 'gh-42', sourceRef: { source: 'github-issue', externalId: '100', displayId: '42' }, title: 'Test', description: 'desc' },
       branchName: 'feat/issue-42',
       pipelineMode: 'plan-mode',
     };
@@ -203,7 +202,7 @@ describe('Preview port restore on retry', () => {
     const wtCtx = createMockWtCtx();
 
     const phaseCtx: PhaseContext = {
-      demand: { demandId: 'gh-42', sourceRef: { source: 'github-issue', externalId: '100', displayId: '42' }, title: 'Test', description: 'desc' },
+      demand: { createdAt: '2026-09-20T00:00:00Z', demandId: 'gh-42', sourceRef: { source: 'github-issue', externalId: '100', displayId: '42' }, title: 'Test', description: 'desc' },
       branchName: 'feat/issue-42',
       pipelineMode: 'plan-mode',
     };
@@ -238,7 +237,7 @@ describe('Preview port restore on retry', () => {
 
     const preExistingPorts: PortPair = { backendPort: 5555, frontendPort: 9999 };
     const phaseCtx: PhaseContext = {
-      demand: { demandId: 'gh-42', sourceRef: { source: 'github-issue', externalId: '100', displayId: '42' }, title: 'Test', description: 'desc' },
+      demand: { createdAt: '2026-09-20T00:00:00Z', demandId: 'gh-42', sourceRef: { source: 'github-issue', externalId: '100', displayId: '42' }, title: 'Test', description: 'desc' },
       branchName: 'feat/issue-42',
       pipelineMode: 'plan-mode',
       ports: preExistingPorts,

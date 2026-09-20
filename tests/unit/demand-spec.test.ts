@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import type { DemandSpec, DemandSource, SourceRef, DemandSupplement } from '../../src/demand/DemandSpec.js';
+import { describe,expect,it } from 'vitest';
+import type { GitHubIssue } from '../../src/clients/GitHubClient.js';
+import type { DemandSource,DemandSpec,DemandSupplement } from '../../src/demand/DemandSpec.js';
 import { githubIssueToDemandSpec } from '../../src/demand/adapters/GitHubAdapter.js';
 import { demandToPromptContext } from '../../src/prompts/templates.js';
-import type { GitHubIssue } from '../../src/clients/GitHubClient.js';
 import type { SupplementInfo } from '../../src/supplement/SupplementStore.js';
 
 describe('DemandSpec', () => {
@@ -45,6 +45,7 @@ describe('DemandSpec', () => {
         references: 'refs',
         freeText: 'free',
       };
+      expect(full.requirements).toBe('req');
     });
   });
 });

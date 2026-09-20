@@ -1,3 +1,4 @@
+import { PREVIEW_DEFAULTS } from '../shared/runtime/defaults.js';
 import net from 'node:net';
 import { PortExhaustionError } from '../errors/index.js';
 import { logger as rootLogger } from '../logger.js';
@@ -16,9 +17,9 @@ export interface PortAllocatorOptions {
 }
 
 const DEFAULT_OPTIONS: PortAllocatorOptions = {
-  backendPortBase: 4000,
-  frontendPortBase: 9000,
-  maxPorts: 100,
+  backendPortBase: PREVIEW_DEFAULTS.backendPortBase,
+  frontendPortBase: PREVIEW_DEFAULTS.frontendPortBase,
+  maxPorts: PREVIEW_DEFAULTS.maxPorts,
 };
 
 async function checkPortAvailable(port: number): Promise<boolean> {

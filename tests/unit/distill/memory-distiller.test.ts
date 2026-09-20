@@ -71,7 +71,7 @@ describe('MemoryDistiller', () => {
       knowledgeStore,
       versionStore,
       workDir: tmpDir,
-      timeoutMs: 10000,
+      aiPolicy: { timeoutMs: 10000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' },
       minDiariesForDistill: 3,
     });
 
@@ -105,11 +105,12 @@ describe('MemoryDistiller', () => {
       knowledgeStore,
       versionStore,
       workDir: tmpDir,
-      timeoutMs: 10000,
+      aiPolicy: { timeoutMs: 10000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' },
       minDiariesForDistill: 3,
     });
 
     const result = await distiller.distill();
+    expect(mockRunner.run).toHaveBeenCalledWith(expect.objectContaining({ mode: 'plan', timeoutMs: 10000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' }));
     expect(result.processedDiaries).toBe(3);
     expect(result.actions).toBe(1);
 
@@ -138,7 +139,7 @@ describe('MemoryDistiller', () => {
       knowledgeStore,
       versionStore,
       workDir: tmpDir,
-      timeoutMs: 10000,
+      aiPolicy: { timeoutMs: 10000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' },
       minDiariesForDistill: 3,
     });
 
@@ -158,11 +159,12 @@ describe('MemoryDistiller', () => {
       knowledgeStore,
       versionStore,
       workDir: tmpDir,
-      timeoutMs: 10000,
+      aiPolicy: { timeoutMs: 10000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' },
       minDiariesForDistill: 3,
     });
 
     const result = await distiller.distill();
+    expect(mockRunner.run).toHaveBeenCalledWith(expect.objectContaining({ mode: 'plan', timeoutMs: 10000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' }));
     expect(result.processedDiaries).toBe(3);
     expect(result.actions).toBe(0);
     expect(diaryStore.undistilledCount()).toBe(0);

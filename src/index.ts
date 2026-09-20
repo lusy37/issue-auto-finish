@@ -1,3 +1,4 @@
+import { configuredCallPolicy } from './ai-runner/CallPolicy.js';
 import { validateDraftStorage } from "./demand/DraftService.js";
 import path from "node:path";
 import { loadConfig } from "./config.js";
@@ -96,7 +97,7 @@ export async function main(): Promise<void> {
       knowledgeStore,
       versionStore,
       workDir: config.project.workDir,
-      timeoutMs: config.ai.phaseTimeoutMs,
+      aiPolicy: configuredCallPolicy(config.ai),
       minDiariesForDistill: config.distill.minDiariesForDistill,
     });
     const agentRuleDistiller = new AgentRuleDistiller({
@@ -104,7 +105,7 @@ export async function main(): Promise<void> {
       knowledgeStore,
       versionStore,
       workDir: config.project.workDir,
-      timeoutMs: config.ai.phaseTimeoutMs,
+      aiPolicy: configuredCallPolicy(config.ai),
       confidenceThreshold: config.distill.memoryConfidenceThreshold,
     });
     const distillScheduler = new DistillScheduler({

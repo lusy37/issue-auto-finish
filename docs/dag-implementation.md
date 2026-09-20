@@ -88,11 +88,11 @@ PR 身份跨完整重做保留。开放 PR 继续使用；关闭 PR 要求先重
 
 ## 数据格式和重新初始化
 
-新格式分别为 `iaf-mini/issue-run/v5-langgraph`、`iaf-mini/task-plan/v2`、`iaf-mini/draft/v2`。开发阶段不兼容或迁移旧任务、旧草稿；启动错误会指出具体文件和重新初始化方法。运行数据从不读取或写回仓库原 `data/`。
+新格式分别为 `iaf-mini/issue-run/v6-langgraph`、`iaf-mini/task-plan/v2`、`iaf-mini/draft/v2`。开发阶段不兼容或迁移旧任务、旧草稿；启动错误会指出具体文件和重新初始化方法。运行数据从不读取或写回仓库原 `data/`。
 
 需要重新初始化时，先停止原服务并确认任务进程退出，再选择新的 `DATA_DIR` 和工作目录，或归档旧运行目录后初始化。旧状态仍需恢复时保留原目录及原版本程序，不能在活动目录上直接删除数据。
 
-演示使用 `.iaf-mini/demo-langgraph-v5`。演示的 AI 和 GitHub 为模拟，真实执行 Git、落盘和浏览器，生产执行器没有模拟模式开关。
+演示使用 `.iaf-mini/demo-langgraph-v6`。演示的 AI 和 GitHub 为模拟，真实执行 Git、落盘和浏览器，生产执行器没有模拟模式开关。
 
 ## 分阶段结果与验证
 
@@ -142,3 +142,5 @@ PR 身份跨完整重做保留。开放 PR 继续使用；关闭 PR 要求先重
 以上按实现提交的 `git show --numstat` 统计，包含新增文件，不以最初 DAG 功能估算限制本次完整范围。README 和本文的说明提交另计。测试代码净减少主要来自旧批量创建、worktree 备份回退及重复审核测试的契约重写；新增恢复、进程和交付验收保留在测试集中。
 
 以上历史验收记录来自 DAG 基线；本分支的迁移范围及重新验收结果见 [LangGraph 迁移](langgraph-native.md)。
+
+2026-09-20：调用策略、旧路径清理、双图展示与工程检查已落地，见 [实施记录](langgraph-native-repair-plan.md#10-本轮落地记录)。业务生命周期与页面图的数据来源见 [双图说明](issue-lifecycle.md)。

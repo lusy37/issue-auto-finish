@@ -42,7 +42,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   return {
     ...original,
     default: {
-      ...original.default,
+      ...original,
       readdir: async () => [],
       rmdir: async () => {},
       access: (...args: unknown[]) => mockFsAccess(...args),
@@ -177,7 +177,7 @@ describe('IssueService', () => {
     });
 
     it('defaults to plan-mode for cursor-agent', () => {
-      const cfg = createTestConfig({ ai: { ...config.ai, mode: 'cursor-agent', binary: 'cursor' } });
+      const cfg = createTestConfig({ ai: { ...config.ai, mode: 'codex', binary: 'cursor' } });
       const orch = createOrchestrator(cfg);
       expect(orch.getPipelineDef().mode).toBe('plan-mode');
     });
@@ -451,9 +451,9 @@ describe('IssueService', () => {
   });
 
   describe('applyGateAction（LangGraph 原生审核恢复）', () => {
-    function captureEvent(name: string): Array<EventPayload<never>> {
-      const events: Array<EventPayload<never>> = [];
-      const listener = (payload: EventPayload<never>) => events.push(payload);
+    function captureEvent(name: string): Array<EventPayload> {
+      const events: Array<EventPayload> = [];
+      const listener = (payload: EventPayload) => events.push(payload);
       eventBus.on(name as never, listener);
       return events;
     }
@@ -509,7 +509,7 @@ describe('IssueService', () => {
         lifecycle: { kind: 'waiting', phase: 'uat' },
         pipelineMode: 'plan-mode',
       });
-      const cfg = createTestConfig({ release: { enabled: true } });
+      const cfg = createTestConfig();
 
       const orchestrator = createOrchestrator(cfg);
       await expect(

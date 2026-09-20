@@ -18,7 +18,7 @@ export interface PhaseRunnerContext {
   readonly ports?: unknown;
   /** 工作区布局（不在此模块定义，仅透传） */
   readonly workspace?: unknown;
-  /** verify-fix loop 的修复上下文（fixIteration 自动推算自历史） */
+  /** 集成修复上下文（fixIteration 来自持久化 repairRounds） */
   readonly fixIteration?: number;
   readonly verifyFailures?: readonly string[];
   readonly rawReport?: string;

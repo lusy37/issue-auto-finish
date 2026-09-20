@@ -1,3 +1,5 @@
+import { isWorkbenchLabel } from './IssueLabels.js';
+import { GITHUB_MAX_AUTO_WAIT_MS } from '../errors/GitHubPolicy.js';
 import { GitHubApiError } from "../errors/index.js";
 import { RetryPolicy } from "../utils/RetryPolicy.js";
 import { Semaphore } from "../utils/Semaphore.js";
@@ -99,7 +101,7 @@ export class GitHubClient {
   private readonly retry = new RetryPolicy({
     maxRetries: 3,
     baseDelayMs: 1000,
-    maxDelayMs: 30000,
+    maxDelayMs: GITHUB_MAX_AUTO_WAIT_MS,
     jitterFactor: 0,
     isRetryable: (error) =>
       error instanceof GitHubApiError
@@ -292,7 +294,7 @@ export class GitHubClient {
   }
   private async ensureLabels(labels: string[]): Promise<void> {
     for (const name of labels.filter(
-      (l) => l === "auto-finish" || l.startsWith("auto-finish:"),
+      isWorkbenchLabel,
     )) {
       if (this.labels.has(name)) continue;
       try {

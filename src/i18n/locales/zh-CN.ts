@@ -136,24 +136,6 @@ export const zhCN: Record<string, string> = {
 完整计划使用 title、description、acceptanceCriteria、tasks 字段，最终只返回严格 JSON，不输出 Markdown 文档。
 {outputConstraint}`,
 
-  'prompt.build': `你是开发工程师。请按照实施计划完成代码变更。
-
-## Issue 信息
-- IID: #{number}
-- 标题: {title}
-
-请先阅读:
-- AGENTS.md (项目架构和代码规范)
-
-## 完整实施计划
-{planContent}
-
-## 实施要求
-1. 按照完整计划实现任务，并逐项核对验收标准
-2. 计划和运行产物由服务端保存，不修改计划勾选状态或创建内部产物目录
-3. 严格遵循 AGENTS.md 中的代码规范（{codeStyleDescription}）
-4. 不要过度工程化，只实现计划中要求的内容
-5. 确保代码安全，避免 OWASP Top 10 漏洞`,
 
   'prompt.rePlan': `你是资深技术负责人。之前的实施计划未通过审核，请根据审核反馈修改计划。
 
@@ -215,32 +197,6 @@ export const zhCN: Record<string, string> = {
   'update.completed': '更新完成，服务将自动重启',
   'update.failed': '更新失败: {error}',
 
-  'prompt.conflictResolve': `你是一名资深开发工程师，正在处理 Git rebase 过程中产生的合并冲突。
-
-## 背景
-- Issue IID: #{number}
-- 分支: \`{branch}\` 正在 rebase 到 \`{baseBranch}\`
-- 冲突文件列表:
-{conflictFilesList}
-
-## 任务
-请逐一解决上述冲突文件：
-
-1. 打开每个冲突文件，仔细阅读冲突标记（<<<<<<< HEAD / ======= / >>>>>>> ...）
-2. 理解双方修改的意图：
-   - HEAD（当前分支）的修改目的
-   - 对方分支的修改目的
-3. 正确合并代码，确保：
-   - 保留双方有意义的修改
-   - 完全移除所有冲突标记（<<<<<<<, =======, >>>>>>>）
-   - 合并后的代码逻辑完整、可编译、可运行
-4. 如果某个文件的冲突涉及结构性变更（如函数签名变化），确保所有引用处也同步更新
-
-## 注意事项
-- 不要遗漏任何冲突标记
-- 不要引入新的 bug
-- 保持代码风格一致
-- 只修改冲突文件，不要做额外的代码改动`,
 
   // Distill (知识蒸馏)
   'distill.diaryCreated': '📝 已记录 Issue #{number} 的经验日记（{outcome}）',
@@ -259,26 +215,6 @@ export const zhCN: Record<string, string> = {
   'distill.triggerSuccess': '🧪 知识蒸馏已触发，处理中请稍候...',
 
   // Build fix mode suffix (verify-fix loop)
-  'prompt.buildFixSuffix': `
-
-## ⚠️ 修复模式（第 {iteration} 轮修复）
-
-**重要**: 上一轮验证发现以下问题未通过，请在本轮优先修复：
-
-{failures}
-
-### 修复要求
-1. 仔细阅读验证报告中的具体错误信息
-2. 修复所有导致 lint/build/test 失败的问题
-3. 完成所有 Todolist 中未完成的项目（- [ ] → - [x]），特别是新增单测
-4. 不要引入新的问题
-5. 修复完成后确保 {lintCommand} 和 {buildCommand} 和 {testFilesCommand} 全部通过
-
-### 原始验证报告摘要
-\`\`\`
-{rawReport}
-\`\`\`
-`,
 
   // --- E2E Runner ---
   'e2e.runnerCreated': 'E2E 验证阶段将使用独立 AI Runner（{mode}）',

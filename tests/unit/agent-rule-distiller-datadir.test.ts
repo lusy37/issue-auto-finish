@@ -35,7 +35,7 @@ describe('AgentRuleDistiller DATA_DIR integration', () => {
       knowledgeStore: mockKnowledgeStore as any,
       versionStore: mockVersionStore as any,
       workDir: path.join(tmpDir, 'project'),
-      timeoutMs: 30000,
+      aiPolicy: { timeoutMs: 30000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' },
       confidenceThreshold: 0.7,
     });
 
@@ -48,7 +48,7 @@ describe('AgentRuleDistiller DATA_DIR integration', () => {
     expect(result.actions).toBe(0);
   });
 
-  it('respects syncToProject option', async () => {
+  it('规则只保存在显式配置的数据目录', async () => {
     const { AgentRuleDistiller } = await import('../../src/distill/AgentRuleDistiller.js');
 
     const mockKnowledgeStore = {
@@ -70,12 +70,11 @@ describe('AgentRuleDistiller DATA_DIR integration', () => {
       knowledgeStore: mockKnowledgeStore as any,
       versionStore: mockVersionStore as any,
       workDir: projectDir,
-      timeoutMs: 30000,
+      aiPolicy: { timeoutMs: 30000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' },
       confidenceThreshold: 0.7,
-      syncToProject: true,
-      projectRulesDir,
     });
 
     expect(distiller).toBeDefined();
+    expect(fs.existsSync(projectRulesDir)).toBe(false);
   });
 });

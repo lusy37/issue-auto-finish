@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { AI_DEFAULTS, PROJECT_DEFAULTS } from '../shared/runtime/defaults.js';
 import { Command } from "commander";
 import fs from "node:fs";
 import path from "node:path";
@@ -27,9 +28,9 @@ program
       throw new Error("配置已存在，请直接编辑或在工作台设置中修改");
     fs.writeFileSync(
       file,
-      "GITHUB_API_URL=https://api.github.com\nGITHUB_TOKEN=replace-me\nGITHUB_REPOSITORY=owner/repo\nPROJECT_WORK_DIR=" +
+      `GITHUB_API_URL=${PROJECT_DEFAULTS.githubApiUrl}\nGITHUB_TOKEN=replace-me\nGITHUB_REPOSITORY=owner/repo\nPROJECT_WORK_DIR=` +
         process.cwd().replaceAll("\\", "/") +
-        "\nBASE_BRANCH=main\nAI_RUNNER_MODE=codex\nCODEX_BINARY=\nAI_PHASE_TIMEOUT_MS=2700000\n",
+        `\nBASE_BRANCH=${PROJECT_DEFAULTS.baseBranch}\nAI_RUNNER_MODE=codex\nCODEX_BINARY=\nAI_PHASE_TIMEOUT_MS=${AI_DEFAULTS.phaseTimeoutMs}\n`,
     );
     console.log("已创建配置：" + file);
   });

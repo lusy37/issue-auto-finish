@@ -38,5 +38,5 @@ export function graphFixture(
   return { directory, repo, data, worktrees, integration, tracker };
 }
 export function graphDeps(fixture: ReturnType<typeof graphFixture>, runner: AIRunner, extra: Partial<GraphDependencies> = {}): GraphDependencies {
-  return { number: 1, tracker: fixture.tracker, runner, integration: new GitOperations(fixture.integration), repository: new GitOperations(fixture.repo), repositoryMutex: new AsyncMutex(), worktreeRoot: fixture.worktrees, signal: new AbortController().signal, timeoutMs: 10000, install: async () => {}, ...extra };
+  return { number: 1, tracker: fixture.tracker, runner, integration: new GitOperations(fixture.integration), repository: new GitOperations(fixture.repo), repositoryMutex: new AsyncMutex(), worktreeRoot: fixture.worktrees, signal: new AbortController().signal, aiPolicy: { timeoutMs: 10000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' }, install: async () => {}, ...extra };
 }

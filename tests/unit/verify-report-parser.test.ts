@@ -19,8 +19,6 @@ describe('VerifyReportParser', () => {
       expect(result.lintPassed).toBe(true);
       expect(result.buildPassed).toBe(true);
       expect(result.testPassed).toBe(true);
-      expect(result.todolistComplete).toBe(true);
-      expect(result.todolistStats).toEqual({ completed: 5, total: 5 });
       expect(result.failureReasons).toEqual([]);
     });
 
@@ -65,20 +63,18 @@ TS2345: Argument of type 'string' is not assignable
       expect(result.failureReasons).toContain('测试未通过');
     });
 
-    it('should detect incomplete todolist via stats', () => {
+    it('未勾选描述不覆盖明确通过的检查结果', () => {
       const report = `- **Lint 结果**: 通过
 - **Build 结果**: 通过
 - **Test 结果**: 通过
 - **Todolist 检查**: 3/5 项完成
   - [ ] 新增单元测试
   - [ ] 更新文档
-- **总结**: 验证失败`;
+- **总结**: 验证通过`;
 
       const result = parser.parse(report);
-      expect(result.passed).toBe(false);
-      expect(result.todolistComplete).toBe(false);
-      expect(result.todolistStats).toEqual({ completed: 3, total: 5 });
-      expect(result.failureReasons).toContain('Todolist 未全部完成(3/5)');
+      expect(result.passed).toBe(true);
+      expect(result.failureReasons).toEqual([]);
     });
 
     it('should detect multiple failures', () => {
@@ -90,11 +86,10 @@ TS2345: Argument of type 'string' is not assignable
 
       const result = parser.parse(report);
       expect(result.passed).toBe(false);
-      expect(result.failureReasons).toHaveLength(4);
+      expect(result.failureReasons).toHaveLength(3);
       expect(result.failureReasons).toContain('Lint 检查失败');
       expect(result.failureReasons).toContain('Build 编译失败');
       expect(result.failureReasons).toContain('测试未通过');
-      expect(result.failureReasons).toContain('Todolist 未全部完成(1/4)');
     });
 
     it('should handle English format', () => {
@@ -130,7 +125,6 @@ TS2345: Argument of type 'string' is not assignable
 
       const result = parser.parse(report);
       expect(result.passed).toBe(true);
-      expect(result.todolistComplete).toBe(true);
     });
 
     it('should preserve raw report content', () => {
@@ -141,11 +135,11 @@ TS2345: Argument of type 'string' is not assignable
 
     it('should handle empty report gracefully', () => {
       const result = parser.parse('');
-      expect(result.passed).toBe(true);
-      expect(result.lintPassed).toBe(true);
-      expect(result.buildPassed).toBe(true);
-      expect(result.testPassed).toBe(true);
-      expect(result.failureReasons).toEqual([]);
+      expect(result.passed).toBe(false);
+      expect(result.lintPassed).toBe(false);
+      expect(result.buildPassed).toBe(false);
+      expect(result.testPassed).toBe(false);
+      expect(result.valid).toBe(false);
     });
 
     it('should handle report without explicit result markers', () => {
@@ -153,71 +147,8 @@ TS2345: Argument of type 'string' is not assignable
 所有检查通过，代码质量良好。`;
 
       const result = parser.parse(report);
-      expect(result.passed).toBe(true);
+      expect(result.passed).toBe(false);
     });
   });
 
-  describe('parseTodolistFromPlan()', () => {
-    it('should count completed and uncompleted items', () => {
-      const plan = `# 实施计划
-
-## Todolist
-- [x] 步骤1: 创建数据模型
-- [x] 步骤2: 实现 API 接口
-- [ ] 步骤3: 新增单元测试
-- [ ] 步骤4: 更新文档
-- [x] 步骤5: 集成测试`;
-
-      const stats = parser.parseTodolistFromPlan(plan);
-      expect(stats.completed).toBe(3);
-      expect(stats.total).toBe(5);
-    });
-
-    it('should handle all completed', () => {
-      const plan = `- [x] Task 1
-- [x] Task 2
-- [x] Task 3`;
-
-      const stats = parser.parseTodolistFromPlan(plan);
-      expect(stats.completed).toBe(3);
-      expect(stats.total).toBe(3);
-    });
-
-    it('should handle none completed', () => {
-      const plan = `- [ ] Task 1
-- [ ] Task 2`;
-
-      const stats = parser.parseTodolistFromPlan(plan);
-      expect(stats.completed).toBe(0);
-      expect(stats.total).toBe(2);
-    });
-
-    it('should handle no todolist items', () => {
-      const plan = `# 实施计划
-Some text without checkboxes.`;
-
-      const stats = parser.parseTodolistFromPlan(plan);
-      expect(stats.completed).toBe(0);
-      expect(stats.total).toBe(0);
-    });
-
-    it('should handle indented todolist items', () => {
-      const plan = `  - [x] Indented completed
-    - [ ] Deeply indented incomplete`;
-
-      const stats = parser.parseTodolistFromPlan(plan);
-      expect(stats.completed).toBe(1);
-      expect(stats.total).toBe(2);
-    });
-
-    it('should be case-insensitive for [X] vs [x]', () => {
-      const plan = `- [X] Task with uppercase X
-- [x] Task with lowercase x
-- [ ] Incomplete task`;
-
-      const stats = parser.parseTodolistFromPlan(plan);
-      expect(stats.completed).toBe(2);
-      expect(stats.total).toBe(3);
-    });
-  });
 });

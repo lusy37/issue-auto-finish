@@ -1,3 +1,5 @@
+import { buildCallOptions, type AICallPolicy } from '../ai-runner/CallPolicy.js';
+import { parseJsonOutput } from '../prompts/parseJsonOutput.js';
 import { ruleActionsSchema } from './ActionSchema.js';
 /**
  * AgentRuleDistiller — Layer 3: 从成熟 memory 提取可执行的 Agent 规则。
@@ -23,7 +25,7 @@ export interface AgentRuleDistillerDeps {
   knowledgeStore: KnowledgeStore;
   versionStore: VersionStore;
   workDir: string;
-  timeoutMs: number;
+  aiPolicy: AICallPolicy;
   confidenceThreshold: number;
   /** 本地规则目录（默认位于数据目录） */
   rulesDir?: string;
@@ -34,7 +36,7 @@ export class AgentRuleDistiller {
   private knowledgeStore: KnowledgeStore;
   private versionStore: VersionStore;
   private workDir: string;
-  private timeoutMs: number;
+  private aiPolicy: AICallPolicy;
   private confidenceThreshold: number;
   private rulesDir: string;
 
@@ -43,7 +45,7 @@ export class AgentRuleDistiller {
     this.knowledgeStore = deps.knowledgeStore;
     this.versionStore = deps.versionStore;
     this.workDir = deps.workDir;
-    this.timeoutMs = deps.timeoutMs;
+    this.aiPolicy = deps.aiPolicy;
     this.confidenceThreshold = deps.confidenceThreshold;
     this.rulesDir = deps.rulesDir ?? path.join(resolveDataDir(), 'rules');
   }
@@ -75,7 +77,7 @@ export class AgentRuleDistiller {
     const result = await this.aiRunner.run({
       prompt,
       workDir: this.workDir,
-      timeoutMs: this.timeoutMs,
+      ...buildCallOptions(this.aiPolicy, 'rule-distill'),
     });
 
     if (!result.success) {
@@ -162,13 +164,8 @@ export class AgentRuleDistiller {
   /** 解析 AI 输出 */
   private parseActions(output: string): RuleDistillAction[] {
     try {
-      const jsonMatch = output.match(/```json\s*([\s\S]*?)```/) ?? output.match(/\{[\s\S]*"actions"[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('规则蒸馏结果缺少 JSON');
-      }
-      const jsonStr = jsonMatch[1] ?? jsonMatch[0];
-      const parsed = JSON.parse(jsonStr) as { actions: RuleDistillAction[] };
-      if (!Array.isArray(parsed.actions)) throw new Error('规则蒸馏 actions 格式无效');
+      const parsed = parseJsonOutput(output);
+      if (!parsed || typeof parsed !== 'object' || !('actions' in parsed)) throw new Error('蒸馏结果缺少 actions');
       return ruleActionsSchema.parse(parsed.actions);
     } catch (err) {
       logger.warn('Failed to parse AI rule distill output', {

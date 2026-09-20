@@ -1,3 +1,4 @@
+import { ISSUE_LABELS } from '../clients/IssueLabels.js';
 import { Config } from '../config.js';
 import { GitHubClient, GitHubIssue } from '../clients/GitHubClient.js';
 import { IssueTracker } from '../tracker/IssueTracker.js';
@@ -13,7 +14,7 @@ import crypto from 'node:crypto';
 
 const logger = rootLogger.child('IssuePoller');
 
-const AUTO_FINISH_LABEL = 'auto-finish';
+const AUTO_FINISH_LABEL = ISSUE_LABELS.root;
 const AUTO_APPROVE_CHECK_INTERVAL_MS = 30_000;
 /** GitHub侧表示「已结束、不应再驱动」的终态标签。 */
 
@@ -325,7 +326,7 @@ export class IssuePoller {
 
   private passesBasicFilter(issue: GitHubIssue): boolean {
     if (!issue.labels.includes(AUTO_FINISH_LABEL)) return false;
-    if (issue.labels.some((l) => l === 'auto-finish:done')) return false;
+    if (issue.labels.some((l) => l === ISSUE_LABELS.done)) return false;
     if (this.tracker.get(issue.number)) return false;
 
     return true;

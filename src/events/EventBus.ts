@@ -22,10 +22,6 @@ export type EventType =
   | 'distill:rule:generated'
   | 'distill:completed'
   | 'distill:failed'
-  // Verify-fix loop events
-  | 'verify:loopStarted'
-  | 'verify:iterationComplete'
-  | 'verify:loopExhausted'
   // UAT async events
   | 'uat:completed'
   | 'uat:failed'

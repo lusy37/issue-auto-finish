@@ -72,7 +72,7 @@ describe('RetryPolicy', () => {
 
   it('uses custom isRetryable predicate', async () => {
     const retryableError = new Error('retryable');
-    (retryableError as Record<string, unknown>).retryable = true;
+    Object.assign(retryableError, { retryable: true });
     const nonRetryableError = new Error('non-retryable');
 
     const policy = new RetryPolicy({
