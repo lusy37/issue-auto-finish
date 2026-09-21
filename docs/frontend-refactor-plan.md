@@ -67,7 +67,7 @@
 | 5. DAG 与任务详情 | 接入真实任务拆分结果 | 已统一深色执行区、图状态栏、刷新反馈和任务表样式；节点/边仍完全来自 `IssueGraphs`，Vue Flow 替换和大图性能优化后续处理 | `TaskGraphPanel.vue`、`ExecutionGraph.vue`、`useIssueGraphs.ts` | 真实图请求、版本保护和任务字段回归通过 | 1.5 天 | 部分完成 |
 | 6. 审核、补充和计划文档 | 接通人工门禁 | 接入计划版本、计划差异、审核历史、补充说明；批准/驳回请求携带服务端要求的 revision 和反馈 | `ReviewGatePanel.vue`、`PlanDocViewer.vue`、`SupplementEditor.vue` | 驳回必须有反馈；批准前显示当前版本；旧计划不会覆盖新版本；审核后详情自动刷新 | 1 天 | 待开始 |
 | 7. 操作闭环 | 接通真实写操作 | 接入 start、retry、cancel、restart、abort、continue、redo-phase、retry-from-phase、preview 操作；统一 loading、成功、错误和重复点击保护 | `useAction.ts`、`IssueDetailPage.vue`、`StartDialog.vue` | 每个按钮只在合法生命周期出现；服务端错误可见；操作后由 API/SSE 收敛状态 | 1.5 天 | 待开始 |
-| 8. SSE 与日志实时化 | 接入连续事件流 | 复用 `useSSE` 处理 `issue:*`、`gate:*`、`agent:output`、`pipeline:progress`；按 Issue 过滤并合并日志 | `useSSE.ts`、`useAgentLogs.ts`、`AgentLogViewer.vue` | 事件不会重复写入；断线可恢复；切换 Issue 后旧事件不污染新详情；日志自动跟随可关闭 | 1 天 | 待开始 |
+| 8. SSE 与日志实时化 | 接入连续事件流 | `useSSE` 已覆盖 Native 暂停、阶段、流水线和 UAT 事件；增加事件签名去重与指数退避重连；工作台和详情页按 Issue 收敛刷新 | `useSSE.ts`、`useAgentLogs.ts`、`AgentLogViewer.vue`、`WorkbenchPage.vue`、`IssueDetailPage.vue` | 重复事件不会重复触发刷新；断线可恢复；切换 Issue 后旧事件不污染新详情；日志自动跟随可关闭 | 1 天 | 部分完成 |
 | 9. UAT、辅助页面与设置 | 补齐原型其余页面 | UAT 查询已统一经 `api/client.ts`；知识、蒸馏、分析和设置页仍需按原型视觉和真实接口继续收口 | `E2eArtifactsViewer.vue`、`KnowledgePanel.vue`、`DistillPanel.vue`、`AnalyticsPanel.vue`、`SettingsPanel.vue` | UAT 记录来自真实接口；辅助页完成后再做统一验收 | 1.5 天 | 部分完成 |
 | 10. 体验和性能收口 | 达到可交付质量 | 检查无障碍、深色主题、响应式、错误文案、懒加载、图表性能和 Naive UI vendor chunk；必要时拆分路由 | `style.css`、各页面和 Vite 配置 | Lighthouse/Playwright 关键项通过；无整页横向溢出；大日志/DAG 不明显卡顿 | 1 天 | 待开始 |
 | 11. 灰度切换与交付 | 替换旧页面 | 保留旧页面可回退入口；以真实 Native 数据完成一轮浏览器验收；更新开发文档 | `App.vue`、路由入口、`docs/` | 前后端构建、相关测试、Playwright UAT 通过；当前退出码和本次报告有效 | 1 天 | 待开始 |
@@ -171,6 +171,6 @@ npm run test:windows
 - [x] 完成工作台壳、统计、任务表和执行图第一批视觉重构。
 - [x] 补齐 Issue 详情的加载/失败反馈和生命周期操作准入。
 - [ ] 补齐日志和 UAT 的专用视图适配层。
-- [ ] 完成真实 SSE 事件的版本化收敛。
+- [x] 完成 SSE 事件白名单、重复过滤和退避重连第一批收敛。
 - [ ] 接入审核、重试、暂停和 UAT 操作。
 - [ ] 完成前后端构建及浏览器验收。

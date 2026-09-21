@@ -5,16 +5,37 @@ export type SSEHandler = (eventName: string, data: unknown) => void;
 const SSE_EVENTS = [
   'issue:updated', 'issue:created', 'issue:failed',
   'issue:deleted', 'issue:resetForRetry', 'issue:restarted',
-  'issue:retryFromPhase',
+  'issue:retryFromPhase', 'issue:paused', 'issue:continued', 'issue:redone',
 
   'gate:requested', 'gate:approved', 'gate:rejected', 'gate:supplemented',
-  'agent:output', 'pipeline:progress',
+  'agent:output', 'pipeline:progress', 'pipeline:completed', 'pipeline:failed',
+  'phase:failed', 'phase:retryFrom', 'phase:retryFromExhausted',
+  'uat:completed', 'uat:failed',
 ] as const;
 
 const connected = ref(false);
 const handlers = new Set<SSEHandler>();
 let eventSource: EventSource | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectAttempt = 0;
+const recentEventKeys = new Set<string>();
+const MAX_RECENT_EVENTS = 500;
+
+function eventKey(eventName: string, data: unknown): string {
+  try { return `${eventName}:${JSON.stringify(data)}`; }
+  catch { return `${eventName}:${String(data)}`; }
+}
+
+function isDuplicate(eventName: string, data: unknown): boolean {
+  const key = eventKey(eventName, data);
+  if (recentEventKeys.has(key)) return true;
+  recentEventKeys.add(key);
+  if (recentEventKeys.size > MAX_RECENT_EVENTS) {
+    const oldest = recentEventKeys.values().next().value;
+    if (oldest) recentEventKeys.delete(oldest);
+  }
+  return false;
+}
 
 function dispatch(eventName: string, data: unknown) {
   for (const h of handlers) {
@@ -31,19 +52,27 @@ function connect() {
 
   eventSource = new EventSource('/api/events');
 
-  eventSource.addEventListener('connected', () => { connected.value = true; });
+  eventSource.addEventListener('connected', () => {
+    connected.value = true;
+    reconnectAttempt = 0;
+  });
   eventSource.addEventListener('heartbeat', () => { connected.value = true; });
 
   for (const name of SSE_EVENTS) {
     eventSource.addEventListener(name, (e: MessageEvent) => {
-      try { dispatch(name, JSON.parse(e.data)); } catch { /* ignore */ }
+      try {
+        const payload = JSON.parse(e.data);
+        if (!isDuplicate(name, payload)) dispatch(name, payload);
+      } catch { /* ignore */ }
     });
   }
 
   eventSource.onerror = () => {
     connected.value = false;
     if (handlers.size > 0) {
-      reconnectTimer = setTimeout(connect, 5000);
+      reconnectAttempt++;
+      const delay = Math.min(30_000, 1_000 * 2 ** Math.min(reconnectAttempt - 1, 5));
+      reconnectTimer = setTimeout(connect, delay);
     }
   };
 }
@@ -64,6 +93,8 @@ function teardownIfIdle() {
     eventSource.close();
     eventSource = null;
   }
+  reconnectAttempt = 0;
+  recentEventKeys.clear();
   connected.value = false;
 }
 
