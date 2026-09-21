@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, useId } from 'vue';
 import type { GraphTopology } from '../../../../shared/workflowGraphs.js';
-const props = defineProps<{ graph: GraphTopology; active?: string[]; statuses?: Record<string, string>; order?: string[] }>();
+const props = defineProps<{ graph: GraphTopology; active?: string[]; statuses?: Record<string, string>; order?: string[]; variant?: 'workflow' | 'tasks' }>();
 const emit = defineEmits<{ select: [id: string] }>();
 const marker = `arrow-${useId()}`;
 const layout = computed(() => {
@@ -14,20 +14,25 @@ const layout = computed(() => {
     ranks.set(id, value); return value;
   }
   const rows = new Map<number, number>();
-  const nodes = props.graph.nodes.map(node => {
-    const column = rank(node.id), row = rows.get(column) ?? 0;
-    rows.set(column, row + 1);
-    return { ...node, x: 24 + column * 180, y: 30 + row * 104 };
+  let nodes = props.graph.nodes.map(node => {
+      const column = rank(node.id), row = rows.get(column) ?? 0;
+      rows.set(column, row + 1);
+      const isTaskGraph = props.variant === 'tasks';
+      return { ...node, x: (isTaskGraph ? 38 : 24) + column * (isTaskGraph ? 220 : 180), y: (isTaskGraph ? 54 : 30) + row * (isTaskGraph ? 118 : 104) };
   });
-  return { nodes, width: Math.max(480, ...nodes.map(n => n.x + 180)), height: Math.max(210, ...nodes.map(n => n.y + 180)) };
+  const isTaskGraph = props.variant === 'tasks';
+  if (isTaskGraph && nodes.length === 1) nodes = nodes.map(node => ({ ...node, x: 256, y: 108 }));
+  return { nodes, width: Math.max(isTaskGraph ? 720 : 480, ...nodes.map(n => n.x + (isTaskGraph ? 208 : 180))), height: Math.max(isTaskGraph ? 260 : 210, ...nodes.map(n => n.y + (isTaskGraph ? 132 : 180))) };
 });
 const edges = computed(() => props.graph.edges.flatMap((edge, index) => {
   const source = layout.value.nodes.find(n => n.id === edge.source), target = layout.value.nodes.find(n => n.id === edge.target);
   if (!source || !target) return [];
+  const nodeWidth = props.variant === 'tasks' ? 208 : 144;
+  const nodeHeight = props.variant === 'tasks' ? 84 : 66;
   const back = target.x <= source.x;
-  const sx = back ? source.x + 72 : source.x + 144, sy = back ? source.y + 66 : source.y + 33;
-  const tx = back ? target.x + 72 : target.x, ty = back ? target.y + 66 : target.y + 33;
-  const lower = Math.max(...layout.value.nodes.map(node => node.y + 66)) + 48 + (index % 3) * 18;
+  const sx = back ? source.x + nodeWidth / 2 : source.x + nodeWidth, sy = back ? source.y + nodeHeight : source.y + nodeHeight / 2;
+  const tx = back ? target.x + nodeWidth / 2 : target.x, ty = back ? target.y + nodeHeight : target.y + nodeHeight / 2;
+  const lower = Math.max(...layout.value.nodes.map(node => node.y + nodeHeight)) + 48 + (index % 3) * 18;
   return [{ ...edge, path: back ? `M ${sx} ${sy} C ${sx} ${lower}, ${tx} ${lower}, ${tx} ${ty}` : tx - sx > 36 ? `M ${sx} ${sy} H ${sx + 18} V ${lower} H ${tx - 18} V ${ty} H ${tx}` : `M ${sx} ${sy} C ${sx + 18} ${sy}, ${tx - 18} ${ty}, ${tx} ${ty}` }];
 }));
 </script>
@@ -38,9 +43,9 @@ const edges = computed(() => props.graph.edges.flatMap((edge, index) => {
       <path v-for="(edge, i) in edges" :key="i" :d="edge.path" fill="none" stroke="currentColor" :opacity="edge.disabled ? 0.15 : 0.5" :stroke-dasharray="edge.conditional ? '5 3' : undefined" :marker-end="`url(#${marker})`" />
       <g v-for="node in layout.nodes" :key="node.id" :transform="`translate(${node.x},${node.y})`" role="button" tabindex="0" :aria-label="`${node.label} ${statuses?.[node.id] ?? node.id}`" :class="{ active: active?.includes(node.id), disabled: node.disabled }" @click="emit('select', node.id)" @keydown.enter="emit('select', node.id)" @keydown.space.prevent="emit('select', node.id)">
         <title>{{ node.id }} · {{ node.label }} · {{ statuses?.[node.id] ?? (node.disabled ? '本轮不执行' : '') }}</title>
-        <rect width="144" height="66" rx="10" />
-        <text x="72" y="26" text-anchor="middle">{{ node.label.length > 12 ? node.label.slice(0, 11) + '…' : node.label }}</text>
-        <text x="72" y="49" text-anchor="middle" class="status">{{ node.disabled ? '本轮不执行' : statuses?.[node.id] ?? node.id }}</text>
+        <rect :width="variant === 'tasks' ? 208 : 144" :height="variant === 'tasks' ? 84 : 66" :rx="variant === 'tasks' ? 12 : 10" />
+        <text :x="variant === 'tasks' ? 104 : 72" :y="variant === 'tasks' ? 32 : 26" text-anchor="middle">{{ node.label.length > 18 ? node.label.slice(0, 17) + '…' : node.label }}</text>
+        <text :x="variant === 'tasks' ? 104 : 72" :y="variant === 'tasks' ? 60 : 49" text-anchor="middle" class="status">{{ node.disabled ? '本轮不执行' : statuses?.[node.id] ?? node.id }}</text>
       </g>
     </svg>
   </div>

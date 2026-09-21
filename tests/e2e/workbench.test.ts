@@ -200,7 +200,9 @@ it("真实 Native 工作台：五个入口、草稿生成、任务详情与 UAT 
     await page.getByText('工作台验收任务', { exact: true }).click();
     await browserExpect(page).toHaveURL(/#\/issue\/1$/);
     await browserExpect(page.getByRole('heading', { name: '工作台验收任务' })).toBeVisible();
-    await browserExpect(page.getByRole('heading', { name: 'Issue 主流程' })).toBeVisible();
+    await browserExpect(page.getByRole('heading', { name: '构建任务图' })).toBeVisible();
+    await browserExpect(page.locator('.graph-legend')).toBeVisible();
+    await browserExpect(page.getByRole('heading', { name: '任务清单' })).toBeVisible();
     await browserExpect(page.locator('.prototype-workflow-panel .n-steps')).toBeVisible();
     await browserExpect(page.locator('.prototype-workflow-panel .n-step')).toHaveCount(5);
     await browserExpect.poll(async () => page.locator('.execution-surface .graph-viewport > .execution-graph').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
