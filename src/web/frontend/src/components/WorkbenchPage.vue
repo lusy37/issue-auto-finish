@@ -64,7 +64,7 @@ const { readIssueIidFromUrl } = useUrlSync({
 const { connected } = useSSE((eventName, rawPayload) => {
   const payload = rawPayload as { type: string; timestamp: string; data: Record<string, unknown> };
 
-  if (eventName.startsWith('issue:') || eventName.startsWith('gate:')) {
+  if (eventName.startsWith('issue:') || eventName.startsWith('gate:') || eventName.startsWith('phase:') || eventName.startsWith('pipeline:') || eventName.startsWith('uat:')) {
     refreshIssues();
     const d = payload.data;
     if (d?.issueIid && detail.selectedIssue.value && getIssueIid(detail.selectedIssue.value) === d.issueIid) {
