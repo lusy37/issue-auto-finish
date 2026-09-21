@@ -2,28 +2,32 @@
 defineProps<{
   total: number;
   active: number;
+  review: number;
   completed: number;
-  failed: number;
 }>();
 </script>
 
 <template>
-  <div class="grid grid-cols-4 gap-4 mb-6">
-    <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
-      <div class="text-sm text-gray-500">{{ $t('stats.total') }}</div>
-      <div class="text-2xl font-bold text-gray-800">{{ total }}</div>
+  <div class="metrics-grid" aria-label="任务统计">
+    <div class="metric-card">
+      <div class="metric-label"><span>全部任务</span><span class="metric-icon">◈</span></div>
+      <div class="metric-value">{{ total }}</div>
+      <p>当前仓库的全部 Issue</p>
     </div>
-    <div class="bg-white rounded-lg shadow-sm p-4 border border-blue-200">
-      <div class="text-sm text-blue-500">{{ $t('stats.active') }}</div>
-      <div class="text-2xl font-bold text-blue-600">{{ active }}</div>
+    <div class="metric-card metric-card-primary">
+      <div class="metric-label"><span>正在执行</span><span class="metric-icon">●</span></div>
+      <div class="metric-value">{{ active }}<span class="live-dot" aria-hidden="true"></span></div>
+      <p>正在占用执行额度</p>
     </div>
-    <div class="bg-white rounded-lg shadow-sm p-4 border border-green-200">
-      <div class="text-sm text-green-500">{{ $t('stats.completed') }}</div>
-      <div class="text-2xl font-bold text-green-600">{{ completed }}</div>
+    <div class="metric-card metric-card-warning">
+      <div class="metric-label"><span>等待审核</span><span class="metric-icon">◷</span></div>
+      <div class="metric-value">{{ review }}</div>
+      <p>需要你的下一步决策</p>
     </div>
-    <div class="bg-white rounded-lg shadow-sm p-4 border border-red-200">
-      <div class="text-sm text-red-500">{{ $t('stats.failed') }}</div>
-      <div class="text-2xl font-bold text-red-600">{{ failed }}</div>
+    <div class="metric-card metric-card-success">
+      <div class="metric-label"><span>已完成交付</span><span class="metric-icon">✓</span></div>
+      <div class="metric-value">{{ completed }}</div>
+      <p>构建、验证与验收完成</p>
     </div>
   </div>
 </template>

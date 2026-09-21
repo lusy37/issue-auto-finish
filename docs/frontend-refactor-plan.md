@@ -60,15 +60,15 @@
 | 阶段 | 目标 | 主要工作 | 主要文件 | 验收标准 | 估时 | 状态 |
 | --- | --- | --- | --- | --- | ---: | --- |
 | 0. 基线冻结 | 固定原型和真实契约 | 记录原型截图、读取 `IssueRecord`/`IssueGraphs`/`UatRun` 字段；建立页面状态清单 | `docs/frontend-refactor-plan.md`、`src/web/frontend/src/types` | `npm run typecheck`、`npm run web:build` 通过；基线截图可复现 | 0.5 天 | 已完成 |
-| 1. 视图模型适配层 | 消除组件对 mock 类型的依赖 | 新增 `IssueRecord -> WorkbenchRow/IssueDetailViewModel`、`IssueGraphs -> GraphModel`、日志和 UAT 适配器；保留原始版本号和生命周期 | `src/web/frontend/src/adapters/`、`src/web/frontend/src/types/` | 使用真实夹具映射；未知状态、缺失字段和旧版本明确报错；适配器单测通过 | 1 天 | 待开始 |
-| 2. 数据访问与缓存 | 接入只读真实数据 | 将原型 store 替换为 `api/client.ts`、`useTasks`、`useIssueDetail`、`useIssueGraphs`；加入请求序号、取消和 stale response 防护 | `src/web/frontend/src/composables/`、`src/web/frontend/src/api/` | 工作台、详情、DAG 刷新后数据来自 API；无旧响应覆盖新响应 | 1 天 | 待开始 |
-| 3. 工作台壳与队列 | 落地原型首页 | 重构导航、统计卡片、状态筛选、搜索、空状态、错误恢复和选中行为；保持现有路由/查询参数 | `WorkbenchPage.vue`、`HeaderBar.vue`、`IssueTable.vue`、`StatsCards.vue` | 列表、筛选、键盘操作、刷新和移动端布局通过 Playwright | 1 天 | 待开始 |
+| 1. 视图模型适配层 | 消除组件对 mock 类型的依赖 | 已新增真实任务到工作台行模型、状态摘要和生命周期操作适配器；Issue 详情、日志和 UAT 的专用模型仍按后续页面接入 | `src/web/frontend/src/adapters/issueflowViewModel.ts`、`tests/unit/frontend-view-model.test.ts` | 任务字段保留、进度摘要和生命周期操作有契约测试 | 1 天 | 部分完成 |
+| 2. 数据访问与缓存 | 接入只读真实数据 | 图数据、UAT 数据统一经 `api/client.ts` 访问；`useTasks` 增加请求序号、加载、错误和搜索状态；图请求继续校验 Issue 与版本 | `src/web/frontend/src/composables/`、`src/web/frontend/src/api/` | 工作台、DAG、UAT 刷新使用真实 API；旧响应不会覆盖新视图 | 1 天 | 部分完成 |
+| 3. 工作台壳与队列 | 落地原型首页 | 已落地侧栏导航、顶部状态栏、统计卡片、状态筛选、搜索、空/错/加载状态和响应式布局；详情路由与辅助页沿用现有入口 | `WorkbenchPage.vue`、`HeaderBar.vue`、`IssueTable.vue`、`StatsCards.vue`、`style.css` | 1440px/375px 浏览器加载无横向溢出，console 无错误 | 1 天 | 已完成 |
 | 4. Issue 详情与阶段时间线 | 展示服务端生命周期 | 将原型详情页接入 `lifecycle`、`phaseProgress`、`phaseHistory`、`run` 和 `pipelineMeta`；按钮从服务端准入条件计算 | `IssueDetailPage.vue`、`PipelineProgress.vue`、`DetailModal.vue` | running、waiting、paused、failed、completed、skipped 等真实状态均显示正确；非法操作被禁用并有原因 | 1.5 天 | 待开始 |
-| 5. DAG 与任务详情 | 接入真实任务拆分结果 | 以 `IssueGraphs.topology` 的节点/边为准；展示 `TaskDefinition`、`TaskRun`、依赖、验收标准、错误、尝试次数和合并结果 | `TaskGraphPanel.vue`、`ExecutionGraph.vue`、`TaskGraphPanel` 相关类型 | 图节点、连线、选中状态、缩放、失败节点和移动端聚焦正确；不修改服务端依赖 | 1.5 天 | 待开始 |
+| 5. DAG 与任务详情 | 接入真实任务拆分结果 | 已统一深色执行区、图状态栏、刷新反馈和任务表样式；节点/边仍完全来自 `IssueGraphs`，Vue Flow 替换和大图性能优化后续处理 | `TaskGraphPanel.vue`、`ExecutionGraph.vue`、`useIssueGraphs.ts` | 真实图请求、版本保护和任务字段回归通过 | 1.5 天 | 部分完成 |
 | 6. 审核、补充和计划文档 | 接通人工门禁 | 接入计划版本、计划差异、审核历史、补充说明；批准/驳回请求携带服务端要求的 revision 和反馈 | `ReviewGatePanel.vue`、`PlanDocViewer.vue`、`SupplementEditor.vue` | 驳回必须有反馈；批准前显示当前版本；旧计划不会覆盖新版本；审核后详情自动刷新 | 1 天 | 待开始 |
 | 7. 操作闭环 | 接通真实写操作 | 接入 start、retry、cancel、restart、abort、continue、redo-phase、retry-from-phase、preview 操作；统一 loading、成功、错误和重复点击保护 | `useAction.ts`、`IssueDetailPage.vue`、`StartDialog.vue` | 每个按钮只在合法生命周期出现；服务端错误可见；操作后由 API/SSE 收敛状态 | 1.5 天 | 待开始 |
 | 8. SSE 与日志实时化 | 接入连续事件流 | 复用 `useSSE` 处理 `issue:*`、`gate:*`、`agent:output`、`pipeline:progress`；按 Issue 过滤并合并日志 | `useSSE.ts`、`useAgentLogs.ts`、`AgentLogViewer.vue` | 事件不会重复写入；断线可恢复；切换 Issue 后旧事件不污染新详情；日志自动跟随可关闭 | 1 天 | 待开始 |
-| 9. UAT、辅助页面与设置 | 补齐原型其余页面 | 接入 UAT 历史、报告有效性、知识、蒸馏、分析和系统设置；明确演示数据与真实数据边界 | `E2eArtifactsViewer.vue`、`KnowledgePanel.vue`、`DistillPanel.vue`、`AnalyticsPanel.vue`、`SettingsPanel.vue` | 页面不再依赖 localStorage mock；真实接口失败有恢复入口；设置变更刷新后仍与服务端一致 | 1.5 天 | 待开始 |
+| 9. UAT、辅助页面与设置 | 补齐原型其余页面 | UAT 查询已统一经 `api/client.ts`；知识、蒸馏、分析和设置页仍需按原型视觉和真实接口继续收口 | `E2eArtifactsViewer.vue`、`KnowledgePanel.vue`、`DistillPanel.vue`、`AnalyticsPanel.vue`、`SettingsPanel.vue` | UAT 记录来自真实接口；辅助页完成后再做统一验收 | 1.5 天 | 部分完成 |
 | 10. 体验和性能收口 | 达到可交付质量 | 检查无障碍、深色主题、响应式、错误文案、懒加载、图表性能和 Naive UI vendor chunk；必要时拆分路由 | `style.css`、各页面和 Vite 配置 | Lighthouse/Playwright 关键项通过；无整页横向溢出；大日志/DAG 不明显卡顿 | 1 天 | 待开始 |
 | 11. 灰度切换与交付 | 替换旧页面 | 保留旧页面可回退入口；以真实 Native 数据完成一轮浏览器验收；更新开发文档 | `App.vue`、路由入口、`docs/` | 前后端构建、相关测试、Playwright UAT 通过；当前退出码和本次报告有效 | 1 天 | 待开始 |
 
@@ -166,8 +166,10 @@ npm run test:windows
 - [x] 创建 `codex/langgraph-native-frontend-refactor` 子分支。
 - [x] 固定原型地址、真实前端入口和 Native 数据契约。
 - [x] 完成阶段拆分、接口清单、适配器边界和验收门禁设计。
-- [ ] 实现视图模型适配层。
-- [ ] 接入真实只读 API 和 SSE。
+- [x] 实现工作台任务视图模型适配层。
+- [x] 接入工作台、图和 UAT 的第一批真实只读 API。
+- [x] 完成工作台壳、统计、任务表和执行图第一批视觉重构。
+- [ ] 补齐 Issue 详情、日志和 UAT 的专用视图适配层。
+- [ ] 完成真实 SSE 事件的版本化收敛。
 - [ ] 接入审核、重试、暂停和 UAT 操作。
 - [ ] 完成前后端构建及浏览器验收。
-

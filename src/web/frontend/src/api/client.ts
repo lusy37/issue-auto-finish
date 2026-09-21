@@ -5,6 +5,8 @@ import type {
   PipelineMeta,
   ExecutableTask, TaskKind,
 } from '@/types';
+import type { IssueGraphs } from '../../../../shared/workflowGraphs.js';
+import type { UatResult } from '../../../../shared/workbench.js';
 import { request, json } from './http';
 
 async function post<T = { success: boolean; message?: string }>(
@@ -33,6 +35,15 @@ export async function fetchIssueDetail(number: number): Promise<IssueRecord> {
 
 export async function fetchIssueLogs(number: number): Promise<AgentLogEntry[]> {
   return request<AgentLogEntry[]>(`/api/issues/${number}/logs`);
+}
+
+export async function fetchIssueGraphs(number: number): Promise<IssueGraphs> {
+  return request<IssueGraphs>(`/api/issues/${number}/graphs`);
+}
+
+export async function fetchUatRuns(number: number): Promise<UatResult[]> {
+  const result = await request<{ runs: UatResult[] }>(`/api/issues/${number}/uat-runs`);
+  return result.runs;
 }
 
 export async function fetchSystemStatus(): Promise<SystemStatus> {

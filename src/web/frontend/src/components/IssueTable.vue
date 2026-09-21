@@ -12,11 +12,15 @@ type SortDirection = 'asc' | 'desc';
 const props = defineProps<{
   issues: ExecutableTask[];
   filter: string;
+  query: string;
   systemStatus: SystemStatus | null;
+  loading?: boolean;
+  error?: string;
 }>();
 
 const emit = defineEmits<{
   'update:filter': [value: string];
+  'update:query': [value: string];
   select: [taskId: number];
   start: [number: number];
   retry: [number: number];
@@ -81,50 +85,69 @@ function toggleSort(field: SortField) {
 </script>
 
 <template>
-  <div>
-    <div class="mb-4 flex items-center space-x-2">
-      <span class="text-sm text-gray-600">{{ $t('table.filter') }}</span>
+  <section class="issue-table-panel" aria-label="任务列表">
+    <div class="issue-table-toolbar">
+      <div class="issue-filter-tabs" role="tablist" :aria-label="$t('table.filter')">
       <button
         v-for="f in getTaskFilterOptions()"
         :key="f.value"
-        class="px-3 py-1 rounded-full text-xs font-medium transition-colors"
-        :class="filter === f.value ? 'bg-gray-800 text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'"
+        class="issue-filter-tab"
+        :class="filter === f.value ? 'is-active' : ''"
+        role="tab"
+        :aria-selected="filter === f.value"
         @click="emit('update:filter', f.value)"
       >{{ f.label }}</button>
+      </div>
+      <div class="issue-search-row">
+        <label class="sr-only" for="issue-search">搜索任务</label>
+        <input
+          id="issue-search"
+          :value="query"
+          type="search"
+          class="issue-search-input"
+          placeholder="搜索标题、编号或分支…"
+          @input="emit('update:query', ($event.target as HTMLInputElement).value)"
+        />
+        <button v-if="query" type="button" class="issue-clear-button" @click="emit('update:query', '')">清除</button>
+      </div>
     </div>
 
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      <table class="w-full">
-        <thead class="bg-gray-50 border-b border-gray-200">
+    <div v-if="loading" class="issue-table-state" aria-busy="true" role="status">正在读取任务与最新进度…</div>
+    <div v-else-if="error" class="issue-table-state issue-table-error" role="alert">
+      <strong>暂时无法读取任务</strong><span>{{ error }}</span>
+    </div>
+    <div v-else class="issue-table-scroll">
+      <table class="issue-table">
+        <thead>
           <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none hover:text-gray-700" @click="toggleSort('taskId')">
+            <th class="issue-table-heading" @click="toggleSort('taskId')">
               IID <span v-if="sortField === 'taskId'">{{ sortDirection === 'asc' ? '&#9650;' : '&#9660;' }}</span>
             </th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ $t('table.title') }}</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none hover:text-gray-700" @click="toggleSort('lifecycle')">
+            <th class="issue-table-heading">{{ $t('table.title') }}</th>
+            <th class="issue-table-heading" @click="toggleSort('lifecycle')">
               {{ $t('table.state') }} <span v-if="sortField === 'lifecycle'">{{ sortDirection === 'asc' ? '&#9650;' : '&#9660;' }}</span>
             </th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ $t('table.progress') }}</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none hover:text-gray-700" @click="toggleSort('attempts')">
+            <th class="issue-table-heading">{{ $t('table.progress') }}</th>
+            <th class="issue-table-heading" @click="toggleSort('attempts')">
               {{ $t('table.retries') }} <span v-if="sortField === 'attempts'">{{ sortDirection === 'asc' ? '&#9650;' : '&#9660;' }}</span>
             </th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none hover:text-gray-700" @click="toggleSort('updatedAt')">
+            <th class="issue-table-heading" @click="toggleSort('updatedAt')">
               {{ $t('table.updatedAt') }} <span v-if="sortField === 'updatedAt'">{{ sortDirection === 'asc' ? '&#9650;' : '&#9660;' }}</span>
             </th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ $t('table.actions') }}</th>
+            <th class="issue-table-heading">{{ $t('table.actions') }}</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-100">
+        <tbody>
           <tr v-if="sortedIssues.length === 0">
-            <td colspan="7" class="px-4 py-8 text-center text-gray-400">{{ $t('table.empty') }}</td>
+            <td colspan="7" class="issue-table-empty">{{ query ? '没有匹配的任务，请调整搜索条件。' : $t('table.empty') }}</td>
           </tr>
           <tr
             v-for="task in sortedIssues"
             :key="task.taskId"
-            class="hover:bg-gray-50 cursor-pointer transition-colors"
+            class="issue-table-row"
             @click="emit('select', Number(task.taskId))"
           >
-            <td class="px-4 py-3 text-sm font-mono text-gray-700">
+            <td class="issue-table-cell issue-id-cell">
               <a
                 :href="systemStatus ? `${systemStatus.config.githubBaseUrl}/${systemStatus.config.repository}/issues/${task.taskId}` : '#'"
                 target="_blank" rel="noopener"
@@ -135,13 +158,13 @@ function toggleSort(field: SortField) {
                 <svg class="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
               </a>
             </td>
-            <td class="px-4 py-3 text-sm text-gray-800 max-w-xs truncate">{{ task.title }}</td>
-            <td class="px-4 py-3">
-              <span class="px-2 py-1 rounded-full text-xs font-medium" :class="stateClass(task.lifecycle)">{{ task.displayLabel ?? stateLabel(task.lifecycle) }}</span>
+            <td class="issue-table-cell issue-title-cell" :title="task.title">{{ task.title }}</td>
+            <td class="issue-table-cell">
+              <span class="issue-state-pill" :class="stateClass(task.lifecycle)">{{ task.displayLabel ?? stateLabel(task.lifecycle) }}</span>
             </td>
-            <td class="px-4 py-3">
-              <div v-if="task.phaseProgress" class="flex items-center gap-2 min-w-[140px]" :title="progressTooltip(task)">
-                <div class="flex h-2 rounded-full overflow-hidden flex-1 max-w-[100px] bg-gray-100">
+            <td class="issue-table-cell">
+              <div v-if="task.phaseProgress" class="issue-progress" :title="progressTooltip(task)">
+                <div class="issue-progress-track">
                   <div
                     v-for="phase in task.phaseProgress"
                     :key="phase.name"
@@ -149,30 +172,30 @@ function toggleSort(field: SortField) {
                     :class="segmentClass(phase.status)"
                   />
                 </div>
-                <span class="text-xs text-gray-500 truncate max-w-[80px]">{{ activePhaseLabel(task) }}</span>
+                <span class="issue-progress-label">{{ activePhaseLabel(task) }}</span>
               </div>
             </td>
-            <td class="px-4 py-3 text-sm text-gray-600">{{ task.attempts }}</td>
-            <td class="px-4 py-3 text-sm text-gray-500">{{ formatTime(task.updatedAt) }}</td>
-            <td class="px-4 py-3">
-              <div class="flex space-x-2" @click.stop>
+            <td class="issue-table-cell issue-muted-cell">{{ task.attempts }}</td>
+            <td class="issue-table-cell issue-muted-cell">{{ formatTime(task.updatedAt) }}</td>
+            <td class="issue-table-cell">
+              <div class="issue-actions" @click.stop>
                 <button
                   v-if="task.lifecycle.kind === 'skipped'"
-                  class="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
+                  class="issue-action issue-action-primary"
                   @click="emit('start', Number(task.taskId))"
                 >{{ $t('table.start') }}</button>
                 <button
                   v-if="task.lifecycle.kind === 'failed'"
-                  class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+                  class="issue-action issue-action-primary"
                   @click="emit('retry', Number(task.taskId))"
                 >{{ $t('table.retry') }}</button>
                 <button
                   v-if="task.lifecycle.kind !== 'skipped'"
-                  class="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded hover:bg-yellow-200"
+                  class="issue-action issue-action-warning"
                   @click="emit('restart', Number(task.taskId))"
                 >{{ $t('table.restart') }}</button>
                 <button
-                  class="px-2 py-1 bg-red-100 text-red-600 text-xs rounded hover:bg-red-200"
+                  class="issue-action issue-action-danger"
                   @click="emit('cancel', Number(task.taskId))"
                 >{{ $t('table.cancel') }}</button>
               </div>
@@ -181,5 +204,6 @@ function toggleSort(field: SortField) {
         </tbody>
       </table>
     </div>
-  </div>
+    <footer class="issue-table-footer"><span>共 {{ sortedIssues.length }} 个任务</span><span>点击任务查看执行详情</span></footer>
+  </section>
 </template>

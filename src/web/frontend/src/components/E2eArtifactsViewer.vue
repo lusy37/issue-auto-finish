@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import { json, type UatRun } from "@/api/mini";
+import * as api from "@/api/client";
+import type { UatResult as UatRun } from "../../../../shared/workbench.js";
 import { useAction } from "@/composables/useAction";
 const props = defineProps<{ issueIid?: number }>(),
   runs = ref<UatRun[]>([]);
 const { busy, error, run } = useAction();
 async function load() {
   if (props.issueIid)
-    runs.value = (
-      await json<{ runs: UatRun[] }>(`/api/issues/${props.issueIid}/uat-runs`)
-    ).runs;
+    runs.value = await api.fetchUatRuns(props.issueIid);
 }
 watch(
   () => props.issueIid,

@@ -1,5 +1,5 @@
 import { ref, watch, onScopeDispose } from 'vue';
-import { json } from '@/api/mini';
+import * as api from '@/api/client';
 import type { IssueGraphs } from '../../../../shared/workflowGraphs.js';
 
 export function useIssueGraphs(props: { issueNumber: number; stateVersion?: number }) {
@@ -15,7 +15,7 @@ export function useIssueGraphs(props: { issueNumber: number; stateVersion?: numb
     error.value = '';
     loading.value = true;
     try {
-      const result = await json<IssueGraphs>(`/api/issues/${number}/graphs`);
+      const result = await api.fetchIssueGraphs(number);
       if (current !== request) return;
       if (result.issueNumber !== number || result.version < (props.stateVersion ?? 0)) {
         error.value = '图数据已过期，请刷新。';

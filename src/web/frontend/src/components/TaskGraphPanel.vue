@@ -32,32 +32,30 @@ const active = computed(() => graph.value?.checkpoint.next.map(id => debug.value
 function selectNode(id: string) { if (id === 'build') { showTasks.value = true; document.getElementById(`tasks-${props.issueNumber}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } }
 </script>
 <template>
-  <section class="p-4">
-    <div class="flex items-center justify-between"><h3 class="font-semibold">Issue 主流程</h3><button class="text-blue-600" @click="refresh">刷新</button></div>
-    <p v-if="loading" class="my-3">正在读取本轮流程…</p>
-    <p v-if="error" role="alert">{{ error }}</p>
+  <section class="execution-surface">
+    <div class="execution-head"><div><div class="execution-eyebrow">EXECUTION GRAPH</div><h3>Issue 主流程</h3></div><button class="execution-refresh" type="button" :disabled="loading" @click="refresh">{{ loading ? '读取中…' : '刷新图数据' }}</button></div>
+    <div v-if="loading" class="execution-state" role="status">正在读取本轮流程…</div>
+    <div v-if="error" class="execution-state execution-error" role="alert">{{ error }}</div>
     <template v-if="graph">
-      <p class="text-sm text-gray-500 my-2">计划 {{ graph.planRevision }} · 构建 {{ graph.buildGeneration }} · 流程 {{ graph.workflowGeneration }} · 状态 {{ graph.lifecycle }}</p>
-      <label class="text-sm"><input v-model="debug" type="checkbox" /> 显示原生节点与声明路由</label>
-      <ExecutionGraph :graph="workflow" :order="workflowOrder" :active="active" @select="selectNode" />
-      <p class="text-sm">{{ graph.checkpoint.exists ? (graph.checkpoint.next.length ? '检查点下一步：' + graph.checkpoint.next.join('、') : '检查点已无后续节点') : '尚无检查点，当前位置未确定。' }}</p>
-      <p v-for="task in graph.checkpoint.tasks.filter(task => task.interrupts.length)" :key="task.id" class="text-sm text-amber-600">{{ task.name }}：等待人工审核</p>
+      <div class="execution-meta"><span>计划 v{{ graph.planRevision }}</span><span>构建 {{ graph.buildGeneration }}</span><span>流程 {{ graph.workflowGeneration }}</span><span>状态 {{ graph.lifecycle }}</span><label><input v-model="debug" type="checkbox" /> 原生节点</label></div>
+      <div class="graph-viewport"><ExecutionGraph :graph="workflow" :order="workflowOrder" :active="active" @select="selectNode" /></div>
+      <div class="graph-statusbar"><span>{{ graph.checkpoint.exists ? (graph.checkpoint.next.length ? '检查点下一步：' + graph.checkpoint.next.join('、') : '检查点已无后续节点') : '尚无检查点，当前位置未确定。' }}</span><span v-if="graph.checkpoint.tasks.some(task => task.interrupts.length)">等待人工审核</span></div>
       <p v-if="graph.buildEntry === 'repair-integration'" class="my-2 text-amber-600">当前进入集成修复，第 {{ graph.repairRounds }} 轮；保留原任务合并结果。</p>
       <details v-if="graph.repairReason"><summary>修复原因</summary><p class="whitespace-pre-wrap text-sm">{{ graph.repairReason }}</p></details>
       <details v-if="debug" class="my-2"><summary>检查点详情</summary><code>{{ graph.threadId }} · 记录版本 {{ graph.version }}</code><pre class="overflow-auto text-xs">{{ JSON.stringify(graph.checkpoint.tasks, null, 2) }}</pre></details>
-      <div :id="`tasks-${issueNumber}`" class="mt-5"><button class="font-semibold" @click="showTasks = !showTasks">{{ showTasks ? '收起' : '展开' }} build 任务图</button></div>
+      <div :id="`tasks-${issueNumber}`" class="task-graph-heading"><button type="button" @click="showTasks = !showTasks">{{ showTasks ? '收起' : '展开' }} build 任务图</button></div>
       <template v-if="showTasks">
-        <p class="text-sm text-gray-500 my-2">前置任务合并后才执行后续任务，全部完成后统一验收。点击主流程构建节点可定位到本图。</p>
-        <p v-if="!tasks.length">计划尚未生成。</p>
+        <p class="task-graph-help">前置任务合并后才执行后续任务，全部完成后统一验收。点击主流程构建节点可定位到本图。</p>
+        <p v-if="!tasks.length" class="execution-state">计划尚未生成。</p>
         <ExecutionGraph v-else :graph="graph.topology" :statuses="taskStatuses" :active="tasks.filter(task => task.status === 'running').map(task => task.id)" />
-    <div class="overflow-x-auto">
-      <table v-if="tasks.length" class="w-full text-sm text-left border-collapse">
-        <thead><tr class="border-b"><th class="p-2">任务</th><th class="p-2">依赖</th><th class="p-2">状态</th><th class="p-2">尝试</th><th class="p-2">执行结果</th></tr></thead>
-        <tbody><tr v-for="task in tasks" :key="task.id" class="border-b">
-          <td class="p-2"><strong>{{ task.id }} · {{ task.title }}</strong><details class="mt-1"><summary>实施要求</summary><p class="whitespace-pre-wrap">{{ task.instructions }}</p><ul><li v-for="criterion in task.acceptanceCriteria" :key="criterion">{{ criterion }}</li></ul></details></td>
-          <td class="p-2">{{ task.dependsOn.join('、') || '无' }}</td>
-          <td class="p-2">{{ status(task) }}</td><td class="p-2">{{ task.attemptNo || '—' }}</td>
-          <td class="p-2"><p v-if="task.error" class="text-red-600">{{ task.error }}</p><span v-else-if="task.success">{{ task.success.noChange ? '执行完成，无内容变化' : '执行成功' }}</span><code v-if="task.merge?.integrationAfter" class="block text-xs">{{ task.merge.integrationAfter.slice(0, 12) }}</code></td>
+    <div class="task-table-scroll">
+      <table v-if="tasks.length" class="task-table">
+        <thead><tr><th>任务</th><th>依赖</th><th>状态</th><th>尝试</th><th>执行结果</th></tr></thead>
+        <tbody><tr v-for="task in tasks" :key="task.id">
+          <td><strong>{{ task.id }} · {{ task.title }}</strong><details><summary>实施要求</summary><p>{{ task.instructions }}</p><ul><li v-for="criterion in task.acceptanceCriteria" :key="criterion">{{ criterion }}</li></ul></details></td>
+          <td>{{ task.dependsOn.join('、') || '无' }}</td>
+          <td><span class="task-status-label">{{ status(task) }}</span></td><td>{{ task.attemptNo || '—' }}</td>
+          <td><p v-if="task.error" class="task-error">{{ task.error }}</p><span v-else-if="task.success">{{ task.success.noChange ? '执行完成，无内容变化' : '执行成功' }}</span><code v-if="task.merge?.integrationAfter" class="task-commit">{{ task.merge.integrationAfter.slice(0, 12) }}</code></td>
         </tr></tbody>
       </table>
     </div>
