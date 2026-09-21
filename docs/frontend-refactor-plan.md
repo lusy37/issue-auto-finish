@@ -62,13 +62,13 @@
 | 0. 基线冻结 | 固定原型和真实契约 | 记录原型截图、读取 `IssueRecord`/`IssueGraphs`/`UatRun` 字段；建立页面状态清单 | `docs/frontend-refactor-plan.md`、`src/web/frontend/src/types` | `npm run typecheck`、`npm run web:build` 通过；基线截图可复现 | 0.5 天 | 已完成 |
 | 1. 视图模型适配层 | 消除组件对 mock 类型的依赖 | 已新增真实任务到工作台行模型、状态摘要和生命周期操作适配器；Issue 详情、日志和 UAT 的专用模型仍按后续页面接入 | `src/web/frontend/src/adapters/issueflowViewModel.ts`、`tests/unit/frontend-view-model.test.ts` | 任务字段保留、进度摘要和生命周期操作有契约测试 | 1 天 | 部分完成 |
 | 2. 数据访问与缓存 | 接入只读真实数据 | 图数据、UAT 数据统一经 `api/client.ts` 访问；`useTasks` 增加请求序号、加载、错误和搜索状态；图请求继续校验 Issue 与版本 | `src/web/frontend/src/composables/`、`src/web/frontend/src/api/` | 工作台、DAG、UAT 刷新使用真实 API；旧响应不会覆盖新视图 | 1 天 | 部分完成 |
-| 3. 工作台壳与队列 | 落地原型首页 | 已落地侧栏导航、顶部状态栏、统计卡片、状态筛选、搜索、空/错/加载状态和响应式布局；详情路由与辅助页沿用现有入口 | `WorkbenchPage.vue`、`HeaderBar.vue`、`IssueTable.vue`、`StatsCards.vue`、`style.css` | 1440px/375px 浏览器加载无横向溢出，console 无错误 | 1 天 | 已完成 |
-| 4. Issue 详情与阶段时间线 | 展示服务端生命周期 | 详情页已增加真实加载/失败反馈，操作按钮读取生命周期适配器；阶段进度、历史和 `run` 沿用 Native 真实数据 | `IssueDetailPage.vue`、`useIssueDetail.ts`、`PipelineProgress.vue` | 详情加载失败可见；操作入口与生命周期一致；详情页响应式布局通过浏览器检查 | 1.5 天 | 部分完成 |
+| 3. 工作台壳与队列 | 落地原型首页 | 已替换为原型式 Shell、预览条、白色侧栏、顶部工具栏、统计卡、任务表、运行概况和响应式布局；页面通过 hash 路由切换 | `NativeWorkbenchPage.vue`、`NativeTaskTable.vue`、`style.css`、`App.vue` | 1440px/375px 浏览器加载无横向溢出，console 无错误；旧工作台不再挂载 | 1 天 | 已完成 |
+| 4. Issue 详情与阶段时间线 | 展示服务端生命周期 | 已迁移为原型式详情页壳，接入 Native 生命周期、阶段进度、DAG、计划、日志和 UAT 区域；操作入口读取生命周期适配器 | `NativeIssueDetailPage.vue`、`useIssueDetail.ts`、`PipelineProgress.vue` | 详情加载失败可见；操作入口与生命周期一致；详情页响应式布局通过浏览器检查 | 1.5 天 | 已完成 |
 | 5. DAG 与任务详情 | 接入真实任务拆分结果 | 已统一深色执行区、图状态栏、刷新反馈和任务表样式；节点/边仍完全来自 `IssueGraphs`，Vue Flow 替换和大图性能优化后续处理 | `TaskGraphPanel.vue`、`ExecutionGraph.vue`、`useIssueGraphs.ts` | 真实图请求、版本保护和任务字段回归通过 | 1.5 天 | 部分完成 |
 | 6. 审核、补充和计划文档 | 接通人工门禁 | 接入计划版本、计划差异、审核历史、补充说明；批准/驳回请求携带服务端要求的 revision 和反馈 | `ReviewGatePanel.vue`、`PlanDocViewer.vue`、`SupplementEditor.vue` | 驳回必须有反馈；批准前显示当前版本；旧计划不会覆盖新版本；审核后详情自动刷新 | 1 天 | 待开始 |
 | 7. 操作闭环 | 接通真实写操作 | 详情页已统一包裹启动、重试、取消、重启、暂停、继续、重做、审核、补充保存和预览操作，增加操作锁与提交中提示；各 API 仍沿用现有服务端准入 | `IssueDetailPage.vue`、`useIssueDetail.ts`、`useAction.ts`、`StartDialog.vue` | 重复点击被阻止；操作提交中可见；服务端错误仍可见；操作后由 API/SSE 收敛状态 | 1.5 天 | 部分完成 |
 | 8. SSE 与日志实时化 | 接入连续事件流 | `useSSE` 已覆盖 Native 暂停、阶段、流水线和 UAT 事件；增加事件签名去重与指数退避重连；工作台和详情页按 Issue 收敛刷新 | `useSSE.ts`、`useAgentLogs.ts`、`AgentLogViewer.vue`、`WorkbenchPage.vue`、`IssueDetailPage.vue` | 重复事件不会重复触发刷新；断线可恢复；切换 Issue 后旧事件不污染新详情；日志自动跟随可关闭 | 1 天 | 部分完成 |
-| 9. UAT、辅助页面与设置 | 补齐原型其余页面 | UAT 查询已统一经 `api/client.ts`；知识、蒸馏、分析和设置页仍需按原型视觉和真实接口继续收口 | `E2eArtifactsViewer.vue`、`KnowledgePanel.vue`、`DistillPanel.vue`、`AnalyticsPanel.vue`、`SettingsPanel.vue` | UAT 记录来自真实接口；辅助页完成后再做统一验收 | 1.5 天 | 部分完成 |
+| 9. UAT、辅助页面与设置 | 补齐原型其余页面 | 已迁移需求草稿、知识、统计和设置的原型式页面；草稿继续使用 `/api/drafts`，统计读取真实任务，UAT 详情继续使用真实接口 | `NativeWorkspacePage.vue`、`E2eArtifactsViewer.vue` | 辅助页面不再挂载旧 `mini-panel`；UAT 记录来自真实接口 | 1.5 天 | 部分完成 |
 | 10. 体验和性能收口 | 达到可交付质量 | 检查无障碍、深色主题、响应式、错误文案、懒加载、图表性能和 Naive UI vendor chunk；必要时拆分路由 | `style.css`、各页面和 Vite 配置 | Lighthouse/Playwright 关键项通过；无整页横向溢出；大日志/DAG 不明显卡顿 | 1 天 | 待开始 |
 | 11. 灰度切换与交付 | 替换旧页面 | 保留旧页面可回退入口；以真实 Native 数据完成一轮浏览器验收；更新开发文档 | `App.vue`、路由入口、`docs/` | 前后端构建、相关测试、Playwright UAT 通过；当前退出码和本次报告有效 | 1 天 | 待开始 |
 
@@ -169,6 +169,8 @@ npm run test:windows
 - [x] 实现工作台任务视图模型适配层。
 - [x] 接入工作台、图和 UAT 的第一批真实只读 API。
 - [x] 完成工作台壳、统计、任务表和执行图第一批视觉重构。
+- [x] 替换旧工作台入口，迁移原型式 Shell、hash 路由和组件库。
+- [x] 迁移需求草稿、知识、统计、设置和 Issue 详情的原型式页面骨架。
 - [x] 补齐 Issue 详情的加载/失败反馈和生命周期操作准入。
 - [ ] 补齐日志和 UAT 的专用视图适配层。
 - [x] 完成 SSE 事件白名单、重复过滤和退避重连第一批收敛。
