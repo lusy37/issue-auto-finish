@@ -196,6 +196,42 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .task-error { margin: 0; color: #e6a5a2; }
 .task-commit { display: block; margin-top: 4px; color: #9ec3d2; font-size: 9px; }
 
+.detail-shell { background: var(--app-bg); color: var(--app-text); }
+.detail-topbar { border-bottom: 1px solid var(--app-line); background: rgba(255,255,255,.92); }
+.detail-topbar a { color: #3d9585; font-size: 11px; text-decoration: none; }
+.detail-topbar a:hover { color: #176c5e; }
+.detail-topbar h1 { color: #29434d; font-size: 17px; }
+.detail-topbar .text-gray-500 { color: #84969d; }
+.detail-sidebar { border-color: var(--app-line); background: var(--app-surface); }
+.detail-sidebar > div { border-color: #edf1f2 !important; }
+.detail-sidebar .text-xs.font-semibold { color: #789099; letter-spacing: .08em; }
+.detail-sidebar .text-gray-400, .detail-sidebar .text-gray-600 { color: #83949b; }
+.detail-sidebar code { background: #f1f6f5; color: #4e716d; }
+.detail-sidebar button { transition: filter .15s ease, transform .15s ease; }
+.detail-sidebar button:hover { filter: brightness(.98); }
+.detail-main { min-width: 0; background: var(--app-bg); }
+.detail-tabs { border-color: var(--app-line); background: var(--app-surface); }
+.detail-tabs button { color: #81939a; }
+.detail-tabs button:hover { color: var(--app-primary); }
+.detail-tabs .border-blue-500 { border-color: var(--app-primary); color: var(--app-primary); }
+.detail-empty { background: var(--app-bg); }
+.detail-shell .plan-doc, .detail-shell .mini-panel { border-color: var(--app-line); background: var(--app-surface); }
+.detail-shell .mini-panel { color: var(--app-text); }
+
+@media (max-width: 900px) {
+  .detail-shell > .flex.flex-1 { display: block; overflow: visible; }
+  .detail-sidebar { width: 100%; border-right: 0; border-bottom: 1px solid var(--app-line); }
+  .detail-sidebar > div { padding: 14px 18px; }
+  .detail-main { min-height: 600px; }
+}
+@media (max-width: 640px) {
+  .detail-topbar { padding: 11px 14px; }
+  .detail-topbar h1 { font-size: 15px; }
+  .detail-topbar .hidden.sm\:inline { display: none; }
+  .detail-tabs { overflow-x: auto; padding-left: 10px; padding-right: 10px; }
+  .detail-tabs button { flex: none; padding: 10px 11px; font-size: 11px; }
+}
+
 @media (max-width: 1180px) {
   :root { --app-sidebar: 204px; }
   .app-sidebar { padding-left: 10px; padding-right: 10px; }

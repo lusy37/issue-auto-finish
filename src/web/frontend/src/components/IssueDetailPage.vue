@@ -3,6 +3,7 @@ import TaskGraphPanel from "./TaskGraphPanel.vue";
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import type { SystemStatus } from '@/types';
 import { getIssueIid, getIssueTitle, getReviewApprovalSource } from '@/types';
+import { getAllowedActions, type AllowedAction } from '@/adapters/issueflowViewModel';
 import * as api from '@/api/client';
 import { usePipeline, loadPipelineMeta } from '@/composables/usePipeline';
 import { useSSE } from '@/composables/useSSE';
@@ -31,6 +32,8 @@ const retryCount = computed(() => Object.values(detail.selectedIssue.value?.run?
 const issueError = computed(() => detail.selectedIssue.value?.lifecycle.kind === 'failed'
   ? detail.selectedIssue.value.lifecycle.error.message
   : undefined);
+const allowedActions = computed(() => new Set(detail.selectedIssue.value ? getAllowedActions(detail.selectedIssue.value) : []));
+function can(action: AllowedAction): boolean { return allowedActions.value.has(action); }
 
 const noteSyncDisplay = computed(() => {
   if (!detail.selectedIssue.value) return 'system';
@@ -150,9 +153,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="detail.selectedIssue.value" class="min-h-screen bg-gray-50 flex flex-col">
+  <div v-if="detail.selectedIssue.value" class="detail-shell min-h-screen flex flex-col">
     <!-- Top bar -->
-    <div class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-10">
+    <div class="detail-topbar px-6 py-3 flex items-center justify-between sticky top-0 z-10">
       <div class="flex items-center gap-3 min-w-0">
         <a href="/" class="text-sm text-blue-600 hover:text-blue-800 flex-shrink-0">{{ $t('detail.backToList') }}</a>
         <span class="text-gray-300">|</span>
@@ -176,7 +179,7 @@ onUnmounted(() => {
     <!-- Two-column layout -->
     <div class="flex flex-1 overflow-hidden">
       <!-- Left sidebar -->
-      <aside class="w-80 flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
+      <aside class="detail-sidebar w-80 flex-shrink-0 border-r overflow-y-auto">
 
         <!-- Pipeline Progress (vertical) -->
         <div class="p-4 border-b border-gray-100">
@@ -296,47 +299,48 @@ onUnmounted(() => {
         <div class="p-4">
           <div class="flex flex-wrap gap-2">
             <button
-              v-if="detail.selectedIssue.value.lifecycle.kind === 'skipped'"
+              v-if="can('start')"
               class="px-3 py-1.5 bg-green-500 text-white text-xs rounded-lg hover:bg-green-600"
               @click="detail.doStartIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.start') }}</button>
             <button
-              v-if="detail.selectedIssue.value.lifecycle.kind === 'failed'"
+              v-if="can('retry')"
               class="px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600"
               @click="detail.doRetryIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.retry') }}</button>
 
             <button
-              v-if="['running', 'waiting', 'ready'].includes(detail.selectedIssue.value.lifecycle.kind)"
+              v-if="can('abort')"
               class="px-3 py-1.5 bg-amber-100 text-amber-700 text-xs rounded-lg hover:bg-amber-200"
               @click="detail.doAbortIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.abort') }}</button>
             <button
-              v-if="detail.selectedIssue.value.lifecycle.kind === 'paused'"
+              v-if="can('continue')"
               class="px-3 py-1.5 bg-green-500 text-white text-xs rounded-lg hover:bg-green-600"
               @click="detail.doContinueIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.continue') }}</button>
             <button
-              v-if="detail.selectedIssue.value.lifecycle.kind === 'paused'"
+              v-if="can('redo-phase')"
               class="px-3 py-1.5 bg-orange-500 text-white text-xs rounded-lg hover:bg-orange-600"
               @click="detail.doRedoPhase(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.redo') }}</button>
             <button
-              v-if="detail.selectedIssue.value.preview?.running"
+              v-if="can('stop-preview')"
               class="px-3 py-1.5 bg-orange-100 text-orange-700 text-xs rounded-lg hover:bg-orange-200"
               @click="detail.doStopPreview(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.stopPreview') }}</button>
             <button
-              v-if="!['pending', 'skipped'].includes(detail.selectedIssue.value.lifecycle.kind) && !detail.selectedIssue.value.preview?.running"
+              v-if="can('restart-preview')"
               class="px-3 py-1.5 bg-indigo-100 text-indigo-700 text-xs rounded-lg hover:bg-indigo-200"
               @click="detail.doRestartPreview(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.restartPreview') }}</button>
             <button
-              v-if="detail.selectedIssue.value.lifecycle.kind !== 'skipped'"
+              v-if="can('restart')"
               class="px-3 py-1.5 bg-yellow-100 text-yellow-700 text-xs rounded-lg hover:bg-yellow-200"
               @click="detail.doRestartIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.restart') }}</button>
             <button
+              v-if="can('cancel')"
               class="px-3 py-1.5 bg-red-100 text-red-600 text-xs rounded-lg hover:bg-red-200"
               @click="detail.doCancelIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
             >{{ $t('detail.cancelTrack') }}</button>
@@ -345,14 +349,14 @@ onUnmounted(() => {
       </aside>
 
       <!-- Right content area -->
-      <div class="flex-1 flex flex-col min-w-0">
+      <div class="detail-main flex-1 flex flex-col min-w-0">
         <TaskGraphPanel v-if="activeTab === 'tasks'" :issue-number="getIssueIid(detail.selectedIssue.value)" :state-version="detail.selectedIssue.value.run?.version" />
 
         <!-- Agent interactive dialog (above tabs, always visible) -->
 
 
         <!-- Tabs -->
-        <div class="flex gap-0 border-b border-gray-200 bg-white px-4">
+        <div class="detail-tabs flex gap-0 border-b px-4">
           <button
             v-for="tab in (['docs', 'tasks', 'review', 'supplement', 'logs', 'e2e'] as const)"
             :key="tab"
@@ -436,9 +440,11 @@ onUnmounted(() => {
   </div>
 
   <!-- Loading / not found state -->
-  <div v-else class="min-h-screen bg-gray-50 flex items-center justify-center">
-    <div class="text-center">
-      <div class="text-gray-400 text-lg mb-2">{{ $t('detail.loading') }}</div>
+  <div v-else class="detail-empty min-h-screen flex items-center justify-center">
+    <div class="text-center" role="status" :aria-busy="detail.detailLoading.value">
+      <div v-if="detail.detailLoading.value" class="text-gray-400 text-lg mb-2">正在读取 Issue 详情…</div>
+      <div v-else-if="detail.detailError.value" class="text-red-600 text-lg mb-2">{{ detail.detailError.value }}</div>
+      <div v-else class="text-gray-400 text-lg mb-2">{{ $t('detail.loading') }}</div>
       <a href="/" class="text-sm text-blue-600 hover:text-blue-800">{{ $t('detail.backToList') }}</a>
     </div>
   </div>

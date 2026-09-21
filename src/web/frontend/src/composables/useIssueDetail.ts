@@ -14,6 +14,8 @@ function emptySupplementForm(): SupplementInfo {
 
 export function useIssueDetail() {
   const selectedIssue = ref<IssueRecord | null>(null);
+  const detailLoading = ref(false);
+  const detailError = ref('');
   const detailVersion = ref(0);
   let detailRequest = 0;
   let selection = 0;
@@ -42,6 +44,8 @@ export function useIssueDetail() {
   async function selectIssue(issue: IssueRecord, agentLogs: { value: AgentLogEntry[] }) {
     const request = ++detailRequest;
     selection++;
+    detailLoading.value = true;
+    detailError.value = '';
     selectedIssue.value = issue;
     detailSupplementEditing.value = false;
     detailSupplement.value = emptySupplementForm();
@@ -59,6 +63,7 @@ export function useIssueDetail() {
       if ((detail.run?.version ?? 0) >= (selectedIssue.value.run?.version ?? 0)) selectedIssue.value = detail;
       agentLogs.value = logs.reverse();
     } catch (e) {
+      if (request === detailRequest) detailError.value = (e as Error).message;
       console.error('Fetch detail failed', e);
     }
 
@@ -67,6 +72,7 @@ export function useIssueDetail() {
     fetchReviewHistory(getIssueIid(issue));
     fetchPlanDocContent(getIssueIid(issue));
     fetchPlanDiff(getIssueIid(issue));
+    detailLoading.value = false;
   }
 
   async function refreshDetail(): Promise<void> {
@@ -80,6 +86,7 @@ export function useIssueDetail() {
       selectedIssue.value = fresh;
       detailVersion.value++;
     } catch (e) {
+      detailError.value = (e as Error).message;
       console.error('Refresh detail failed', e);
     }
     if (request !== detailRequest) return;
@@ -331,6 +338,8 @@ export function useIssueDetail() {
     reviewSubmitting,
     reviewHistory,
     planDocContent,
+    detailLoading,
+    detailError,
     planDiff,
     selectIssue,
     refreshDetail,
