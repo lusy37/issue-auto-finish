@@ -7,15 +7,13 @@ import { usePipeline, loadPipelineMeta } from '../../src/web/frontend/src/compos
 import type { IssueGraphs } from '../../src/shared/workflowGraphs.js';
 import type { IssueRecord } from '../../src/web/frontend/src/types/index.js';
 import { newIssueRun } from '../../src/dag/contracts.js';
-import * as mini from '../../src/web/frontend/src/api/mini.js';
 import * as api from '../../src/web/frontend/src/api/client.js';
-vi.mock('../../src/web/frontend/src/api/mini.js', () => ({ json: vi.fn() }));
-vi.mock('../../src/web/frontend/src/api/client.js', () => ({ fetchPipelineMeta: vi.fn() }));
+vi.mock('../../src/web/frontend/src/api/client.js', () => ({ fetchIssueGraphs: vi.fn(), fetchPipelineMeta: vi.fn() }));
 afterEach(() => vi.clearAllMocks());
 
 it('旧 Issue 和旧记录版本的图响应不能覆盖新视图', async () => {
   const pending: Array<(value: IssueGraphs) => void> = [];
-  vi.mocked(mini.json).mockImplementation(() => new Promise(resolve => pending.push(resolve)));
+  vi.mocked(api.fetchIssueGraphs).mockImplementation(() => new Promise(resolve => pending.push(resolve)));
   const props = reactive({ issueNumber: 1, stateVersion: 5 });
   const scope = effectScope();
   const state = scope.run(() => useIssueGraphs(props))!;
