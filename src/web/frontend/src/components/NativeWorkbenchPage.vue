@@ -68,7 +68,6 @@ onUnmounted(() => window.removeEventListener('hashchange', onHashChange));
   <NConfigProvider :theme="null">
     <NMessageProvider><NDialogProvider><div class="prototype-shell">
       <a class="prototype-skip-link" href="#prototype-main">跳到主要内容</a>
-      <div class="prototype-preview-strip"><div><span class="prototype-preview-dot"></span><strong>设计预览</strong><span>V2 · Native 工作台</span></div><div class="prototype-preview-tools"><span>场景</span><NTag size="small" :bordered="false">真实数据</NTag><span>当前分支：LangGraph Native</span></div></div>
       <aside class="prototype-sidebar">
         <a class="prototype-brand" href="#/workbench"><span class="prototype-brand-symbol"><GitBranch :size="24" /></span><span><strong>IssueFlow</strong><small>AI ISSUE WORKSPACE</small></span></a>
         <div class="prototype-repo-card"><GitBranch :size="18" /><div><strong>issue-auto-finish</strong><small>LangGraph Native</small></div><span class="prototype-repo-dot"></span></div>

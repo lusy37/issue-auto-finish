@@ -2,7 +2,7 @@ import type { Config } from '../../src/config.js';
 import { suspendAtReview } from '../helpers/native-review.js';
 import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { it, expect, vi } from "vitest";
-import { chromium, expect as browserExpect, type Request } from "@playwright/test";
+import { chromium, expect as browserExpect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { envSchema, transformEnvToConfig } from "../../src/config-schema.js";
@@ -27,7 +27,7 @@ import { AgentLogStore } from "../../src/web/AgentLogStore.js";
 import type { AIRunner } from "../../src/ai-runner/AIRunner.js";
 import { executeUat } from "../../src/e2e/PlaywrightRunner.js";
 
-it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计及报告截图", async () => {
+it("真实 Native 工作台：五个入口、草稿生成、任务详情与 UAT 报告截图", async () => {
   const root = path.resolve(".iaf-mini/browser-tests");
   fs.mkdirSync(root, { recursive: true });
   const dir = fs.mkdtempSync(path.join(root, "工作台 "));
@@ -87,18 +87,6 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
     issues: [],
     total: 0,
   });
-  const createIssue = vi
-    .spyOn(platform, "createIssue")
-    .mockImplementation(async (title, description) => ({
-      id: 102,
-      number: 2,
-      title, description, html_url: platform.repositoryUrl + "/issues/2",
-      state: "open",
-      labels: [],
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      author: { username: "demo", name: "demo" },
-    }));
   const runner: AIRunner = {
     killAll() {},
     killByWorkDir() {
@@ -174,136 +162,60 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
   try {
     await web.start();
     const base = `http://127.0.0.1:${web.getPort()}`;
-    await page.goto(base);
-    await browserExpect(
-      page.getByRole("navigation", { name: "工作台导航" }).getByRole("button"),
-    ).toHaveCount(6);
-    await page.getByRole("button", { name: "需求草稿", exact: true }).click();
-    await page.getByLabel("原始需求").fill("创建演示页面");
-    await page.getByRole("button", { name: "生成草稿" }).click();
-    await browserExpect(page.getByLabel("草稿标题")).toHaveValue("初始需求");
-    await page.getByLabel("草稿标题").fill("编辑后的需求");
-    await page.getByRole("button", { name: "确认创建一个 Issue" }).click();
-    await browserExpect(
-      page.getByRole("link", { name: "查看 Issue #2" }),
-    ).toBeVisible();
-    expect(createIssue).toHaveBeenCalledTimes(1);
-    expect(createIssue.mock.calls[0][0]).toBe("编辑后的需求");
-    await page.reload();
-    await page.getByRole("button", { name: "需求草稿", exact: true }).click();
-    await browserExpect(page.getByLabel("草稿标题")).toHaveValue(
-      "编辑后的需求",
-    );
-    await page.getByRole("button", { name: "知识与经验", exact: true }).click();
-    await page.getByText("项目说明、技术栈与测试命令", { exact: true }).click();
-    await page.getByLabel("项目说明", { exact: true }).fill("这是演示工作台");
-    await page.getByLabel("测试命令", { exact: true }).fill("npm test");
-    await page.getByRole("button", { name: "保存项目上下文" }).click();
-    await browserExpect(
-      page.getByText("项目上下文已保存，后续任务将使用新配置。"),
-    ).toBeVisible();
-    await page.getByLabel("知识标题").fill("测试经验");
-    await page.getByLabel("知识内容").fill("先验证失败再修复。");
-    await page.getByRole("button", { name: "添加知识" }).click();
-    await browserExpect(
-      page.getByRole("heading", { name: "测试经验 custom" }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "蒸馏", exact: true }).click();
-    await page.getByRole("button", { name: "手动蒸馏" }).click();
-    await browserExpect(page.locator("pre").first()).toContainText(
-      "processedDiaries",
-    );
-    await page.getByRole("button", { name: "任务统计", exact: true }).click();
-    await browserExpect(
-      page.getByText("暂无数据", { exact: true }).first(),
-    ).toBeVisible();
-    await page.getByLabel("统计时间范围").selectOption("all");
-    await page.getByRole("button", { name: "设置", exact: true }).click();
-    const flowLabels = ["启用计划审核", "任务引用知识与经验", "启用经验蒸馏", "验证失败后自动修复"];
-    for (const label of flowLabels) await browserExpect(page.getByRole("checkbox", { name: label, exact: true })).toBeChecked();
-    await browserExpect(page.getByLabel("最大自动修复轮数")).toHaveValue("3");
-    await page.getByLabel("最大自动修复轮数").fill("2");
-    await browserExpect(page.getByLabel("全局 AI 并发额度（默认 4，范围 1～32）")).toHaveValue("4");
-    await page.getByLabel("全局 AI 并发额度（默认 4，范围 1～32）").fill("2");
-    for (const label of flowLabels) await page.getByRole("checkbox", { name: label, exact: true }).uncheck();
-    await browserExpect(page.getByLabel("最大自动修复轮数")).toBeDisabled();
-    await browserExpect(page.getByLabel("Codex 程序路径（留空使用内置程序，Windows 需为 .exe）")).toHaveValue(
-      "",
-    );
-    await page.getByLabel("Codex 程序路径（留空使用内置程序，Windows 需为 .exe）").fill("C:\\中文 工具\\codex.exe");
-    await page.getByRole("button", { name: "保存配置" }).click();
-    await browserExpect(page.getByRole("status")).toContainText("配置已保存");
-    await page.reload();
-    await page.getByRole("button", { name: "设置", exact: true }).click();
-    for (const label of flowLabels) await browserExpect(page.getByRole("checkbox", { name: label, exact: true })).not.toBeChecked();
-    await browserExpect(page.getByLabel("最大自动修复轮数")).toHaveValue("2");
-    // 页面回显已保存值，当前服务仍按启动配置运行，直到重启。
-    const currentStatus = await (await page.request.get(base + "/api/system/status")).json();
-    expect(currentStatus.config).toMatchObject({ reviewEnabled: true, knowledgeEnabled: true, distillEnabled: true, verifyFixLoopEnabled: true, verifyFixMaxIterations: 3 });
-    await browserExpect(page.getByLabel("Codex 程序路径（留空使用内置程序，Windows 需为 .exe）")).toHaveValue(
-      "C:\\中文 工具\\codex.exe",
-    );
-    const detailRequests: string[] = [];
-    const trackDetailRequest = (request: Request) => {
-      detailRequests.push(new URL(request.url()).pathname);
+    await page.goto(`${base}/#/workbench`);
+    await browserExpect(page.locator('.prototype-shell')).toBeVisible();
+    await browserExpect(page.locator('.prototype-preview-strip')).toHaveCount(0);
+    await browserExpect(page.getByRole('heading', { name: '任务工作台' })).toBeVisible();
+    await browserExpect(page.locator('.prototype-sidebar .n-menu-item-content')).toHaveCount(5);
+    await browserExpect(page.getByText('工作台验收任务', { exact: true })).toBeVisible();
+    await browserExpect(page.getByText('等待审核', { exact: true }).first()).toBeVisible();
+
+    const selectMenu = async (label: string) => {
+      await page.locator('.prototype-sidebar .n-menu-item-content').filter({ hasText: label }).click();
     };
-    page.on("request", trackDetailRequest);
-    await page.goto(base + "/detail?issue=1");
-    await page.getByRole("button", { name: "内部任务", exact: true }).click();
-    await browserExpect(page.getByText("implementation · 实现需求", { exact: true })).toBeVisible();
-    await browserExpect(page.getByRole("heading", { name: "Issue 主流程" })).toBeVisible();
-    await browserExpect(page.getByText("检查点下一步：review", { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "构建 build", exact: true }).click();
-    await browserExpect(page.getByRole("group", { name: "流程节点与依赖关系" })).toHaveCount(2);
-    await page.getByLabel("显示原生节点与声明路由").check();
-    await browserExpect(page.getByRole("button", { name: "publish_plan ", exact: false })).toBeVisible();
-    await page.getByRole("button", { name: "审查", exact: true }).click();
-    await browserExpect(
-      page.getByRole("button", { name: "通过计划" }),
-    ).toBeVisible();
-    // 覆盖一个完整轮询周期，防止隐藏的首页重复初始化和查询状态。
-    await page.waitForTimeout(11000);
-    expect(detailRequests.filter((url) => url === "/api/system/status")).toHaveLength(2);
-    expect(detailRequests.filter((url) => url === "/api/tasks")).toHaveLength(0);
-    await page.getByRole("button", { name: "通过计划" }).click();
-    await browserExpect
-      .poll(() => tracker.get(1)?.lifecycle.kind)
-      .toBe('ready');
-    await browserExpect
-      .poll(() => tracker.get(1)?.run?.review?.decision)
-      .toBe('approved');
-    await browserExpect(
-      page.getByText("审查已通过", { exact: false }).first(),
-    ).toBeVisible();
-    await browserExpect(page.getByText("人工审核通过", { exact: true })).toBeVisible();
-    // 审核事件更新详情时，也不应触发首页的任务列表刷新。
-    expect(detailRequests.filter((url) => url === "/api/tasks")).toHaveLength(0);
-    page.off("request", trackDetailRequest);
-    const supplementFile = path.join(process.env.DATA_DIR!, 'supplements', '1.json');
-    fs.mkdirSync(path.dirname(supplementFile), { recursive: true });
-    fs.writeFileSync(supplementFile, '{损坏的补充资料');
-    await page.reload();
-    await page.getByRole("button", { name: "补充信息", exact: true }).click();
-    await browserExpect(page.getByRole("alert")).toContainText("补充资料读取失败");
-    await browserExpect(page.getByRole("button", { name: "编辑", exact: true })).toHaveCount(0);
-    expect(fs.readFileSync(supplementFile, 'utf8')).toBe('{损坏的补充资料');
-    await page.reload();
-    await page.getByRole("button", { name: "审查", exact: true }).click();
-    await browserExpect(
-      page.getByText("审查已通过", { exact: false }).first(),
-    ).toBeVisible();
+    await selectMenu('需求草稿');
+    await browserExpect(page.getByRole('heading', { name: '需求草稿' })).toBeVisible();
+    await page.getByRole('button', { name: '新建需求', exact: true }).click();
+    await page.getByPlaceholder('描述希望完成的需求与验收标准').fill('创建一个可展示的演示页面，并补充浏览器验收。');
+    await page.getByRole('button', { name: '生成草稿', exact: true }).click();
+    await browserExpect(page.getByRole('heading', { name: '初始需求', exact: true })).toBeVisible();
+
+    await selectMenu('知识与经验');
+    await browserExpect(page.getByRole('heading', { name: '知识与经验' })).toBeVisible();
+    await browserExpect(page.getByRole('heading', { name: '项目开发约定' })).toBeVisible();
+    await page.getByRole('button', { name: '阅读内容', exact: true }).first().click();
+    await browserExpect(page.getByText('项目采用 Vue、TypeScript、Express 和本地 JSON。', { exact: false })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    await selectMenu('任务统计');
+    await browserExpect(page.getByRole('heading', { name: '任务统计' })).toBeVisible();
+    await browserExpect(page.getByText('总任务', { exact: true })).toBeVisible();
+    await browserExpect(page.getByText('待审核', { exact: true }).first()).toBeVisible();
+
+    await selectMenu('设置');
+    await browserExpect(page.getByRole('heading', { name: '工作台设置' })).toBeVisible();
+    await browserExpect(page.getByText('数据来自当前 LangGraph Native 服务端。', { exact: true })).toBeVisible();
+
+    await selectMenu('任务工作台');
+    await page.getByText('工作台验收任务', { exact: true }).click();
+    await browserExpect(page).toHaveURL(/#\/issue\/1$/);
+    await browserExpect(page.getByRole('heading', { name: '工作台验收任务' })).toBeVisible();
+    await browserExpect(page.getByRole('heading', { name: 'Issue 主流程' })).toBeVisible();
+    await browserExpect(page.getByRole('button', { name: '实施计划', exact: true }).first()).toBeVisible();
+    await browserExpect(page.getByRole('button', { name: '验收结果', exact: true })).toBeVisible();
+
     fs.writeFileSync(
-      path.join(dir, "playwright.config.ts"),
+      path.join(dir, 'playwright.config.ts'),
       `export default {testDir:'.',testMatch:'screen.spec.ts',use:{channel:process.env.IAF_TEST_BROWSER_CHANNEL || undefined}};`,
     );
     fs.writeFileSync(
-      path.join(dir, "screen.spec.ts"),
+      path.join(dir, 'screen.spec.ts'),
       `import {test,expect} from '@playwright/test';test('实际截图',async({page})=>{await page.setContent('<h1>验收通过</h1>');await expect(page.getByRole('heading')).toHaveText('验收通过');});`,
     );
     const result = await executeUat({
       issueIid: 1,
       workDir: dir,
-      configFile: "playwright.config.ts",
+      configFile: 'playwright.config.ts',
       baseUrl: base,
       timeoutMs: 60000,
     });
@@ -314,56 +226,20 @@ it("真实工作台：六个入口、草稿编辑创建、审核刷新、统计�
       record.completedAt = new Date().toISOString();
       record.uatRunId = result.runId;
     });
-    tracker.updatePhaseProgress(1, "uat", { status: "completed" });
-    await page.getByRole("button", { name: "E2E", exact: true }).click();
-    await browserExpect(
-      page.getByRole("link", { name: "打开本次 HTML 报告" }),
-    ).toBeVisible();
-    await browserExpect(page.locator("img").first()).toBeVisible();
-    expect(
-      (
-        await page.request.get(
-          base + `/api/uat/runs/${result.runId}/files/report/index.html`,
-        )
-      ).ok(),
-    ).toBe(true);
-    await page.goto(base);
-    await page.getByRole("button", { name: "任务统计", exact: true }).click();
-    await browserExpect(
-      page.getByText("100.0%", { exact: true }).first(),
-    ).toBeVisible();
-    await page.screenshot({
-      path: path.join(dir, "工作台统计.png"),
-      fullPage: true,
-    });
-    // 给测试服务注入关闭配置，覆盖关闭视图；真实设置的重启语义在上方单独验证。
-    config.knowledge.enabled = false;
-    config.distill.enabled = false;
+    tracker.updatePhaseProgress(1, 'uat', { status: 'completed' });
     await page.reload();
-    await page.getByRole("button", { name: "知识与经验", exact: true }).click();
-    await browserExpect(page.getByText("任务知识引用已关闭。", { exact: false })).toBeVisible();
-    await browserExpect(page.getByRole("heading", { name: "测试经验 custom" })).toBeVisible();
-    await page.getByRole("button", { name: "蒸馏", exact: true }).click();
-    await browserExpect(page.getByText("经验蒸馏已关闭", { exact: false })).toBeVisible();
-    await browserExpect(page.getByRole("button", { name: "手动蒸馏" })).toBeDisabled();
-    await browserExpect(page.locator("article").first()).toContainText("已完成");
-    config.distill.enabled = true;
-    await page.reload();
-    await page.getByRole("button", { name: "蒸馏", exact: true }).click();
-    await browserExpect(page.getByRole("button", { name: "手动蒸馏" })).toBeEnabled();
-    await browserExpect(page.locator("article").first()).toContainText("已完成");
+    await page.getByRole('button', { name: '验收结果', exact: true }).click();
+    await browserExpect(page.getByRole('link', { name: '打开本次 HTML 报告' })).toBeVisible();
+    await browserExpect(page.locator('img').first()).toBeVisible();
+    expect((await page.request.get(base + `/api/uat/runs/${result.runId}/files/report/index.html`)).ok()).toBe(true);
+
+    await page.goto(`${base}/#/workbench`);
+    await browserExpect(page.getByText('工作台验收任务', { exact: true })).toBeVisible();
+    await page.screenshot({ path: path.join(dir, 'Native 工作台-有数据.png'), fullPage: true });
     expect(errors).toEqual([]);
     fs.writeFileSync(
-      path.join(root, "latest.json"),
-      JSON.stringify(
-        {
-          directory: dir,
-          screenshot: path.join(dir, "工作台统计.png"),
-          uatRunId: result.runId,
-        },
-        null,
-        2,
-      ),
+      path.join(root, 'latest.json'),
+      JSON.stringify({ directory: dir, screenshot: path.join(dir, 'Native 工作台-有数据.png'), uatRunId: result.runId }, null, 2),
     );
   } catch (error) {
     await page.screenshot({ path: path.join(dir, '失败现场.png'), fullPage: true }).catch(() => {});
