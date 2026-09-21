@@ -21,6 +21,8 @@ import E2eArtifactsViewer from './E2eArtifactsViewer.vue';
 const systemStatus = ref<SystemStatus | null>(null);
 const activeTab = ref<'docs' | 'review' | 'supplement' | 'logs' | 'e2e' | 'tasks'>('docs');
 const noteSyncSaving = ref(false);
+const actionBusy = ref(false);
+const actionError = ref('');
 
 const { pipelineMode, stateLabel, stateClass, getPlanDocs, isEditableDoc } = usePipeline();
 const detail = useIssueDetail();
@@ -40,6 +42,19 @@ const noteSyncDisplay = computed(() => {
   const v = detail.selectedIssue.value.issueNoteSyncEnabled;
   return v === true ? 'on' : v === false ? 'off' : 'system';
 });
+
+async function runDetailAction(action: () => Promise<unknown>) {
+  if (actionBusy.value) return;
+  actionBusy.value = true;
+  actionError.value = '';
+  try {
+    await action();
+  } catch (error) {
+    actionError.value = (error as Error).message;
+  } finally {
+    actionBusy.value = false;
+  }
+}
 
 function issueUrl(): string {
   if (!detail.selectedIssue.value || !systemStatus.value) return '#';
@@ -228,8 +243,8 @@ onUnmounted(() => {
                   'bg-red-100 text-red-600 hover:bg-red-200': noteSyncDisplay === 'off',
                   'bg-gray-200 text-gray-600 hover:bg-gray-300': noteSyncDisplay === 'system',
                 }"
-                :disabled="noteSyncSaving"
-                @click="cycleNoteSync()"
+                :disabled="noteSyncSaving || actionBusy"
+                @click="runDetailAction(cycleNoteSync)"
               >{{ noteSyncDisplay === 'on' ? $t('detail.enabled') : noteSyncDisplay === 'off' ? $t('detail.disabled') : $t('detail.followSystem') }}</button>
             </div>
             <div class="flex items-center justify-between text-sm">
@@ -281,8 +296,9 @@ onUnmounted(() => {
               </span>
             </div>
             <button
+              :disabled="actionBusy"
               class="px-3 py-1.5 bg-indigo-500 text-white text-xs rounded-lg hover:bg-indigo-600"
-              @click="detail.doRebuildWorktree(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
+              @click="runDetailAction(() => detail.doRebuildWorktree(getIssueIid(detail.selectedIssue.value!), refreshIssues))"
             >{{ $t('detail.rebuildWorktree') }}</button>
           </div>
         </div>
@@ -297,52 +313,64 @@ onUnmounted(() => {
 
         <!-- Actions -->
         <div class="p-4">
+          <div v-if="actionBusy || actionError" class="mb-3 rounded-lg border px-3 py-2 text-xs" :class="actionError ? 'border-red-200 bg-red-50 text-red-700' : 'border-blue-200 bg-blue-50 text-blue-700'" role="status">
+            {{ actionError || '正在提交操作，请稍候…' }}
+          </div>
           <div class="flex flex-wrap gap-2">
             <button
+              :disabled="actionBusy"
               v-if="can('start')"
               class="px-3 py-1.5 bg-green-500 text-white text-xs rounded-lg hover:bg-green-600"
-              @click="detail.doStartIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
+              @click="runDetailAction(() => detail.doStartIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues))"
             >{{ $t('detail.start') }}</button>
             <button
+              :disabled="actionBusy"
               v-if="can('retry')"
               class="px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600"
-              @click="detail.doRetryIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
+              @click="runDetailAction(() => detail.doRetryIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues))"
             >{{ $t('detail.retry') }}</button>
 
             <button
+              :disabled="actionBusy"
               v-if="can('abort')"
               class="px-3 py-1.5 bg-amber-100 text-amber-700 text-xs rounded-lg hover:bg-amber-200"
-              @click="detail.doAbortIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
+              @click="runDetailAction(() => detail.doAbortIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues))"
             >{{ $t('detail.abort') }}</button>
             <button
+              :disabled="actionBusy"
               v-if="can('continue')"
               class="px-3 py-1.5 bg-green-500 text-white text-xs rounded-lg hover:bg-green-600"
-              @click="detail.doContinueIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
+              @click="runDetailAction(() => detail.doContinueIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues))"
             >{{ $t('detail.continue') }}</button>
             <button
+              :disabled="actionBusy"
               v-if="can('redo-phase')"
               class="px-3 py-1.5 bg-orange-500 text-white text-xs rounded-lg hover:bg-orange-600"
-              @click="detail.doRedoPhase(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
+              @click="runDetailAction(() => detail.doRedoPhase(getIssueIid(detail.selectedIssue.value!), refreshIssues))"
             >{{ $t('detail.redo') }}</button>
             <button
+              :disabled="actionBusy"
               v-if="can('stop-preview')"
               class="px-3 py-1.5 bg-orange-100 text-orange-700 text-xs rounded-lg hover:bg-orange-200"
-              @click="detail.doStopPreview(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
+              @click="runDetailAction(() => detail.doStopPreview(getIssueIid(detail.selectedIssue.value!), refreshIssues))"
             >{{ $t('detail.stopPreview') }}</button>
             <button
+              :disabled="actionBusy"
               v-if="can('restart-preview')"
               class="px-3 py-1.5 bg-indigo-100 text-indigo-700 text-xs rounded-lg hover:bg-indigo-200"
-              @click="detail.doRestartPreview(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
+              @click="runDetailAction(() => detail.doRestartPreview(getIssueIid(detail.selectedIssue.value!), refreshIssues))"
             >{{ $t('detail.restartPreview') }}</button>
             <button
+              :disabled="actionBusy"
               v-if="can('restart')"
               class="px-3 py-1.5 bg-yellow-100 text-yellow-700 text-xs rounded-lg hover:bg-yellow-200"
-              @click="detail.doRestartIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
+              @click="runDetailAction(() => detail.doRestartIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues))"
             >{{ $t('detail.restart') }}</button>
             <button
+              :disabled="actionBusy"
               v-if="can('cancel')"
               class="px-3 py-1.5 bg-red-100 text-red-600 text-xs rounded-lg hover:bg-red-200"
-              @click="detail.doCancelIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
+              @click="runDetailAction(() => detail.doCancelIssue(getIssueIid(detail.selectedIssue.value!), refreshIssues))"
             >{{ $t('detail.cancelTrack') }}</button>
           </div>
         </div>
@@ -390,9 +418,9 @@ onUnmounted(() => {
               :plan-doc-content="detail.planDocContent.value"
               :plan-diff="detail.planDiff.value"
               @update:review-feedback="detail.reviewFeedback.value = $event"
-              @approve="detail.doApprovePlan(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
-              @reject="detail.doRejectPlan(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
-              @skip="detail.doSkipReview(getIssueIid(detail.selectedIssue.value!), refreshIssues)"
+              @approve="runDetailAction(() => detail.doApprovePlan(getIssueIid(detail.selectedIssue.value!), refreshIssues))"
+              @reject="runDetailAction(() => detail.doRejectPlan(getIssueIid(detail.selectedIssue.value!), refreshIssues))"
+              @skip="runDetailAction(() => detail.doSkipReview(getIssueIid(detail.selectedIssue.value!), refreshIssues))"
             />
 
 
@@ -409,7 +437,7 @@ onUnmounted(() => {
               :saving="detail.detailSupplementSaving.value"
               :has-data="detail.hasSupplementData(detail.detailSupplement.value)"
               @edit="detail.enterSupplementEdit()"
-              @save="detail.saveDetailSupplement(refreshIssues)"
+              @save="runDetailAction(() => detail.saveDetailSupplement(refreshIssues))"
               @cancel="detail.detailSupplementEditing.value = false"
               @update:supplement-form="detail.detailSupplementForm.value = $event"
             />
