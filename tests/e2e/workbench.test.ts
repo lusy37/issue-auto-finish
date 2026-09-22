@@ -204,10 +204,15 @@ it("真实 Native 工作台：五个入口、草稿生成、任务详情与 UAT 
     await browserExpect(page.locator('.graph-legend')).toBeVisible();
     await browserExpect(page.getByRole('heading', { name: '任务清单' })).toBeVisible();
     await browserExpect(page.locator('.prototype-workflow-panel .n-steps')).toBeVisible();
-    await browserExpect(page.locator('.prototype-workflow-panel .n-step')).toHaveCount(5);
+    await browserExpect(page.locator('.prototype-workflow-panel .n-step')).toHaveCount(6);
     await browserExpect.poll(async () => page.locator('.execution-surface .graph-viewport > .execution-graph').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
     await browserExpect(page.getByRole('button', { name: '实施计划', exact: true }).first()).toBeVisible();
     await browserExpect(page.getByRole('button', { name: '验收结果', exact: true })).toBeVisible();
+    await page.locator('.prototype-detail-tabs button').filter({ hasText: '实施计划' }).click();
+    await browserExpect(page.locator('.native-plan-panel')).toBeVisible();
+    await browserExpect(page.locator('.native-plan-tasks .n-collapse-item')).toHaveCount(1);
+    await browserExpect(page.getByText('让每一步都可核验', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '执行视图', exact: true }).click();
 
     fs.writeFileSync(
       path.join(dir, 'playwright.config.ts'),
