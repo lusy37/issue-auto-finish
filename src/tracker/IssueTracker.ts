@@ -7,7 +7,11 @@ import { type ExecutableTask, issueToExecutableTask } from './ExecutableTask.js'
 import { getIssueNumber } from './IssueRecordHelper.js';
 import { logger as rootLogger } from '../logger.js';
 import { eventBus } from '../events/EventBus.js';
-import { initializeWorkflowDefinition, PHASE_IDS, type PhaseId } from '../orchestration/WorkflowState.js';
+import {
+  initializeWorkflowDefinition,
+  PHASE_IDS,
+  type PhaseId,
+} from '../orchestration/WorkflowState.js';
 import { applyIssueLifecycleEvent } from './IssueLifecycle.js';
 
 const logger = rootLogger.child('IssueTracker');
@@ -16,10 +20,7 @@ export class IssueTracker {
   readonly store: IssueRunStore;
   private pipelineDefinitions: Map<string, PipelineDef>;
 
-  constructor(
-    dataDir: string,
-    pipelineDefinitions: Map<string, PipelineDef>,
-  ) {
+  constructor(dataDir: string, pipelineDefinitions: Map<string, PipelineDef>) {
     this.store = new IssueRunStore(dataDir);
     this.pipelineDefinitions = pipelineDefinitions;
   }
@@ -33,18 +34,34 @@ export class IssueTracker {
   assertIdentity(identity: ExecutionIdentity): void {
     const record = this.get(identity.issueNumber);
     const run = record?.run;
-    if (!run || this.store.isBlocked(identity.issueNumber) || run.stopIntent || run.planRevision !== identity.planRevision || run.buildGeneration !== identity.buildGeneration || run.dispatchId !== identity.dispatchId || !sameIdentity(run.calls[identity.callId]?.identity, identity)) throw new Error('执行身份已失效');
+    if (
+      !run ||
+      this.store.isBlocked(identity.issueNumber) ||
+      run.stopIntent ||
+      run.planRevision !== identity.planRevision ||
+      run.buildGeneration !== identity.buildGeneration ||
+      run.dispatchId !== identity.dispatchId ||
+      !sameIdentity(run.calls[identity.callId]?.identity, identity)
+    )
+      throw new Error('执行身份已失效');
     const lifecycle = record!.lifecycle;
     const phase = parsePhaseCallId(identity.taskId);
     if (phase && (lifecycle.kind !== 'running' || lifecycle.phase !== phase)) {
       throw new Error('父阶段调用身份已失效');
     }
-    if (run.activeCalls?.[identity.taskId] && run.activeCalls[identity.taskId] !== identity.callId) throw new Error('调用已被新的执行替代');
+    if (run.activeCalls?.[identity.taskId] && run.activeCalls[identity.taskId] !== identity.callId)
+      throw new Error('调用已被新的执行替代');
     const task = run.tasks[identity.taskId];
-    if (task && (task.attemptNo !== identity.attemptNo || task.identity?.callId !== identity.callId)) throw new Error('任务尝试身份已失效');
+    if (
+      task &&
+      (task.attemptNo !== identity.attemptNo || task.identity?.callId !== identity.callId)
+    )
+      throw new Error('任务尝试身份已失效');
   }
 
-  private getAllRecords(): IssueRecord[] { return this.store.all(); }
+  private getAllRecords(): IssueRecord[] {
+    return this.store.all();
+  }
 
   private pipelineFor(record: IssueRecord): PipelineDef {
     // 尚未初始化的任务使用当前默认流程；显式指定的模式必须已注册。
@@ -54,7 +71,9 @@ export class IssueTracker {
     return definition;
   }
 
-  get(issueIid: number): IssueRecord | undefined { return this.store.get(issueIid); }
+  get(issueIid: number): IssueRecord | undefined {
+    return this.store.get(issueIid);
+  }
 
   create(record: NewIssueRecord): IssueRecord {
     const now = new Date().toISOString();
@@ -67,10 +86,16 @@ export class IssueTracker {
       run: record.run ?? newIssueRun(),
     };
     if (!full.run.workflow.definition && !['pending', 'skipped'].includes(full.lifecycle.kind)) {
-      initializeWorkflowDefinition(full.run.workflow, this.pipelineFor(full).phases.map(phase => phase.name));
+      initializeWorkflowDefinition(
+        full.run.workflow,
+        this.pipelineFor(full).phases.map((phase) => phase.name),
+      );
     }
     this.store.insert(getIssueNumber(full), full);
-    logger.info('Issue tracked', { issueIid: getIssueNumber(full), lifecycle: record.lifecycle.kind });
+    logger.info('Issue tracked', {
+      issueIid: getIssueNumber(full),
+      lifecycle: record.lifecycle.kind,
+    });
     const saved = this.get(getIssueNumber(full))!;
     eventBus.emitTyped('issue:created', saved);
     return saved;
@@ -88,8 +113,11 @@ export class IssueTracker {
   /** 初始化阶段进度（流水线启动时调用） */
   initPhaseProgress(issueIid: number, def: PipelineDef): void {
     if (!this.get(issueIid)) return;
-    this.transaction(issueIid, record => {
-      initializeWorkflowDefinition(record.run!.workflow, def.phases.map(spec => spec.name));
+    this.transaction(issueIid, (record) => {
+      initializeWorkflowDefinition(
+        record.run!.workflow,
+        def.phases.map((spec) => spec.name),
+      );
       if (!record.phaseProgress) {
         const phases: Record<string, PhaseProgress> = {};
         for (const spec of def.phases) phases[spec.name] = { status: 'pending' };
@@ -117,15 +145,21 @@ export class IssueTracker {
 
   emitFailure(issueIid: number): void {
     const record = this.get(issueIid);
-    if (record?.lifecycle.kind === 'failed') eventBus.emitTyped('issue:failed', {
-      issueIid,
-      record,
-      error: record.lifecycle.error.message,
-      phase: record.lifecycle.phase,
-    });
+    if (record?.lifecycle.kind === 'failed')
+      eventBus.emitTyped('issue:failed', {
+        issueIid,
+        record,
+        error: record.lifecycle.error.message,
+        phase: record.lifecycle.phase,
+      });
   }
 
-  private persistFailure(issueIid: number, error: string, isRetryable: boolean, reserveRetry: boolean): void {
+  private persistFailure(
+    issueIid: number,
+    error: string,
+    isRetryable: boolean,
+    reserveRetry: boolean,
+  ): void {
     const record = this.get(issueIid);
     if (!record) return;
     if (record.lifecycle.kind === 'cancelled') return;
@@ -280,7 +314,8 @@ export class IssueTracker {
     const record = this.get(issueIid);
     if (!record) return false;
     const lifecycle = record.lifecycle;
-    if (lifecycle.kind === 'waiting' || lifecycle.kind === 'paused' || lifecycle.kind === 'failed') return false;
+    if (lifecycle.kind === 'waiting' || lifecycle.kind === 'paused' || lifecycle.kind === 'failed')
+      return false;
     if (!this.isProcessing(issueIid)) return false;
     const elapsed = Date.now() - new Date(record.updatedAt).getTime();
     return elapsed > thresholdMs;
@@ -290,20 +325,25 @@ export class IssueTracker {
     return this.getAllRecords().filter((record) => {
       if (record.run!.stopIntent || this.store.isBlocked(getIssueNumber(record))) return false;
       const lifecycle = record.lifecycle;
-      const retryPhase = lifecycle.kind === 'failed' ? lifecycle.phase ?? 'setup' : 'setup';
+      const retryPhase = lifecycle.kind === 'failed' ? (lifecycle.phase ?? 'setup') : 'setup';
       const retryUsed = record.run!.retryUsed[retryPhase] ?? 0;
       // 已预留的最后一次重试仍必须可调度；否则 retryUsed 达到上限后会永久滞留在 Failed。
       const phaseExecutions = record.run!.phaseExecutions[retryPhase] ?? 0;
-      const reservedRetry = lifecycle.kind === 'failed'
-        && lifecycle.retry === 'auto'
-        && phaseExecutions > 0
-        && retryUsed >= phaseExecutions
-        && retryUsed <= maxRetries;
-      const drivableByLifecycle = lifecycle.kind === 'pending'
-        || lifecycle.kind === 'ready'
-        || (lifecycle.kind === 'failed' && lifecycle.retry === 'auto' && retryUsed < maxRetries);
-      const drivable = record.run!.recoveryRequired || reservedRetry || drivableByLifecycle
-        || this.isStalled(getIssueNumber(record), stalledThresholdMs);
+      const reservedRetry =
+        lifecycle.kind === 'failed' &&
+        lifecycle.retry === 'auto' &&
+        phaseExecutions > 0 &&
+        retryUsed >= phaseExecutions &&
+        retryUsed <= maxRetries;
+      const drivableByLifecycle =
+        lifecycle.kind === 'pending' ||
+        lifecycle.kind === 'ready' ||
+        (lifecycle.kind === 'failed' && lifecycle.retry === 'auto' && retryUsed < maxRetries);
+      const drivable =
+        record.run!.recoveryRequired ||
+        reservedRetry ||
+        drivableByLifecycle ||
+        this.isStalled(getIssueNumber(record), stalledThresholdMs);
       if (!drivable) return false;
 
       // 持久化锁检查：有未超时的锁则跳过（正在被某协程处理）
@@ -348,7 +388,24 @@ export class IssueTracker {
     record.processingLock = undefined;
     record.resetGeneration = (record.resetGeneration ?? 0) + 1;
     const previous = record.run!;
-    record.run = { ...newIssueRun(), version: previous.version, planRevision: previous.planRevision, buildGeneration: previous.buildGeneration + 1, delivery: previous.delivery, workspaces: previous.workspaces, budgetHistory: [...(previous.budgetHistory ?? []), { planRevision: previous.planRevision, buildGeneration: previous.buildGeneration, retryUsed: previous.retryUsed, phaseExecutions: previous.phaseExecutions, repairRounds: previous.repairRounds }] };
+    record.run = {
+      ...newIssueRun(),
+      version: previous.version,
+      planRevision: previous.planRevision,
+      buildGeneration: previous.buildGeneration + 1,
+      delivery: previous.delivery,
+      workspaces: previous.workspaces,
+      budgetHistory: [
+        ...(previous.budgetHistory ?? []),
+        {
+          planRevision: previous.planRevision,
+          buildGeneration: previous.buildGeneration,
+          retryUsed: previous.retryUsed,
+          phaseExecutions: previous.phaseExecutions,
+          repairRounds: previous.repairRounds,
+        },
+      ],
+    };
     record.run.planDigest = previous.planDigest;
     record.deliveryPending = undefined;
     record.deliveryNoteWritten = undefined;
@@ -367,7 +424,7 @@ export class IssueTracker {
     const record = this.get(issueIid);
     if (!record) return false;
     if (!PHASE_IDS.includes(phase as PhaseId) || phase === 'review') return false;
-    const phaseIdx = def.phases.findIndex(p => p.name === phase);
+    const phaseIdx = def.phases.findIndex((p) => p.name === phase);
     if (phaseIdx < 0) return false;
     // 显式回退开始新图执行轮次；暂停继续和失败重试则保留原检查点。
     record.run!.workflow.generation++;
@@ -441,8 +498,9 @@ export class IssueTracker {
     for (const record of this.getAllRecords()) {
       // 等待审核也在启动后核对一次图，覆盖生命周期发布与中断落盘之间的退出窗口。
       const lifecycle = record.lifecycle;
-      if (!['running', 'delivering', 'waiting'].includes(lifecycle.kind) && !record.run!.stopIntent) continue;
-      this.transaction(getIssueNumber(record), current => {
+      if (!['running', 'delivering', 'waiting'].includes(lifecycle.kind) && !record.run!.stopIntent)
+        continue;
+      this.transaction(getIssueNumber(record), (current) => {
         current.run!.recoveryRequired = true;
         current.processingLock = undefined;
         if (current.run!.stopIntent) {

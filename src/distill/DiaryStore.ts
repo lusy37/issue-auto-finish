@@ -29,12 +29,12 @@ export class DiaryStore extends BaseTracker<DiaryEntry> {
 
   /** 获取未蒸馏的日记列表 */
   getUndistilled(): DiaryEntry[] {
-    return this.getAllRecords().filter(d => !d.distilled);
+    return this.getAllRecords().filter((d) => !d.distilled);
   }
 
   /** 按 Issue IID 获取日记 */
   getByIssueIid(issueIid: number): DiaryEntry[] {
-    return this.getAllRecords().filter(d => d.issueIid === issueIid);
+    return this.getAllRecords().filter((d) => d.issueIid === issueIid);
   }
 
   /** 标记日记已蒸馏 */

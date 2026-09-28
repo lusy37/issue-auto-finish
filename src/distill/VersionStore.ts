@@ -1,16 +1,16 @@
-import { writeJsonAtomicSync } from "../utils/atomicFile.js";
+import { writeJsonAtomicSync } from '../utils/atomicFile.js';
 /**
  * VersionStore — 知识条目版本历史管理。
  *
  * 为 memory 和 agent-rule 条目保留版本历史，支持知识退役追溯。
  * JSON 文件持久化到显式配置目录下的 versions.json。
  */
-import fs from "node:fs";
-import path from "node:path";
-import { logger as rootLogger } from "../logger.js";
-import type { VersionRecord } from "./types.js";
+import fs from 'node:fs';
+import path from 'node:path';
+import { logger as rootLogger } from '../logger.js';
+import type { VersionRecord } from './types.js';
 
-const logger = rootLogger.child("VersionStore");
+const logger = rootLogger.child('VersionStore');
 
 interface VersionData {
   records: VersionRecord[];
@@ -21,7 +21,7 @@ export class VersionStore {
   private data: VersionData;
 
   constructor(dataDir: string) {
-    this.filePath = path.join(dataDir, "versions.json");
+    this.filePath = path.join(dataDir, 'versions.json');
     this.data = this.load();
   }
 
@@ -51,11 +51,11 @@ export class VersionStore {
   private load(): VersionData {
     try {
       if (fs.existsSync(this.filePath)) {
-        const raw = fs.readFileSync(this.filePath, "utf-8");
+        const raw = fs.readFileSync(this.filePath, 'utf-8');
         return JSON.parse(raw) as VersionData;
       }
     } catch (err) {
-      logger.warn("Failed to load version store", {
+      logger.warn('Failed to load version store', {
         error: (err as Error).message,
       });
     }

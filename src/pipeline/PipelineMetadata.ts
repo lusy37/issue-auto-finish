@@ -77,12 +77,12 @@ pipelineRegistry.set(PLAN_MODE_PIPELINE.mode, PLAN_MODE_PIPELINE);
 export function buildPlanModePipeline(opts: { e2eEnabled: boolean }): PipelineDef {
   const specs = getPlanModePhases(opts.e2eEnabled);
   // 阶段内容统一由编排核心提供，不附带另一套状态映射。
-  const phases: PhaseSpec[] = specs.map(spec => ({
+  const phases: PhaseSpec[] = specs.map((spec) => ({
     name: spec.id,
     label: spec.label,
     kind: spec.kind,
     ...(spec.retryable !== undefined ? { retryable: spec.retryable } : {}),
-    ...(spec.artifacts ? { artifacts: spec.artifacts.map(artifact => ({ ...artifact })) } : {}),
+    ...(spec.artifacts ? { artifacts: spec.artifacts.map((artifact) => ({ ...artifact })) } : {}),
   }));
   return { mode: 'plan-mode', phases };
 }

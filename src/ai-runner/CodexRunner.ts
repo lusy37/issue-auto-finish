@@ -5,7 +5,6 @@ import type { AIRunner, RunOptions, RunResult } from './AIRunner.js';
 import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
 import { findExecutable } from '../utils/process.js';
 
-
 /** 留空时由 SDK 定位随依赖安装的原生程序；Windows 不接受脚本启动器。 */
 export function createCodexClient(binary = ''): Codex {
   if (!binary) return new Codex();
@@ -26,7 +25,10 @@ function workDirKey(dir: string): string {
 export class CodexRunner implements AIRunner {
   private readonly active = new Map<AbortController, string>();
 
-  constructor(private readonly binary = '', private readonly model?: string) {}
+  constructor(
+    private readonly binary = '',
+    private readonly model?: string,
+  ) {}
 
   /** 会话标识是不透明值；仅接受本执行器命名空间内的非空标识。 */
   canResumeSession(sessionId: string): boolean {
@@ -53,9 +55,13 @@ export class CodexRunner implements AIRunner {
     let wasActiveAtTimeout = false;
     let wallTimer: ReturnType<typeof setTimeout> | undefined;
     let idleTimer: ReturnType<typeof setTimeout> | undefined;
-    const emit = (type: string, content: unknown) => options.onStreamEvent?.({
-      type, content, sessionId, timestamp: new Date().toISOString(),
-    });
+    const emit = (type: string, content: unknown) =>
+      options.onStreamEvent?.({
+        type,
+        content,
+        sessionId,
+        timestamp: new Date().toISOString(),
+      });
     const abortForTimeout = (kind: NonNullable<RunResult['timeoutType']>) => {
       if (controller.signal.aborted) return;
       timeoutType = kind;
@@ -65,7 +71,8 @@ export class CodexRunner implements AIRunner {
     const scheduleWallTimeout = (delay: number) => {
       wallTimer = setTimeout(() => {
         if (controller.signal.aborted) return;
-        wasActiveAtTimeout = lastItemActivity !== undefined &&
+        wasActiveAtTimeout =
+          lastItemActivity !== undefined &&
           Date.now() - lastItemActivity < (options.timeoutGraceMs ?? 60000);
         if (!completed && wasActiveAtTimeout && extensions < (options.timeoutMaxExtensions ?? 0)) {
           extensions++;
@@ -155,7 +162,10 @@ export class CodexRunner implements AIRunner {
     if (controller.signal.aborted && !timeoutType) errorMessage = 'Codex 执行已取消';
     const success = completed && !errorMessage && !controller.signal.aborted;
     return {
-      success, output, errorMessage, sessionId,
+      success,
+      output,
+      errorMessage,
+      sessionId,
       // SDK 不公开子进程退出码；0 表示成功，失败保留未知。
       exitCode: success ? 0 : null,
       timeoutType,
@@ -178,26 +188,49 @@ export class CodexRunner implements AIRunner {
     return count;
   }
 
-  private emitItem(item: ThreadItem, eventType: string, emit: (type: string, content: unknown) => void): void {
+  private emitItem(
+    item: ThreadItem,
+    eventType: string,
+    emit: (type: string, content: unknown) => void,
+  ): void {
     switch (item.type) {
-      case 'agent_message': emit('assistant', item.text); break;
-      case 'reasoning': emit('thinking', item.text); break;
+      case 'agent_message':
+        emit('assistant', item.text);
+        break;
+      case 'reasoning':
+        emit('thinking', item.text);
+        break;
       case 'command_execution':
-        emit(eventType === 'item.started' ? 'tool_use' : 'tool_result', eventType === 'item.started'
-          ? { name: 'shell', input: { command: item.command } }
-          : { content: item.aggregated_output, exitCode: item.exit_code });
+        emit(
+          eventType === 'item.started' ? 'tool_use' : 'tool_result',
+          eventType === 'item.started'
+            ? { name: 'shell', input: { command: item.command } }
+            : { content: item.aggregated_output, exitCode: item.exit_code },
+        );
         break;
       case 'file_change':
-        emit('system', `文件变更（${item.status}）：${item.changes.map(c => `${c.kind} ${c.path}`).join('、')}`);
+        emit(
+          'system',
+          `文件变更（${item.status}）：${item.changes.map((c) => `${c.kind} ${c.path}`).join('、')}`,
+        );
         break;
       case 'mcp_tool_call':
-        emit(eventType === 'item.completed' ? 'tool_result' : 'tool_use', eventType === 'item.completed'
-          ? { content: item.error?.message ?? item.result }
-          : { name: `${item.server}.${item.tool}`, input: item.arguments });
+        emit(
+          eventType === 'item.completed' ? 'tool_result' : 'tool_use',
+          eventType === 'item.completed'
+            ? { content: item.error?.message ?? item.result }
+            : { name: `${item.server}.${item.tool}`, input: item.arguments },
+        );
         break;
-      case 'web_search': emit('tool_use', { name: 'web_search', input: { command: item.query } }); break;
-      case 'todo_list': emit('system', item.items.map(i => `${i.completed ? '✓' : '○'} ${i.text}`).join('\n')); break;
-      case 'error': emit('system', item.message); break;
+      case 'web_search':
+        emit('tool_use', { name: 'web_search', input: { command: item.query } });
+        break;
+      case 'todo_list':
+        emit('system', item.items.map((i) => `${i.completed ? '✓' : '○'} ${i.text}`).join('\n'));
+        break;
+      case 'error':
+        emit('system', item.message);
+        break;
     }
   }
 }

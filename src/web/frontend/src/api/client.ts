@@ -1,23 +1,30 @@
 import { ARTIFACTS } from '../../../../shared/runtime/artifacts.js';
 import type {
-  IssueRecord, SystemStatus, AgentLogEntry,
-  GitHubIssue, SupplementInfo, ReviewRound,
+  IssueRecord,
+  SystemStatus,
+  AgentLogEntry,
+  GitHubIssue,
+  SupplementInfo,
+  ReviewRound,
   PipelineMeta,
-  ExecutableTask, TaskKind,
+  ExecutableTask,
+  TaskKind,
 } from '@/types';
 import type { IssueGraphs } from '../../../../shared/workflowGraphs.js';
 import type { UatResult } from '../../../../shared/workbench.js';
 import { request, json } from './http';
 
 async function post<T = { success: boolean; message?: string }>(
-  url: string, body?: unknown,
+  url: string,
+  body?: unknown,
 ): Promise<T> {
   return json<T>(url, 'POST', body);
 }
 
-export async function fetchTasks(
-  params?: { kind?: TaskKind; status?: string },
-): Promise<ExecutableTask[]> {
+export async function fetchTasks(params?: {
+  kind?: TaskKind;
+  status?: string;
+}): Promise<ExecutableTask[]> {
   const qs = new URLSearchParams();
   if (params?.kind) qs.set('kind', params.kind);
   if (params?.status) qs.set('status', params.status);
@@ -86,7 +93,11 @@ export async function approvePlan(number: number, planRevision: number): Promise
   await post(`/api/issues/${number}/approve-plan`, { planRevision });
 }
 
-export async function rejectPlan(number: number, feedback: string, planRevision: number): Promise<void> {
+export async function rejectPlan(
+  number: number,
+  feedback: string,
+  planRevision: number,
+): Promise<void> {
   await post(`/api/issues/${number}/reject-plan`, { feedback, planRevision });
 }
 
@@ -103,15 +114,23 @@ export interface PlanDiff {
   hasChanges: boolean;
 }
 
-export async function fetchPlanDiff(number: number, file = ARTIFACTS.plan.filename): Promise<PlanDiff> {
+export async function fetchPlanDiff(
+  number: number,
+  file = ARTIFACTS.plan.filename,
+): Promise<PlanDiff> {
   const url = `/api/issues/${number}/plan-diff?file=${encodeURIComponent(file)}`;
   return request<PlanDiff>(url);
 }
 
-export async function loadPlanDoc(number: number, filename: string, format: 'html' | 'raw' = 'html'): Promise<string> {
-  const url = format === 'html'
-    ? `/api/issues/${number}/plans/${filename}?format=html`
-    : `/api/issues/${number}/plans/${filename}`;
+export async function loadPlanDoc(
+  number: number,
+  filename: string,
+  format: 'html' | 'raw' = 'html',
+): Promise<string> {
+  const url =
+    format === 'html'
+      ? `/api/issues/${number}/plans/${filename}?format=html`
+      : `/api/issues/${number}/plans/${filename}`;
   const res = await fetch(url);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -120,7 +139,11 @@ export async function loadPlanDoc(number: number, filename: string, format: 'htm
   return res.text();
 }
 
-export async function savePlanDoc(number: number, filename: string, content: string): Promise<void> {
+export async function savePlanDoc(
+  number: number,
+  filename: string,
+  content: string,
+): Promise<void> {
   await request(`/api/issues/${number}/plans/${filename}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -133,7 +156,8 @@ export async function fetchSupplement(number: number): Promise<SupplementInfo> {
 }
 
 export async function saveSupplement(
-  number: number, data: SupplementInfo,
+  number: number,
+  data: SupplementInfo,
 ): Promise<{ success: boolean; data: SupplementInfo }> {
   return request(`/api/issues/${number}/supplement`, {
     method: 'PUT',
@@ -148,9 +172,11 @@ export interface BrowseResult {
   trackedIids: number[];
 }
 
-export async function fetchGitHubIssues(
-  params: { search?: string; page?: number; perPage?: number },
-): Promise<BrowseResult> {
+export async function fetchGitHubIssues(params: {
+  search?: string;
+  page?: number;
+  perPage?: number;
+}): Promise<BrowseResult> {
   const qs = new URLSearchParams();
   if (params.search) qs.set('search', params.search);
   qs.set('page', String(params.page ?? 1));
@@ -165,12 +191,15 @@ export interface StartIssueParams {
   supplement?: Partial<SupplementInfo>;
 }
 
-export async function startIssue(params: StartIssueParams): Promise<{ success: boolean; record: IssueRecord }> {
+export async function startIssue(
+  params: StartIssueParams,
+): Promise<{ success: boolean; record: IssueRecord }> {
   return post(`/api/issues/start`, params);
 }
 
 export async function setIssueNoteSync(
-  number: number, enabled: boolean | null,
+  number: number,
+  enabled: boolean | null,
 ): Promise<{ success: boolean; issueNoteSyncEnabled: boolean | null }> {
   return request(`/api/issues/${number}/note-sync`, {
     method: 'PUT',
@@ -189,11 +218,16 @@ export async function setSystemNoteSync(
   });
 }
 
-export async function restartPreview(number: number): Promise<{ success: boolean; previewUrl: string }> {
+export async function restartPreview(
+  number: number,
+): Promise<{ success: boolean; previewUrl: string }> {
   return post(`/api/issues/${number}/restart-preview`);
 }
 
-export async function rebuildWorktree(number: number): Promise<{ success: boolean; worktree: { exists: boolean; cleanedAt?: string; path?: string; ideUrl?: string } }> {
+export async function rebuildWorktree(number: number): Promise<{
+  success: boolean;
+  worktree: { exists: boolean; cleanedAt?: string; path?: string; ideUrl?: string };
+}> {
   return post(`/api/issues/${number}/rebuild-worktree`);
 }
 

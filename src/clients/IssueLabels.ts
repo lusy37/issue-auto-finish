@@ -11,5 +11,5 @@ export function isWorkbenchLabel(label: string): boolean {
 }
 
 export function withWorkbenchLabels(labels: readonly string[], owned: readonly string[]): string[] {
-  return [...labels.filter(label => !isWorkbenchLabel(label)), ...owned];
+  return [...labels.filter((label) => !isWorkbenchLabel(label)), ...owned];
 }

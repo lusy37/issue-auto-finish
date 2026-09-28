@@ -50,5 +50,7 @@ export const KNOWLEDGE_DEFAULTS: ProjectKnowledge = {
     summary: '',
     rules: [],
     conventions: [],
-  },ruleTriggers: [],knownIssues: [],
+  },
+  ruleTriggers: [],
+  knownIssues: [],
 };

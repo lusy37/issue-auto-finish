@@ -47,7 +47,7 @@ export function extractTodolist(markdown: string): TodolistSummary {
     });
   }
 
-  const completed = items.filter(i => i.completed).length;
+  const completed = items.filter((i) => i.completed).length;
   const summary: TodolistSummary = {
     items,
     total: items.length,

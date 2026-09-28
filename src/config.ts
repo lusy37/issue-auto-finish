@@ -1,13 +1,13 @@
-import { config as loadDotenv } from "dotenv";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { config as loadDotenv } from 'dotenv';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   envSchema,
   extractEnvSubset,
   transformEnvToConfig,
   ConfigValidationError,
-} from "./config-schema.js";
-import { getGlobalDir } from "./paths.js";
+} from './config-schema.js';
+import { getGlobalDir } from './paths.js';
 
 export type {
   Config,
@@ -24,17 +24,15 @@ export type {
   PreviewConfig,
   KnowledgeConfig,
   DistillConfig,
-} from "./config-schema.js";
-export { ConfigValidationError } from "./config-schema.js";
+} from './config-schema.js';
+export { ConfigValidationError } from './config-schema.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** 读取显式配置或独立配置。 */
 export function resolveConfigFilePath(configPath?: string): string {
   return path.resolve(
-    configPath ??
-      process.env.IAF_CONFIG_PATH ??
-      path.join(getGlobalDir(), ".env"),
+    configPath ?? process.env.IAF_CONFIG_PATH ?? path.join(getGlobalDir(), '.env'),
   );
 }
 

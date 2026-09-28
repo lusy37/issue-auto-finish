@@ -1,17 +1,16 @@
 # Issue Auto-Finish
 
-单用户、单实例、单仓库的 AI Issue 开发工作台。以 issue-auto-finish-mini 为功能参考，从可启动骨架分批接入成熟模块、测试和界面，形成可回溯的 main 线性提交历史。
+单用户、单实例、单仓库的 AI Issue 开发工作台，使用 Vue、TypeScript、Express 和本地 JSON。使用 LangGraph 原生工作流管理审核中断、检查点恢复与阶段重试；构建阶段按任务依赖调度。
 
-六个入口：任务工作台、需求草稿、知识与经验、蒸馏、任务统计、设置。默认流程为 plan → review → build → verify → uat（浏览器验收可关闭）。一个草稿创建一个 Issue；计划包含 1～20 个内部任务，统一审核后在 build 中按依赖并行执行，汇总后绑定同一提交完成验证和浏览器验收，最后更新该 Issue 唯一的 PR、回写 Issue 并采集经验。
+界面提供任务工作台、需求草稿、知识与经验、任务统计及设置。默认流程为 plan → review → build → verify → uat（浏览器验收可关闭）；成功后交付 PR、回写 Issue 并采集经验。计划统一审核，build 内部任务按依赖执行。
 
-当前分支使用 LangGraph 原生工作流，详见 [迁移说明与学习入口](docs/langgraph-native.md)。审核中断、检查点恢复、节点重试和 build 内的依赖调度由框架负责。
+工作流设计与状态约束见 [LangGraph 原生工作流说明](docs/langgraph-native.md) 和 [Issue 生命周期说明](docs/issue-lifecycle.md)。
 
 ## 快速演示
 
-需要 Node.js ≥22.12 和 Git；启用浏览器验收时还需可用浏览器。本轮 DAG 验收使用 Windows、Edge；依赖版本由 package-lock.json 锁定。
+需要 Node.js ≥22.12 和 Git；浏览器验收需要安装 Playwright Chromium，使用 Edge 时可设置 `IAF_TEST_BROWSER_CHANNEL=msedge`。依赖版本由 `package-lock.json` 锁定。以下命令在**仓库根目录**执行：
 
 ~~~powershell
-cd E:\Edge_Load\issue-auto-finish\.iaf-mini\worktrees\langgraph-native
 npm ci
 npm run e2e:install
 npm run build
@@ -19,7 +18,15 @@ npm run web:build
 npm run demo
 ~~~
 
-打开 http://127.0.0.1:3000，在任务工作台手动启动演示 Issue，打开详情查看计划并审核通过。演示使用模拟 GitHub 与 AI，Git、状态持久化和浏览器验收真实执行；数据写入 .iaf-mini/demo-langgraph-v6。同时保留其他演示实例时，分别设置 `IAF_DEMO_PORT` 和 `IAF_DEMO_PLATFORM_PORT` 为未占用端口；端口冲突会报错停止。使用本机 Edge 时先设置 $env:IAF_TEST_BROWSER_CHANNEL='msedge'。
+打开 http://127.0.0.1:3000，在任务工作台手动启动演示 Issue，并在详情中审核计划。此演示使用模拟 GitHub 与 AI，真实执行本地 Git、持久化和浏览器验收；运行数据写入已忽略的 `.iaf-mini/demo-langgraph-v6`。端口冲突时，在启动前设置 `IAF_DEMO_PORT` 和 `IAF_DEMO_PLATFORM_PORT`。
+
+## 多状态界面展示
+
+运行 `npm run demo:showcase`，打开 http://127.0.0.1:3312。独立的 `.iaf-mini/showcase-frontend-v6` 会生成 8 条本地演示任务，覆盖待审核、构建中、暂停、失败、完成、取消等状态及并行任务图；重复启动会保留已有样例。
+
+其中 #308“工作台主题升级”的 DAG 为：准备主题规范 → 前端组件、主题接口、迁移文档（三路并行）→ 集成并联调 → 回归验证。打开 #308 的“实施计划”或“执行视图”，可以看到三个同层节点同时处于“执行中”。
+
+此入口只用于界面验收：后台不轮询、不调度，GitHub 和 AI 均为本地模拟；完成状态和验收报告不代表真实 PR 或测试证据。不要在展示页提交审核、重试或启动任务。需要更换端口时，在启动前设置 `IAF_DEMO_PORT` 与 `IAF_DEMO_PLATFORM_PORT`。
 
 ## 连接真实仓库
 
@@ -28,7 +35,7 @@ npm run init
 npm run doctor
 ~~~
 
-按照 env.example 编辑 .iaf-mini/github/.env，配置专用仓库、Token、本地 Git 克隆目录、main 基础分支、测试及预览环境；确保 Git 推送认证和 Codex 登录可用。然后执行 npm start，打开设置页检查平台连接。修改设置后重启服务。
+按照 [`env.example`](env.example) 编辑 `.iaf-mini/github/.env`，配置用于处理 Issue 的仓库、Token、本地 Git 克隆目录、基础分支及测试和预览环境。**该业务仓库可以与本项目源码仓库不同**；不要将真实凭据提交到 Git。确保推送认证和 Codex 登录可用后运行 `npm start`，打开设置页检查连接。修改配置后重启服务。
 
 Codex 使用官方 SDK 与内置原生程序；CODEX_BINARY 留空即可，模型留空沿用用户配置。计划调用只读，完整计划由服务端持久化。真实调用检查为 npm run test:codex，独立于模拟回归，可能产生模型用量。
 
@@ -71,7 +78,9 @@ npm run test:windows
 npm run test:codex
 ~~~
 
-浏览器检查默认使用已安装的 Chromium，也支持 IAF_TEST_BROWSER_CHANNEL=chrome 或 msedge。Windows CI 已配置在 .github/workflows/ci.yml；远程 CI 尚未触发，本次结果来自本机执行。
+浏览器检查默认使用已安装的 Chromium，也支持 `IAF_TEST_BROWSER_CHANNEL=chrome` 或 `msedge`。CI 配置位于 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。`npm run web:build` 如提示单个 JS Bundle 超过 500 KB，这是包体积警告，不代表构建失败；首屏性能优化应优先按页面拆分代码。
+
+本次整理的本机检查：类型检查、后端 Lint、前后端构建及相关的 61 项测试通过；完整保留测试集 **859 项通过、9 项失败**。失败涉及 Windows 进程回收、测试进程内存不足和两项工作流断言，尚未解决，不能视为完整回归通过。真实 Codex 调用与模拟回归分开验证。
 
 ## 数据与 Git
 
@@ -81,22 +90,4 @@ Native 聚合运行状态使用 `iaf-mini/issue-run/v6-langgraph`，不可变计
 
 暂停／取消先保存停止意图并等待进程退出；不确定的孤儿进程保持目录隔离。普通重试复用已确认任务，完整重做使用新构建轮次但保留原 PR。开放 PR 继续更新，关闭 PR 需先重开，已合并 PR 对应的 Issue 不再重做。详细状态和恢复规则见 [DAG 实施记录](docs/dag-implementation.md)。
 
-工程开发在 main 上按功能提交，2026-09-05 至 2026-09-11 对应七个开发阶段，日期按指定学习日程回排，不使用 Git 阶段标签。业务任务使用独立 worktree 和分支，通过 PR 交付；完成后不自动合并。此工程的 Git 历史保存在本地，专用测试仓库的 Issue/PR 是独立验收产物。
-
-初次实现验收的完整回归 925 项通过，另通过 Chrome 工作台端到端、Windows 专项和真实 Codex 检查。真实流程产物：[Issue #3](https://github.com/lusy37/issue-auto-finish-sandbox/issues/3)、[PR #4](https://github.com/lusy37/issue-auto-finish-sandbox/pull/4)。
-
-底层依赖迁移后，Windows 本机完整回归 **937 项通过**，类型检查、前后端构建、Chrome 工作台端到端及 Windows 专项均通过。本次未复跑真实 Codex/GitHub 验收。相关源码与脚本净减少 138 行，见 [迁移记录](docs/dependency-migration.md)。
-
-遗留兼容清理后，本机完整回归 **924 项通过**，类型检查、前后端构建和 Chrome 工作台验收通过。删除范围、保留依据及测试数量变化见 [兼容代码盘点](docs/compatibility-audit.md)。
-
-详细说明：[开发记录](docs/development.md)、[架构与功能对照](docs/architecture.md)、[精简依据](docs/simplification.md)、[验收记录](docs/validation.md)。
-
-精简后已再次执行真实 GitHub、Codex 和 Windows Chrome 全流程：[Issue #5](https://github.com/lusy37/issue-auto-finish-sandbox/issues/5) → [PR #6](https://github.com/lusy37/issue-auto-finish-sandbox/pull/6)，正式 UAT 7 项通过，重启核对通过。旧 mini 实例重复领取造成的标签干扰及恢复处置见 [本次真实复验记录](docs/live-uat-20260912.md)。
-
-配置、知识读写和文件保存修复后，Windows 本机回归 **958 项通过**，类型检查、前后端构建、变更文件 lint 和 Chrome 工作台端到端通过。本轮 AI/GitHub 使用模拟，未重新调用真实服务。行为说明、统计及验证边界见 [修复实施记录](docs/config-knowledge-storage-repair-plan.md#七实施与验收结果)。
-
-单 Issue 内部 DAG 修订完成后，本机完整回归 **1005 项通过**，工作台 Edge 端到端、类型检查、变更文件 lint 和前后端构建均通过。真实 Codex 生成代码与中止验证单独通过；本轮 GitHub 使用模拟平台，独立演示使用真实 Git 与 Edge 完成唯一 PR 交付。新状态格式、恢复边界、配置和实际增删见 [DAG 实施记录](docs/dag-implementation.md)。
-
-Issue 详情的“内部任务”页签提供主流程与 build 任务双图，支持查看检查点和集成修复入口。参见 [双图与生命周期说明](docs/issue-lifecycle.md) 和 [修复实施记录](docs/langgraph-native-repair-plan.md)。
-
-2026-09-20 审查计划落地：完整保留测试 111 个文件、880 项通过（含 Chrome 工作台验收），类型检查与前后端构建通过。本轮 AI/GitHub 使用模拟实现，未执行真实 Codex 或平台写入。
+业务 Issue 使用独立 worktree 和分支，通过 PR 交付；完成后不会自动合并。历史实施和验收记录保留在 [文档目录](docs/)，不作为当前版本的测试结果。运行数据与源码分离，不要读取或修改原 `data/` 作为工作台运行数据。

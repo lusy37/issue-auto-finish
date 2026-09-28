@@ -41,8 +41,14 @@ export class DevServerManager {
   private starting = new Map<number, Promise<void>>();
   private startups = new Map<number, AbortController>();
   private stopping = new Map<number, Promise<void>>();
-  async waitForStopped(issueIid: number): Promise<void> { await this.stopping.get(issueIid); }
-  async stopAllAndWait(): Promise<void> { this.stopAll(); await Promise.allSettled(this.starting.values()); await Promise.all(this.stopping.values()); }
+  async waitForStopped(issueIid: number): Promise<void> {
+    await this.stopping.get(issueIid);
+  }
+  async stopAllAndWait(): Promise<void> {
+    this.stopAll();
+    await Promise.allSettled(this.starting.values());
+    await Promise.all(this.stopping.values());
+  }
   private options: DevServerManagerOptions;
   private logDir: string;
 
@@ -65,13 +71,25 @@ export class DevServerManager {
     signal?.throwIfAborted();
     const startup = new AbortController();
     this.startups.set(wtCtx.issueIid, startup);
-    const operation = this.start(wtCtx, ports, signal ? AbortSignal.any([signal, startup.signal]) : startup.signal);
+    const operation = this.start(
+      wtCtx,
+      ports,
+      signal ? AbortSignal.any([signal, startup.signal]) : startup.signal,
+    );
     this.starting.set(wtCtx.issueIid, operation);
-    try { await operation; }
-    finally { this.starting.delete(wtCtx.issueIid); this.startups.delete(wtCtx.issueIid); }
+    try {
+      await operation;
+    } finally {
+      this.starting.delete(wtCtx.issueIid);
+      this.startups.delete(wtCtx.issueIid);
+    }
   }
 
-  private async start(wtCtx: WorktreeContext, ports: PortPair, signal?: AbortSignal): Promise<void> {
+  private async start(
+    wtCtx: WorktreeContext,
+    ports: PortPair,
+    signal?: AbortSignal,
+  ): Promise<void> {
     await this.waitForStopped(wtCtx.issueIid);
     signal?.throwIfAborted();
     if (this.servers.has(wtCtx.issueIid)) {
@@ -90,7 +108,7 @@ export class DevServerManager {
       `[${new Date().toISOString()}] [${stream}] ${data.toString().trimEnd()}\n`;
 
     const backendEnv: Record<string, string> = {
-      ...process.env as Record<string, string>,
+      ...(process.env as Record<string, string>),
       PORT: String(ports.backendPort),
       E2E_PORT_OVERRIDE: '1',
       ENV_PATH: '.env.development.local',
@@ -98,17 +116,40 @@ export class DevServerManager {
 
     let startupError: Error | undefined;
     const backendCmd = this.options.backendCommand ?? { bin: 'npm', args: ['run', 'dev:backend'] };
-    const backend = spawn(backendCmd.bin, backendCmd.args.map(a=>a.replaceAll('{port}',String(ports.backendPort))), {
-      cwd: wtCtx.workDir,
-      env: backendEnv,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const backend = spawn(
+      backendCmd.bin,
+      backendCmd.args.map((a) => a.replaceAll('{port}', String(ports.backendPort))),
+      {
+        cwd: wtCtx.workDir,
+        env: backendEnv,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
 
     let backendCall: string | undefined;
-    try { if (backend.pid) backendCall = this.options.onProcessStarted?.(wtCtx.issueIid, backend.pid, wtCtx.workDir); }
-    catch (error) { await stopProcess(backend); await backend; backendLog.end(); frontendLog.end(); throw error; }
-    void backend.then(() => { if (backendCall) { try { this.options.onProcessExited?.(wtCtx.issueIid, backendCall); } catch (error) { logger.error('预览退出凭证写入失败', { error: String(error) }); } } });
-    backend.nodeChildProcess.on('error', error => { startupError=error; this.stopServers(wtCtx.issueIid); });
+    try {
+      if (backend.pid)
+        backendCall = this.options.onProcessStarted?.(wtCtx.issueIid, backend.pid, wtCtx.workDir);
+    } catch (error) {
+      await stopProcess(backend);
+      await backend;
+      backendLog.end();
+      frontendLog.end();
+      throw error;
+    }
+    void backend.then(() => {
+      if (backendCall) {
+        try {
+          this.options.onProcessExited?.(wtCtx.issueIid, backendCall);
+        } catch (error) {
+          logger.error('预览退出凭证写入失败', { error: String(error) });
+        }
+      }
+    });
+    backend.nodeChildProcess.on('error', (error) => {
+      startupError = error;
+      this.stopServers(wtCtx.issueIid);
+    });
     backend.nodeChildProcess.unref();
     backend.nodeChildProcess.stdout?.on('data', (data: Buffer) => {
       if (!backendLog.writableEnded) backendLog.write(tsLine('stdout', data));
@@ -123,30 +164,50 @@ export class DevServerManager {
 
     const frontendDir = path.resolve(wtCtx.workDir, this.options.frontendDir ?? '.');
     const frontendEnv: Record<string, string> = {
-      ...process.env as Record<string, string>,
+      ...(process.env as Record<string, string>),
       BACKEND_PORT: String(ports.backendPort),
       FRONTEND_PORT: String(ports.frontendPort),
       VITE_API_PORT: String(ports.backendPort),
     };
 
-    const frontendCmd = this.options.frontendCommand
-      ?? { bin: 'npm', args: ['run', 'dev:frontend', '--', '--port', String(ports.frontendPort)] };
-    const frontend = spawn(frontendCmd.bin, frontendCmd.args.map(a=>a.replaceAll('{port}',String(ports.frontendPort))), {
-      cwd: frontendDir,
-      env: frontendEnv,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const frontendCmd = this.options.frontendCommand ?? {
+      bin: 'npm',
+      args: ['run', 'dev:frontend', '--', '--port', String(ports.frontendPort)],
+    };
+    const frontend = spawn(
+      frontendCmd.bin,
+      frontendCmd.args.map((a) => a.replaceAll('{port}', String(ports.frontendPort))),
+      {
+        cwd: frontendDir,
+        env: frontendEnv,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
 
     let frontendCall: string | undefined;
-    try { if (frontend.pid) frontendCall = this.options.onProcessStarted?.(wtCtx.issueIid, frontend.pid, frontendDir); }
-    catch (error) {
+    try {
+      if (frontend.pid)
+        frontendCall = this.options.onProcessStarted?.(wtCtx.issueIid, frontend.pid, frontendDir);
+    } catch (error) {
       await Promise.allSettled([stopProcess(backend), stopProcess(frontend)]);
       await Promise.allSettled([backend, frontend]);
-      backendLog.end(); frontendLog.end();
+      backendLog.end();
+      frontendLog.end();
       throw error;
     }
-    void frontend.then(() => { if (frontendCall) { try { this.options.onProcessExited?.(wtCtx.issueIid, frontendCall); } catch (error) { logger.error('预览退出凭证写入失败', { error: String(error) }); } } });
-    frontend.nodeChildProcess.on('error', error => { startupError=error; this.stopServers(wtCtx.issueIid); });
+    void frontend.then(() => {
+      if (frontendCall) {
+        try {
+          this.options.onProcessExited?.(wtCtx.issueIid, frontendCall);
+        } catch (error) {
+          logger.error('预览退出凭证写入失败', { error: String(error) });
+        }
+      }
+    });
+    frontend.nodeChildProcess.on('error', (error) => {
+      startupError = error;
+      this.stopServers(wtCtx.issueIid);
+    });
     frontend.nodeChildProcess.unref();
     frontend.nodeChildProcess.stdout?.on('data', (data: Buffer) => {
       if (!frontendLog.writableEnded) frontendLog.write(tsLine('stdout', data));
@@ -173,14 +234,22 @@ export class DevServerManager {
     this.servers.set(wtCtx.issueIid, serverSet);
     logger.info('Dev servers spawned, waiting for startup', { issueIid: wtCtx.issueIid, ...ports });
 
-    const startupSignal = signal ? AbortSignal.any([signal, serverSet.startup.signal]) : serverSet.startup.signal;
+    const startupSignal = signal
+      ? AbortSignal.any([signal, serverSet.startup.signal])
+      : serverSet.startup.signal;
     try {
       if (startupError) throw startupError;
-      if (backend.nodeChildProcess.exitCode !== null || frontend.nodeChildProcess.exitCode !== null) throw new Error('预览进程已退出，请查看预览日志');
-      await waitForReadiness([
-        { port: ports.backendPort, url: this.options.backendReadyUrl },
-        { port: ports.frontendPort, url: this.options.frontendReadyUrl },
-      ], this.options.startupTimeoutMs ?? PREVIEW_DEFAULTS.startupTimeoutMs, this.options.readinessIntervalMs ?? PREVIEW_DEFAULTS.readinessIntervalMs, startupSignal);
+      if (backend.nodeChildProcess.exitCode !== null || frontend.nodeChildProcess.exitCode !== null)
+        throw new Error('预览进程已退出，请查看预览日志');
+      await waitForReadiness(
+        [
+          { port: ports.backendPort, url: this.options.backendReadyUrl },
+          { port: ports.frontendPort, url: this.options.frontendReadyUrl },
+        ],
+        this.options.startupTimeoutMs ?? PREVIEW_DEFAULTS.startupTimeoutMs,
+        this.options.readinessIntervalMs ?? PREVIEW_DEFAULTS.readinessIntervalMs,
+        startupSignal,
+      );
       startupSignal.throwIfAborted();
       serverSet.ready = true;
       logger.info('预览服务已就绪', { issueIid: wtCtx.issueIid, ...ports });
@@ -205,7 +274,9 @@ export class DevServerManager {
     this.servers.delete(issueIid);
     const done = Promise.allSettled([stopProcess(set.backend), stopProcess(set.frontend)])
       .then(() => Promise.allSettled([set.backend, set.frontend]))
-      .then(() => { this.stopping.delete(issueIid); });
+      .then(() => {
+        this.stopping.delete(issueIid);
+      });
     this.stopping.set(issueIid, done);
   }
 
@@ -219,7 +290,10 @@ export class DevServerManager {
     const set = this.servers.get(issueIid);
     if (!set) return { running: false };
     return {
-      running: set.ready && set.backend.nodeChildProcess.exitCode===null && set.frontend.nodeChildProcess.exitCode===null,
+      running:
+        set.ready &&
+        set.backend.nodeChildProcess.exitCode === null &&
+        set.frontend.nodeChildProcess.exitCode === null,
       ports: set.ports,
       startedAt: set.startedAt,
     };

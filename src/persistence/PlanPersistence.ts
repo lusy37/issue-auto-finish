@@ -23,7 +23,12 @@ export class PlanPersistence {
   private workDir: string;
   private issueIid: number;
 
-  constructor(workDir: string, issueIid: number, private readonly dataDir = resolveDataDir(), private readonly tracker?: IssueTracker) {
+  constructor(
+    workDir: string,
+    issueIid: number,
+    private readonly dataDir = resolveDataDir(),
+    private readonly tracker?: IssueTracker,
+  ) {
     this.workDir = workDir;
     this.issueIid = issueIid;
   }
@@ -46,7 +51,13 @@ export class PlanPersistence {
     }
   }
 
-  writeIssueMeta(meta: { id: number; number: number; title: string; labels: string[]; state: string }): void {
+  writeIssueMeta(meta: {
+    id: number;
+    number: number;
+    title: string;
+    labels: string[];
+    state: string;
+  }): void {
     this.ensureDir();
     const filePath = this.artifactPath(ARTIFACTS.issueMeta.filename);
     fs.writeFileSync(filePath, JSON.stringify(meta, null, 2), 'utf-8');
@@ -95,10 +106,16 @@ export class PlanPersistence {
   readFile(filename: string): string | null {
     if (filename === ARTIFACTS.plan.filename && this.tracker) {
       const run = this.tracker.get(this.issueIid)?.run;
-      if (run?.planRevision && run.planDigest) return renderPlan(this.tracker.store.readPlan(this.issueIid, run.planRevision, run.planDigest));
+      if (run?.planRevision && run.planDigest)
+        return renderPlan(
+          this.tracker.store.readPlan(this.issueIid, run.planRevision, run.planDigest),
+        );
       return null;
     }
-    if (filename === ARTIFACTS.reviewFeedback.filename || filename === ARTIFACTS.reviewHistory.filename) {
+    if (
+      filename === ARTIFACTS.reviewFeedback.filename ||
+      filename === ARTIFACTS.reviewHistory.filename
+    ) {
       const history = this.readReviewHistory();
       if (filename === ARTIFACTS.reviewHistory.filename) return JSON.stringify(history, null, 2);
       return history.length ? PlanPersistence.renderReviewHistoryMarkdown(history) : null;
@@ -125,7 +142,8 @@ export class PlanPersistence {
 
   /** 写入 planDir 下指定文件（自动 ensureDir） */
   writeFile(filename: string, content: string): void {
-    if (filename === ARTIFACTS.plan.filename) throw new Error('计划展示副本只读，请生成结构化计划版本');
+    if (filename === ARTIFACTS.plan.filename)
+      throw new Error('计划展示副本只读，请生成结构化计划版本');
     this.ensureDir();
     fs.writeFileSync(this.artifactPath(filename), content, 'utf-8');
   }

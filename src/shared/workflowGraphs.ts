@@ -1,8 +1,20 @@
 import type { TaskDefinition, TaskRun } from './workbench.js';
 
-export interface GraphNode { id: string; label: string; disabled?: boolean }
-export interface GraphEdge { source: string; target: string; conditional?: boolean; disabled?: boolean }
-export interface GraphTopology { nodes: GraphNode[]; edges: GraphEdge[] }
+export interface GraphNode {
+  id: string;
+  label: string;
+  disabled?: boolean;
+}
+export interface GraphEdge {
+  source: string;
+  target: string;
+  conditional?: boolean;
+  disabled?: boolean;
+}
+export interface GraphTopology {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
 export interface IssueGraphs {
   issueNumber: number;
   version: number;

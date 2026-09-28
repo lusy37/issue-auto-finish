@@ -12,13 +12,13 @@ import { getIssueNumber, getTitle } from './IssueRecordHelper.js';
  * 工作台展示使用的任务状态，由当前 Issue 生命周期投影。
  */
 export type UnifiedTaskStatus =
-  | 'idle'          // 尚未开始
-  | 'preparing'     // 准备中（创建分支、安装依赖等）
-  | 'running'       // 执行中
-  | 'waiting'       // 等待外部输入（审核等）
-  | 'merging'       // 合并中
-  | 'completed'     // 完成
-  | 'failed';       // 失败
+  | 'idle' // 尚未开始
+  | 'preparing' // 准备中（创建分支、安装依赖等）
+  | 'running' // 执行中
+  | 'waiting' // 等待外部输入（审核等）
+  | 'merging' // 合并中
+  | 'completed' // 完成
+  | 'failed'; // 失败
 
 /**
  * IssueRecord 投影为工作台列表和详情使用的任务接口。
@@ -105,30 +105,27 @@ export function issueStateCategory(record: IssueRecord): string {
 // ── Adapters ──
 
 /** 将 IssueRecord 投影为 ExecutableTask */
-export function issueToExecutableTask(
-  record: IssueRecord,
-  def: PipelineDef,
-): ExecutableTask {
+export function issueToExecutableTask(record: IssueRecord, def: PipelineDef): ExecutableTask {
   const lifecycle = record.lifecycle;
   const actionState = projectLifecycleAction(lifecycle);
 
   // 阶段进度快照：使用已持久化的进度；尚未初始化进度时由任务状态推导
-  const phaseDefs = def.phases.map(phase => ({ name: phase.name, label: phase.label }));
+  const phaseDefs = def.phases.map((phase) => ({ name: phase.name, label: phase.label }));
   let phaseProgress: ExecutableTask['phaseProgress'];
   if (record.phaseProgress) {
-    phaseProgress = phaseDefs.map(p => ({
+    phaseProgress = phaseDefs.map((p) => ({
       name: p.name,
       label: p.label,
-      status: record.phaseProgress![p.name]?.status ?? 'pending' as const,
+      status: record.phaseProgress![p.name]?.status ?? ('pending' as const),
       startedAt: record.phaseProgress![p.name]?.startedAt,
       completedAt: record.phaseProgress![p.name]?.completedAt,
     }));
   } else {
     const phaseStatusMap = projectLifecyclePhaseStatuses(def, lifecycle);
-    phaseProgress = phaseDefs.map(p => ({
+    phaseProgress = phaseDefs.map((p) => ({
       name: p.name,
       label: p.label,
-      status: phaseStatusMap[p.name] ?? 'pending' as const,
+      status: phaseStatusMap[p.name] ?? ('pending' as const),
     }));
   }
 

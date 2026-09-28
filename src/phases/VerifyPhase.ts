@@ -23,7 +23,14 @@ export class VerifyPhase extends BasePhase {
     const report = this.readVerifyReport();
     const parsed = this.reportParser.parse(report ?? '');
     if (!parsed.valid) {
-      return { kind: 'failed', sessionId: intent.sessionId, error: { message: '验证报告缺少本次 Lint、Build 或 Test 的明确结果，请人工检查执行环境', retryable: 'hard-no-auto' } };
+      return {
+        kind: 'failed',
+        sessionId: intent.sessionId,
+        error: {
+          message: '验证报告缺少本次 Lint、Build 或 Test 的明确结果，请人工检查执行环境',
+          retryable: 'hard-no-auto',
+        },
+      };
     }
 
     this.logger.info('Verify report parsed', {
@@ -77,5 +84,4 @@ export class VerifyPhase extends BasePhase {
     if (files.length === 0) return null;
     return this.plan.readFile(files[0].filename);
   }
-
 }

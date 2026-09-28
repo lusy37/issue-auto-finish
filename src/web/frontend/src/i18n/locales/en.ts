@@ -132,7 +132,8 @@ export const en: Record<string, string> = {
   'detail.scenarioNodeCoverage': 'Node Coverage',
   'detail.scenarioRuleColumnCoverage': 'Rule Column Coverage',
   'detail.e2eNoRuns': 'No E2E test artifacts yet',
-  'detail.e2eNoRunsHint': 'Screenshots and video recordings will appear here after E2E tests are run',
+  'detail.e2eNoRunsHint':
+    'Screenshots and video recordings will appear here after E2E tests are run',
   'detail.loading': 'Loading...',
   'detail.mrLabel': 'Merge Request:',
   'detail.linkedMrLabel': 'Linked Repo Merge Requests:',
@@ -179,7 +180,8 @@ export const en: Record<string, string> = {
 
   // Review gate panel
   'review.title': 'Plan Review',
-  'review.description': 'AI has completed the planning phase. Please review the implementation plan before proceeding.',
+  'review.description':
+    'AI has completed the planning phase. Please review the implementation plan before proceeding.',
   'review.currentRound': '(Currently round {round})',
   'review.history': 'Review History',
   'review.roundLabel': 'Round {n}',
@@ -197,9 +199,12 @@ export const en: Record<string, string> = {
   'review.notStarted': 'Review Not Started',
   'review.notStartedHint': 'The review gate will be available after the planning phase completes.',
   'review.replanning': 'Re-planning Based on Feedback',
-  'review.replanningHint': 'AI is revising the implementation plan based on review feedback. It will enter review again once done.',
+  'review.replanningHint':
+    'AI is revising the implementation plan based on review feedback. ' +
+    'It will enter review again once done.',
   'review.planPreview': 'Plan Awaiting Review',
-  'review.planPreviewEmpty': 'No plan content available (it may not be generated yet or has been cleaned up).',
+  'review.planPreviewEmpty':
+    'No plan content available (it may not be generated yet or has been cleaned up).',
   'review.expand': 'Expand',
   'review.collapse': 'Collapse',
   'review.noHistoryFirstRound': 'No previous feedback yet.',
@@ -207,7 +212,8 @@ export const en: Record<string, string> = {
   'review.improvementsEmpty': 'No previous version to compare (first round or not committed).',
   'review.improvementsExpand': 'Expand',
   'review.improvementsCollapse': 'Collapse',
-  'review.improvementsRegenerating': 'New plan is being generated. The comparison will be shown once it completes.',
+  'review.improvementsRegenerating':
+    'New plan is being generated. The comparison will be shown once it completes.',
 
   // Supplement editor
   'supplement.title': 'Supplement Info',
@@ -303,7 +309,9 @@ export const en: Record<string, string> = {
   'confirm.start': 'Start processing Issue #{number}?',
   'confirm.retry': 'Retry Issue #{number}?',
   'confirm.cancel': 'Untrack Issue #{number}?',
-  'confirm.restart': 'Clean and restart Issue #{number}?\nThis will delete the worktree, branch, and reset the issue to pending.',
+  'confirm.restart':
+    'Clean and restart Issue #{number}?\n' +
+    'This will delete the worktree, branch, and reset the issue to pending.',
   'confirm.retryFromPhase': 'Retry Issue #{number} from "{phaseLabel}" phase?',
   'confirm.approve': 'Approve the implementation plan for Issue #{number}?',
   'confirm.reject.noFeedback': 'Please enter review feedback',
@@ -317,9 +325,13 @@ export const en: Record<string, string> = {
   'alert.rejectFailed': 'Rejection failed: ',
   'alert.skipFailed': 'Skip failed: ',
   'alert.startFailed': 'Start failed: ',
-  'confirm.abort': 'Abort the current phase of Issue #{number}?\nYou can continue or redo the phase later.',
-  'confirm.continue': 'Continue executing Issue #{number}?\nWill attempt to resume from the abort point.',
-  'confirm.redo': 'Redo the current phase of Issue #{number}?\nThis will clear the phase session and start fresh.',
+  'confirm.abort':
+    'Abort the current phase of Issue #{number}?\nYou can continue or redo the phase later.',
+  'confirm.continue':
+    'Continue executing Issue #{number}?\nWill attempt to resume from the abort point.',
+  'confirm.redo':
+    'Redo the current phase of Issue #{number}?\n' +
+    'This will clear the phase session and start fresh.',
   'alert.abortFailed': 'Abort failed: ',
   'alert.continueFailed': 'Continue failed: ',
   'alert.redoFailed': 'Redo failed: ',

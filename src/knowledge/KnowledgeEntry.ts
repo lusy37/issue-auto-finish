@@ -1,8 +1,9 @@
 export type KnowledgeEntryType =
-  | 'project-meta' | 'custom'
-  | 'diary'        // Layer 1: 原始 Issue 经验日记
-  | 'memory'       // Layer 2: 蒸馏后的模式记忆
-  | 'agent-rule';  // Layer 3: 可执行的 Agent 规则
+  | 'project-meta'
+  | 'custom'
+  | 'diary' // Layer 1: 原始 Issue 经验日记
+  | 'memory' // Layer 2: 蒸馏后的模式记忆
+  | 'agent-rule'; // Layer 3: 可执行的 Agent 规则
 
 export interface KnowledgeEntrySource {
   url?: string;

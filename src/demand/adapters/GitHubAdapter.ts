@@ -1,6 +1,6 @@
-import type { GitHubIssue } from "../../clients/GitHubClient.js";
-import type { DemandSpec } from "../DemandSpec.js";
-import type { SupplementInfo } from "../../supplement/SupplementStore.js";
+import type { GitHubIssue } from '../../clients/GitHubClient.js';
+import type { DemandSpec } from '../DemandSpec.js';
+import type { SupplementInfo } from '../../supplement/SupplementStore.js';
 
 /**
  * 将GitHub Issue 转换为 DemandSpec 值对象。
@@ -15,22 +15,21 @@ export function githubIssueToDemandSpec(
   return {
     demandId: `gh-${issue.number}`,
     sourceRef: {
-      source: "github-issue",
+      source: 'github-issue',
       externalId: String(issue.number),
       displayId: String(issue.number),
     },
     title: issue.title,
-    description: issue.description ?? "",
+    description: issue.description ?? '',
     supplement: supplement ? mapSupplement(supplement) : undefined,
     createdAt: issue.created_at ?? new Date().toISOString(),
   };
 }
 
-function mapSupplement(s: SupplementInfo): DemandSpec["supplement"] {
+function mapSupplement(s: SupplementInfo): DemandSpec['supplement'] {
   const result: Record<string, string | undefined> = {};
   if (s.requirements?.trim()) result.requirements = s.requirements.trim();
-  if (s.acceptanceCriteria?.trim())
-    result.acceptanceCriteria = s.acceptanceCriteria.trim();
+  if (s.acceptanceCriteria?.trim()) result.acceptanceCriteria = s.acceptanceCriteria.trim();
   if (s.scope?.trim()) result.scope = s.scope.trim();
   if (s.constraints?.trim()) result.constraints = s.constraints.trim();
   if (s.references?.trim()) result.references = s.references.trim();

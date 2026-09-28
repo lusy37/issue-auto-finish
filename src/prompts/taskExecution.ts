@@ -13,6 +13,10 @@ export function integrationRepairPrompt(plan: TaskPlan, report: string, rules = 
   return `${rules}\n按已批准的计划修复集成代码。不要重跑任务图，不要推送或创建 PR。\n计划：${JSON.stringify(plan)}\n本轮验证失败报告：${report}`;
 }
 
-export function uatPreparationPrompt(demand: DemandSpec, plan: TaskPlan, configFile: string): string {
+export function uatPreparationPrompt(
+  demand: DemandSpec,
+  plan: TaskPlan,
+  configFile: string,
+): string {
   return `为批准的需求补充 Playwright Chromium 验收测试和配置 ${configFile}。使用 process.env.UAT_BASE_URL 读取预览地址。不要运行验收，不写验收结论，不推送。需求：${JSON.stringify(demand)}\n批准计划与验收要求：${JSON.stringify(plan)}`;
 }

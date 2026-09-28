@@ -1,6 +1,13 @@
 import { getPhaseArtifacts } from '../../../../shared/runtime/artifacts.js';
 import { computed, ref, type Ref } from 'vue';
-import type { IssueLifecycle, IssueRecord, PipelineMode, PhaseStatus, PlanFileSpec, PipelineMeta } from '@/types';
+import type {
+  IssueLifecycle,
+  IssueRecord,
+  PipelineMode,
+  PhaseStatus,
+  PlanFileSpec,
+  PipelineMeta,
+} from '@/types';
 import { fetchPipelineMeta } from '@/api/client';
 import { t } from '@/i18n/index';
 
@@ -24,24 +31,38 @@ export async function loadPipelineMeta(): Promise<void> {
   if (meta.value) return;
   if (loadPromise) return loadPromise;
   loadPromise = fetchPipelineMeta()
-    .then(data => { meta.value = data; })
-    .catch(err => { console.warn('Failed to load pipeline meta, using fallback', err); })
-    .finally(() => { loadPromise = null; });
+    .then((data) => {
+      meta.value = data;
+    })
+    .catch((err) => {
+      console.warn('Failed to load pipeline meta, using fallback', err);
+    })
+    .finally(() => {
+      loadPromise = null;
+    });
   return loadPromise;
 }
 
 function lifecycleCategory(lifecycle: IssueLifecycle): string {
   switch (lifecycle.kind) {
-    case 'pending': return 'idle';
+    case 'pending':
+      return 'idle';
     case 'skipped':
-    case 'cancelled': return 'skipped';
+    case 'cancelled':
+      return 'skipped';
     case 'ready':
-    case 'delivering': return 'ready';
-    case 'running': return 'running';
-    case 'waiting': return 'waiting';
-    case 'paused': return 'paused';
-    case 'failed': return 'failed';
-    case 'completed': return 'done';
+    case 'delivering':
+      return 'ready';
+    case 'running':
+      return 'running';
+    case 'waiting':
+      return 'waiting';
+    case 'paused':
+      return 'paused';
+    case 'failed':
+      return 'failed';
+    case 'completed':
+      return 'done';
   }
 }
 
@@ -50,19 +71,29 @@ export function usePipeline() {
 
   const phaseNames = computed(() => {
     const mode = pipelineMode.value;
-    return meta.value?.modes[mode]?.phases.map(p => p.name) ?? [...FALLBACK_PLAN_MODE_PHASES];
+    return meta.value?.modes[mode]?.phases.map((p) => p.name) ?? [...FALLBACK_PLAN_MODE_PHASES];
   });
 
   function getPlanDocs(issue?: IssueRecord | null): PlanFileSpec[] {
     if (issue?.planDocs) return issue.planDocs;
     const mode = issue?.pipelineMode ?? pipelineMode.value;
-    if (issue?.run?.workflow.definition) return issue.run.workflow.definition.phaseIds.flatMap(getPhaseArtifacts).map(artifact => ({ file: artifact.filename, label: t(`planFile.${artifact.filename}`) }));
+    if (issue?.run?.workflow.definition)
+      return issue.run.workflow.definition.phaseIds.flatMap(getPhaseArtifacts).map((artifact) => ({
+        file: artifact.filename,
+        label: t(`planFile.${artifact.filename}`),
+      }));
     if (meta.value?.modes[mode]) {
-      return meta.value.modes[mode].artifacts.map(a => ({ file: a.filename, label: a.label }));
+      return meta.value.modes[mode].artifacts.map((a) => ({ file: a.filename, label: a.label }));
     }
-    const phases = issue?.run?.workflow.definition?.phaseIds ?? ['plan', 'review', 'build', 'verify'];
-    return phases.flatMap(getPhaseArtifacts).map(artifact => ({
-      file: artifact.filename, label: t(`planFile.${artifact.filename}`),
+    const phases = issue?.run?.workflow.definition?.phaseIds ?? [
+      'plan',
+      'review',
+      'build',
+      'verify',
+    ];
+    return phases.flatMap(getPhaseArtifacts).map((artifact) => ({
+      file: artifact.filename,
+      label: t(`planFile.${artifact.filename}`),
     }));
   }
 
@@ -70,12 +101,12 @@ export function usePipeline() {
     if (issue?.run?.workflow.definition) return [...issue.run.workflow.definition.phaseIds];
     if (issue?.phaseProgress) return Object.keys(issue.phaseProgress);
     const mode = issue?.pipelineMode ?? pipelineMode.value;
-    return meta.value?.modes[mode]?.phases.map(p => p.name) ?? [...FALLBACK_PLAN_MODE_PHASES];
+    return meta.value?.modes[mode]?.phases.map((p) => p.name) ?? [...FALLBACK_PLAN_MODE_PHASES];
   }
 
   function phaseLabel(phase: string): string {
     for (const modeMeta of Object.values(meta.value?.modes ?? {})) {
-      const found = modeMeta.phases.find(item => item.name === phase);
+      const found = modeMeta.phases.find((item) => item.name === phase);
       if (found) return found.label;
     }
     return t(`phase.${phase}`) || phase;
@@ -88,14 +119,22 @@ export function usePipeline() {
       if (lifecycle.kind === 'waiting') return t('state.phaseWaiting', { label });
     }
     switch (lifecycle.kind) {
-      case 'pending': return t('state.pending');
-      case 'skipped': return t('state.skipped');
-      case 'ready': return t('state.ready');
-      case 'paused': return t('state.paused');
-      case 'failed': return t('state.failed');
-      case 'delivering': return t('state.delivering');
-      case 'completed': return t('state.completed');
-      case 'cancelled': return t('state.cancelled');
+      case 'pending':
+        return t('state.pending');
+      case 'skipped':
+        return t('state.skipped');
+      case 'ready':
+        return t('state.ready');
+      case 'paused':
+        return t('state.paused');
+      case 'failed':
+        return t('state.failed');
+      case 'delivering':
+        return t('state.delivering');
+      case 'completed':
+        return t('state.completed');
+      case 'cancelled':
+        return t('state.cancelled');
     }
   }
 
@@ -149,14 +188,17 @@ export function usePipeline() {
 
   function isEditableDoc(filename: string): boolean {
     if (meta.value) {
-      return Object.values(meta.value.modes).some(
-        mode => mode.artifacts.some(artifact => artifact.filename === filename && artifact.editable),
+      return Object.values(meta.value.modes).some((mode) =>
+        mode.artifacts.some((artifact) => artifact.filename === filename && artifact.editable),
       );
     }
     return false;
   }
 
-  function issueUrl(number: number, systemStatus: Ref<{ config: { githubBaseUrl: string; repository: string } } | null>): string {
+  function issueUrl(
+    number: number,
+    systemStatus: Ref<{ config: { githubBaseUrl: string; repository: string } } | null>,
+  ): string {
     if (!systemStatus.value) return '#';
     const { githubBaseUrl, repository } = systemStatus.value.config;
     return `${githubBaseUrl}/${repository}/issues/${number}`;

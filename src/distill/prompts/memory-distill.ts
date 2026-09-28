@@ -7,49 +7,54 @@ export function buildMemoryDistillPrompt(
   diaries: DiaryEntry[],
   existingMemories: MemoryEntry[],
 ): string {
-  const diarySection = diaries.map((d, i) => {
-    const lines = [
-      `### 日记 ${i + 1} (ID: ${d.id})`,
-      `- Issue: #${d.issueIid} — ${d.issueTitle}`,
-      `- 结果: ${d.outcome}`,
-      `- 流水线: ${d.pipelineMode}`,
-      `- 总耗时: ${Math.round(d.timing.totalDurationMs / 1000 / 60)}分钟`,
-    ];
-    if (d.timing.phaseTimings.length > 0) {
-      lines.push('- 各阶段耗时:');
-      for (const pt of d.timing.phaseTimings) {
-        lines.push(`  - ${pt.phase}: ${Math.round(pt.durationMs / 1000 / 60)}分钟`);
+  const diarySection = diaries
+    .map((d, i) => {
+      const lines = [
+        `### 日记 ${i + 1} (ID: ${d.id})`,
+        `- Issue: #${d.issueIid} — ${d.issueTitle}`,
+        `- 结果: ${d.outcome}`,
+        `- 流水线: ${d.pipelineMode}`,
+        `- 总耗时: ${Math.round(d.timing.totalDurationMs / 1000 / 60)}分钟`,
+      ];
+      if (d.timing.phaseTimings.length > 0) {
+        lines.push('- 各阶段耗时:');
+        for (const pt of d.timing.phaseTimings) {
+          lines.push(`  - ${pt.phase}: ${Math.round(pt.durationMs / 1000 / 60)}分钟`);
+        }
       }
-    }
-    if (d.failure) {
-      lines.push(`- 失败阶段: ${d.failure.failedAtPhase}`);
-      lines.push(`- 失败原因: ${d.failure.error}`);
-      lines.push(`- 尝试次数: ${d.failure.attempts}`);
-    }
-    if (d.humanInterventions.length > 0) {
-      lines.push('- 人工介入:');
-      for (const h of d.humanInterventions) {
-        lines.push(`  - ${h.type}: ${h.detail}`);
+      if (d.failure) {
+        lines.push(`- 失败阶段: ${d.failure.failedAtPhase}`);
+        lines.push(`- 失败原因: ${d.failure.error}`);
+        lines.push(`- 尝试次数: ${d.failure.attempts}`);
       }
-    }
-    if (d.artifactSummary) {
-      lines.push(`- 产物摘要: ${d.artifactSummary}`);
-    }
-    return lines.join('\n');
-  }).join('\n\n');
+      if (d.humanInterventions.length > 0) {
+        lines.push('- 人工介入:');
+        for (const h of d.humanInterventions) {
+          lines.push(`  - ${h.type}: ${h.detail}`);
+        }
+      }
+      if (d.artifactSummary) {
+        lines.push(`- 产物摘要: ${d.artifactSummary}`);
+      }
+      return lines.join('\n');
+    })
+    .join('\n\n');
 
-  const memorySection = existingMemories.length > 0
-    ? existingMemories.map((m, i) => {
-        return [
-          `### 现有记忆 ${i + 1} (ID: ${m.id})`,
-          `- 主题: ${m.theme}`,
-          `- 标题: ${m.title}`,
-          `- 信心度: ${m.confidence}`,
-          `- 证据数: ${m.evidence.length}`,
-          `- 内容摘要: ${m.content.slice(0, 200)}${m.content.length > 200 ? '...' : ''}`,
-        ].join('\n');
-      }).join('\n\n')
-    : '（暂无现有记忆）';
+  const memorySection =
+    existingMemories.length > 0
+      ? existingMemories
+          .map((m, i) => {
+            return [
+              `### 现有记忆 ${i + 1} (ID: ${m.id})`,
+              `- 主题: ${m.theme}`,
+              `- 标题: ${m.title}`,
+              `- 信心度: ${m.confidence}`,
+              `- 证据数: ${m.evidence.length}`,
+              `- 内容摘要: ${m.content.slice(0, 200)}${m.content.length > 200 ? '...' : ''}`,
+            ].join('\n');
+          })
+          .join('\n\n')
+      : '（暂无现有记忆）';
 
   return `你是经验分析专家。请分析以下 Issue 执行日记，识别共性模式，并输出结构化的操作指令。
 

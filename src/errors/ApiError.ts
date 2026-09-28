@@ -1,5 +1,5 @@
 import { GITHUB_MAX_AUTO_WAIT_MS } from './GitHubPolicy.js';
-import { AppError } from "./BaseError.js";
+import { AppError } from './BaseError.js';
 
 export class GitHubApiError extends AppError {
   public readonly statusCode: number;
@@ -12,7 +12,7 @@ export class GitHubApiError extends AppError {
     private readonly rateLimited = false,
     public readonly retryAfterMs?: number,
   ) {
-    super("GITHUB_API_ERROR", message);
+    super('GITHUB_API_ERROR', message);
     this.statusCode = statusCode;
     this.responseBody = responseBody;
   }

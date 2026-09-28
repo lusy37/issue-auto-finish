@@ -90,7 +90,7 @@ export class IssuePoller {
       clearInterval(this.driveTimer);
       this.driveTimer = null;
     }
-    logger.info('Issue poller stopped', { });
+    logger.info('Issue poller stopped', {});
   }
 
   getActiveIssueIids(): number[] {
@@ -141,7 +141,9 @@ export class IssuePoller {
       // listIssues + 过滤成功才算「首次发现完成」：存量 issue 已被看到，标志可安全消耗。
       // 必须在用 isFirstDiscovery 计算 initialState 之后再置位。
       // 关键：若本轮抛错（如 429），标志保留，确保后续首个成功发现仍把存量 issue 标记为 skipped。
-      const initialLifecycle: IssueLifecycle = this.isFirstDiscovery ? { kind: 'skipped' } : { kind: 'pending' };
+      const initialLifecycle: IssueLifecycle = this.isFirstDiscovery
+        ? { kind: 'skipped' }
+        : { kind: 'pending' };
       if (this.isFirstDiscovery) {
         this.isFirstDiscovery = false;
         logger.info('First discovery completed — pre-existing issues marked as skipped');
@@ -152,7 +154,10 @@ export class IssuePoller {
         return;
       }
 
-      logger.info('Discovered new issues', { count: newIssues.length, initialLifecycle: initialLifecycle.kind });
+      logger.info('Discovered new issues', {
+        count: newIssues.length,
+        initialLifecycle: initialLifecycle.kind,
+      });
       for (const issue of newIssues) {
         /** 创建新的 issue 记录 */
         this.tracker.create({
@@ -239,12 +244,10 @@ export class IssuePoller {
     if (now - this.lastAutoApproveCheckMs < AUTO_APPROVE_CHECK_INTERVAL_MS) return;
     this.lastAutoApproveCheckMs = now;
 
-    const waiting = this.tracker
-      .getAll()
-      .filter((r) => {
-        const lifecycle = r.lifecycle;
-        return lifecycle.kind === 'waiting' && lifecycle.phase === 'review';
-      });
+    const waiting = this.tracker.getAll().filter((r) => {
+      const lifecycle = r.lifecycle;
+      return lifecycle.kind === 'waiting' && lifecycle.phase === 'review';
+    });
     if (!waiting.length) return;
 
     this.autoApproveByLabels(waiting, autoLabels).catch((err) => {
@@ -252,13 +255,9 @@ export class IssuePoller {
     });
   }
 
-  private async autoApproveByLabels(
-    records: IssueRecord[],
-    autoLabels: string[],
-  ): Promise<void> {
+  private async autoApproveByLabels(records: IssueRecord[], autoLabels: string[]): Promise<void> {
     for (const record of records) {
       try {
-
         // 标签自动审核只作用于 review 阶段。
         const lifecycle = record.lifecycle;
         if (lifecycle.kind !== 'waiting' || lifecycle.phase !== 'review') {
@@ -276,14 +275,20 @@ export class IssuePoller {
         });
 
         // 统一更新编排状态、阶段进度与历史，并发出 review:approved 事件
-        await this.orchestrator.applyGateAction(number, { action: 'approve', source: 'label' }, record.run.planRevision);
+        await this.orchestrator.applyGateAction(
+          number,
+          { action: 'approve', source: 'label' },
+          record.run.planRevision,
+        );
 
         try {
           await this.github.createIssueNote(
             getIssueNumber(record),
             t('poller.autoApproveComment', { labels: matched.join(', ') }),
           );
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       } catch (err) {
         logger.warn('Failed to check auto-approve labels', {
           number: getIssueNumber(record),
@@ -322,7 +327,9 @@ export class IssuePoller {
     }
   }
 
-  private async filterNewIssues(issues: GitHubIssue[]): Promise<GitHubIssue[]> { return issues.filter(issue => this.passesBasicFilter(issue)); }
+  private async filterNewIssues(issues: GitHubIssue[]): Promise<GitHubIssue[]> {
+    return issues.filter((issue) => this.passesBasicFilter(issue));
+  }
 
   private passesBasicFilter(issue: GitHubIssue): boolean {
     if (!issue.labels.includes(AUTO_FINISH_LABEL)) return false;

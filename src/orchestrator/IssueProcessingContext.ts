@@ -73,7 +73,10 @@ export interface AIDeps {
 
 /** 预览服务器依赖 — Workflow / Delivery / Failure */
 export interface PreviewDeps {
-  startPreviewServers(wtCtx: WorktreeContext, issue: GitHubIssue): Promise<import('../preview/PortAllocator.js').PortPair | null>;
+  startPreviewServers(
+    wtCtx: WorktreeContext,
+    issue: GitHubIssue,
+  ): Promise<import('../preview/PortAllocator.js').PortPair | null>;
   stopPreviewServers(issueIid: number): Promise<void>;
   buildPreviewUrl(issueIid: number): string | null;
   getPortsForIssue(issueIid: number): import('../preview/PortAllocator.js').PortPair | undefined;
@@ -93,8 +96,7 @@ export interface PolicyDeps {
  * 由 IssueService 一次性构建，步骤函数按需取用。
  * 按域拆分为 CoreDeps / GitDeps / AIDeps / PreviewDeps / PolicyDeps。
  */
-export interface OrchestratorDeps
-  extends CoreDeps, GitDeps, AIDeps, PreviewDeps, PolicyDeps {
+export interface OrchestratorDeps extends CoreDeps, GitDeps, AIDeps, PreviewDeps, PolicyDeps {
   portAllocator: PortAllocator;
   devServerManager: DevServerManager;
 }

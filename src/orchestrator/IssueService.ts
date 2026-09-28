@@ -20,7 +20,13 @@ import { isNoteSyncEnabledForIssue } from '../notesync/NoteSyncSettings.js';
 import type { WorktreeContext } from '../git/WorktreeContext.js';
 import { getLocalIP } from '../utils/network.js';
 import type { PhaseContext } from '../phases/BasePhase.js';
-import { resolvePipelineMode, getPipelineDef, buildPlanModePipeline, registerPipeline, PipelineDef } from '../pipeline/PipelineMetadata.js';
+import {
+  resolvePipelineMode,
+  getPipelineDef,
+  buildPlanModePipeline,
+  registerPipeline,
+  PipelineDef,
+} from '../pipeline/PipelineMetadata.js';
 import { isRetryablePhase } from '../pipeline/PipelineProjection.js';
 import { SupplementStore } from '../supplement/SupplementStore.js';
 import { githubIssueToDemandSpec } from '../demand/adapters/GitHubAdapter.js';
@@ -44,8 +50,6 @@ import { executeSetup } from './steps/SetupStep.js';
 import { runWorkflow } from './steps/RunWorkflowStep.js';
 import { handleFailure } from './steps/FailureHandler.js';
 
-
-
 export interface WorktreeStatus {
   /** worktree 根目录是否存在（false = 已被回收 / 手动删除）。 */
   exists: boolean;
@@ -55,7 +59,6 @@ export interface WorktreeStatus {
   path?: string;
   /** 当前单仓工作台的持久化与执行上下文。 */
 }
-
 
 const logger = rootLogger.child('IssueService');
 
@@ -74,8 +77,9 @@ export class IssueService {
   private workspaceManager: WorkspaceManager;
   private readonly effectiveWorktreeBaseDir: string;
 
-
-  cancelUat(issueIid?: number): void { cancelUat(issueIid); }
+  cancelUat(issueIid?: number): void {
+    cancelUat(issueIid);
+  }
 
   getAIRunner(): AIRunner {
     return this.aiRunner;
@@ -107,10 +111,13 @@ export class IssueService {
     this.mainGitMutex = mainGitMutex ?? new AsyncMutex();
     this.eventBus = eventBusInstance ?? defaultEventBus;
 
-    const mode = resolvePipelineMode(config.pipeline?.mode === 'auto' ? undefined : config.pipeline?.mode);
-    this.pipelineDef = mode === 'plan-mode'
-      ? buildPlanModePipeline({ e2eEnabled: config.e2e.enabled })
-      : getPipelineDef(mode);
+    const mode = resolvePipelineMode(
+      config.pipeline?.mode === 'auto' ? undefined : config.pipeline?.mode,
+    );
+    this.pipelineDef =
+      mode === 'plan-mode'
+        ? buildPlanModePipeline({ e2eEnabled: config.e2e.enabled })
+        : getPipelineDef(mode);
     registerPipeline(this.pipelineDef);
     logger.info('Pipeline mode resolved', { mode: this.pipelineDef.mode, aiMode: config.ai.mode });
 
@@ -125,19 +132,54 @@ export class IssueService {
       frontendReadyUrl: config.preview.frontendReadyUrl,
       onProcessStarted: (number, pid, workDir) => {
         const callId = randomUUID();
-        this.tracker.transaction(number, record => {
+        this.tracker.transaction(number, (record) => {
           const run = record.run!;
           if (run.stopIntent) throw new Error('已停止的 Issue 不能启动预览');
-          run.calls[callId] = { identity: { issueNumber: number, planRevision: run.planRevision, buildGeneration: run.buildGeneration, dispatchId: run.dispatchId ?? 'preview', taskId: '$preview', attemptNo: 1, callId }, pid, workDir, status: 'running', startedAt: new Date().toISOString() };
+          run.calls[callId] = {
+            identity: {
+              issueNumber: number,
+              planRevision: run.planRevision,
+              buildGeneration: run.buildGeneration,
+              dispatchId: run.dispatchId ?? 'preview',
+              taskId: '$preview',
+              attemptNo: 1,
+              callId,
+            },
+            pid,
+            workDir,
+            status: 'running',
+            startedAt: new Date().toISOString(),
+          };
         });
         return callId;
       },
-      onProcessExited: (number, callId) => this.tracker.transaction(number, record => { const call = record.run!.calls[callId]; if (call) { call.status = 'exited'; call.exitedAt = new Date().toISOString(); } }),
-      backendCommand: config.preview.backendCommand ? (()=>{const [bin,...args]=splitCommand(config.preview.backendCommand);return {bin,args};})() : undefined, frontendCommand: config.preview.frontendCommand ? (()=>{const [bin,...args]=splitCommand(config.preview.frontendCommand);return {bin,args};})() : undefined, frontendDir: config.preview.frontendDir});
+      onProcessExited: (number, callId) =>
+        this.tracker.transaction(number, (record) => {
+          const call = record.run!.calls[callId];
+          if (call) {
+            call.status = 'exited';
+            call.exitedAt = new Date().toISOString();
+          }
+        }),
+      backendCommand: config.preview.backendCommand
+        ? (() => {
+            const [bin, ...args] = splitCommand(config.preview.backendCommand);
+            return { bin, args };
+          })()
+        : undefined,
+      frontendCommand: config.preview.frontendCommand
+        ? (() => {
+            const [bin, ...args] = splitCommand(config.preview.frontendCommand);
+            return { bin, args };
+          })()
+        : undefined,
+      frontendDir: config.preview.frontendDir,
+    });
 
     this.effectiveWorktreeBaseDir = config.project.worktreeBaseDir;
 
-    const effectiveWsConfig = wsConfig ?? buildSingleRepoWorkspace(config.project, config.github.repository);
+    const effectiveWsConfig =
+      wsConfig ?? buildSingleRepoWorkspace(config.project, config.github.repository);
     this.workspaceManager = new WorkspaceManager({
       wsConfig: effectiveWsConfig,
       worktreeBaseDir: this.effectiveWorktreeBaseDir,
@@ -145,22 +187,33 @@ export class IssueService {
     });
     logger.info('WorkspaceManager initialized', {
       primary: effectiveWsConfig.primary.name,
-
     });
 
     this.restorePortAllocations();
   }
 
-  getPortAllocator(): PortAllocator { return this.portAllocator; }
-  getDevServerManager(): DevServerManager { return this.devServerManager; }
-  getMainGitMutex(): AsyncMutex { return this.mainGitMutex; }
-  getTracker(): IssueTracker { return this.tracker; }
+  getPortAllocator(): PortAllocator {
+    return this.portAllocator;
+  }
+  getDevServerManager(): DevServerManager {
+    return this.devServerManager;
+  }
+  getMainGitMutex(): AsyncMutex {
+    return this.mainGitMutex;
+  }
+  getTracker(): IssueTracker {
+    return this.tracker;
+  }
 
   /** 仅检查登记目录；变基恢复、锁文件核对都归所属 Issue 的恢复协议处理。 */
   async cleanupStaleState(): Promise<void> {
     for (const record of this.tracker.getAll()) {
-      const directory = this.computeWorktreeContext(getIssueNumber(record), record.branchName).gitRootDir;
-      if (fsSync.existsSync(directory) && !fsSync.existsSync(path.join(directory, '.git'))) logger.warn('工作目录缺少 Git 登记，请人工核对', { directory });
+      const directory = this.computeWorktreeContext(
+        getIssueNumber(record),
+        record.branchName,
+      ).gitRootDir;
+      if (fsSync.existsSync(directory) && !fsSync.existsSync(path.join(directory, '.git')))
+        logger.warn('工作目录缺少 Git 登记，请人工核对', { directory });
     }
   }
 
@@ -175,8 +228,11 @@ export class IssueService {
     for (const record of this.tracker.getAll()) {
       if (record.ports) {
         const number = getIssueNumber(record);
-        logger.info('Clearing stale port allocation after restart', { number, ports: record.ports });
-        this.tracker.transaction(number, current => {
+        logger.info('Clearing stale port allocation after restart', {
+          number,
+          ports: record.ports,
+        });
+        this.tracker.transaction(number, (current) => {
           current.ports = undefined;
           current.previewStartedAt = undefined;
         });
@@ -188,32 +244,55 @@ export class IssueService {
     return this.pipelineDef;
   }
 
-
   async applyGateAction(number: number, action: GateAction, planRevision?: number): Promise<void> {
     await this.executions.get(number);
     const record = this.tracker.get(number);
     if (!record) throw new IssueNotFoundError(number);
-    if (planRevision === undefined || planRevision !== record.run!.planRevision) throw new GateActionError('审核计划版本已过期，请刷新页面', 'invalid-state');
-    if (action.action === 'supplement') throw new GateActionError('请通过补充需求入口更新计划', 'invalid-state');
+    if (planRevision === undefined || planRevision !== record.run!.planRevision)
+      throw new GateActionError('审核计划版本已过期，请刷新页面', 'invalid-state');
+    if (action.action === 'supplement')
+      throw new GateActionError('请通过补充需求入口更新计划', 'invalid-state');
     const workflow = new IssueWorkflow({
-      tracker: this.tracker, number, events: this.eventBus,
-      maxRetries: this.config.poll.maxRetries, maxRepairs: this.config.verifyFixLoop.maxIterations,
-      context: { issueIid: number, demand: record.demandSpec!, branchName: record.branchName, workDir: this.computeWorktreeContext(number, record.branchName).workDir, pipelineMode: 'plan-mode' },
-      runner: { run: async () => { throw new Error('审核请求不能执行开发阶段'); } },
+      tracker: this.tracker,
+      number,
+      events: this.eventBus,
+      maxRetries: this.config.poll.maxRetries,
+      maxRepairs: this.config.verifyFixLoop.maxIterations,
+      context: {
+        issueIid: number,
+        demand: record.demandSpec!,
+        branchName: record.branchName,
+        workDir: this.computeWorktreeContext(number, record.branchName).workDir,
+        pipelineMode: 'plan-mode',
+      },
+      runner: {
+        run: async () => {
+          throw new Error('审核请求不能执行开发阶段');
+        },
+      },
     });
     try {
       await workflow.resumeReview({ ...action, planRevision });
     } catch (error) {
-      if (error instanceof ReviewConflictError) throw new GateActionError(error.message, 'invalid-state');
+      if (error instanceof ReviewConflictError)
+        throw new GateActionError(error.message, 'invalid-state');
       throw error;
     }
     if (action.action === 'reject') {
       const current = this.tracker.get(number)!;
-      await this.syncRejectFeedbackToIssue(current, number, action.feedback, current.run!.reviewHistory?.length ?? 1);
+      await this.syncRejectFeedbackToIssue(
+        current,
+        number,
+        action.feedback,
+        current.run!.reviewHistory?.length ?? 1,
+      );
     }
 
     logger.info('Gate action applied', {
-      number, phaseId: 'review', action: action.action, planRevision,
+      number,
+      phaseId: 'review',
+      action: action.action,
+      planRevision,
     });
   }
 
@@ -244,7 +323,8 @@ export class IssueService {
       await this.github.createIssueNote(getIssueNumber(record), note);
     } catch (err) {
       logger.warn('Failed to sync reject feedback to issue', {
-        number, error: (err as Error).message,
+        number,
+        error: (err as Error).message,
       });
     }
   }
@@ -255,7 +335,9 @@ export class IssueService {
 
   private computeWorktreeContext(issueIid: number, branchName: string): WorktreeContext {
     const primary = this.workspaceManager.buildPrimaryContext(
-      issueIid, this.config.project.baseBranch, this.config.project.branchPrefix,
+      issueIid,
+      this.config.project.baseBranch,
+      this.config.project.branchPrefix,
     );
     return {
       gitRootDir: primary.gitRootDir,
@@ -277,7 +359,12 @@ export class IssueService {
 
   private async cleanupWorktree(wtCtx: WorktreeContext): Promise<void> {
     const record = this.tracker.get(wtCtx.issueIid);
-    if (this.executions.has(wtCtx.issueIid) || record?.run?.recoveryRequired || Object.values(record?.run?.calls ?? {}).some(call => call.status !== 'exited')) throw new Error('目录仍有执行或恢复引用，不能清理');
+    if (
+      this.executions.has(wtCtx.issueIid) ||
+      record?.run?.recoveryRequired ||
+      Object.values(record?.run?.calls ?? {}).some((call) => call.status !== 'exited')
+    )
+      throw new Error('目录仍有执行或恢复引用，不能清理');
     assertOwnedDirectory(this.config.project.worktreeBaseDir, wtCtx.gitRootDir);
     if (wtCtx.workspace) {
       await this.workspaceManager.cleanupWorkspace(wtCtx.workspace);
@@ -287,31 +374,55 @@ export class IssueService {
       await this.mainGit.worktreeRemove(wtCtx.gitRootDir, true);
       logger.info('Worktree cleaned up', { dir: wtCtx.gitRootDir });
     } catch (err) {
-      logger.warn('Failed to cleanup worktree', { dir: wtCtx.gitRootDir, error: (err as Error).message });
+      logger.warn('Failed to cleanup worktree', {
+        dir: wtCtx.gitRootDir,
+        error: (err as Error).message,
+      });
     }
   }
-private async installDependencies(workDir: string, signal?: AbortSignal, force = false): Promise<void> {
- try { await fs.access(path.join(workDir,'package.json')); } catch { return; }
- if(!force && await this.ensureNodeModules(workDir)) return;
- const knowledge=getProjectKnowledge()??KNOWLEDGE_DEFAULTS;
- const [binary,...args]=splitCommand(knowledge.toolchain.installCommand);
- const result=await runProcess(binary,args,{cwd:workDir,timeoutMs:300000,signal});
- if(result.code!==0) throw new Error('安装项目依赖失败：'+result.stderr.slice(-1000));
-}
-private async ensureNodeModules(workDir: string): Promise<boolean> { try { await fs.access(path.join(workDir, 'node_modules', '.bin')); return true; } catch { return false; } }
+  private async installDependencies(
+    workDir: string,
+    signal?: AbortSignal,
+    force = false,
+  ): Promise<void> {
+    try {
+      await fs.access(path.join(workDir, 'package.json'));
+    } catch {
+      return;
+    }
+    if (!force && (await this.ensureNodeModules(workDir))) return;
+    const knowledge = getProjectKnowledge() ?? KNOWLEDGE_DEFAULTS;
+    const [binary, ...args] = splitCommand(knowledge.toolchain.installCommand);
+    const result = await runProcess(binary, args, { cwd: workDir, timeoutMs: 300000, signal });
+    if (result.code !== 0) throw new Error('安装项目依赖失败：' + result.stderr.slice(-1000));
+  }
+  private async ensureNodeModules(workDir: string): Promise<boolean> {
+    try {
+      await fs.access(path.join(workDir, 'node_modules', '.bin'));
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   private async stopIssue(issueIid: number, kind: 'pause' | 'cancel' | 'redo'): Promise<void> {
-    this.tracker.transaction(issueIid, record => {
+    this.tracker.transaction(issueIid, (record) => {
       record.run!.stopIntent = { kind, requestedAt: new Date().toISOString() };
       const lifecycle = record.lifecycle;
-      const phase = lifecycle.kind === 'running' || lifecycle.kind === 'waiting' || lifecycle.kind === 'paused'
-        ? lifecycle.phase
-        : lifecycle.kind === 'failed' ? lifecycle.phase ?? 'plan' : 'plan';
-      applyIssueLifecycleEvent(record, kind === 'cancel'
-        ? { type: 'cancel-requested' }
-        : kind === 'redo'
-          ? { type: 'full-redo-requested' }
-          : { type: 'pause-requested', phase });
+      const phase =
+        lifecycle.kind === 'running' || lifecycle.kind === 'waiting' || lifecycle.kind === 'paused'
+          ? lifecycle.phase
+          : lifecycle.kind === 'failed'
+            ? (lifecycle.phase ?? 'plan')
+            : 'plan';
+      applyIssueLifecycleEvent(
+        record,
+        kind === 'cancel'
+          ? { type: 'cancel-requested' }
+          : kind === 'redo'
+            ? { type: 'full-redo-requested' }
+            : { type: 'pause-requested', phase },
+      );
     });
     this.controllers.get(issueIid)?.abort();
     cancelUat(issueIid);
@@ -322,29 +433,48 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
 
   private async recoverExecution(issueIid: number): Promise<void> {
     const record = this.tracker.get(issueIid)!;
-    if (record.run!.stopIntent || ['paused', 'cancelled', 'failed'].includes(record.lifecycle.kind)) throw new Error('停止或人工处理状态不自动恢复');
+    if (record.run!.stopIntent || ['paused', 'cancelled', 'failed'].includes(record.lifecycle.kind))
+      throw new Error('停止或人工处理状态不自动恢复');
     for (const call of Object.values(record.run!.calls)) {
       if (call.status === 'exited') continue;
       if (call.pid) {
-        try { process.kill(call.pid, 0); throw new Error(`旧调用进程 ${call.pid} 尚未确认退出，请人工核对`); }
-        catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+        try {
+          process.kill(call.pid, 0);
+          throw new Error(`旧调用进程 ${call.pid} 尚未确认退出，请人工核对`);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+        }
       }
     }
     for (const file of record.run!.temporaryFiles ?? []) {
       assertOwnedDirectory(this.config.project.worktreeBaseDir, file);
-      if (!/^\.iaf-uat-[a-f0-9-]+\.config\.ts$/.test(path.basename(file))) throw new Error('临时文件登记无效，请人工核对');
+      if (!/^\.iaf-uat-[a-f0-9-]+\.config\.ts$/.test(path.basename(file)))
+        throw new Error('临时文件登记无效，请人工核对');
       fsSync.rmSync(file, { force: true });
     }
-    this.tracker.transaction(issueIid, current => {
+    this.tracker.transaction(issueIid, (current) => {
       const run = current.run!;
-      const uncertain = Object.values(run.tasks).some(task => task.status === 'running' && !task.success) || (Object.values(run.calls).some(call => call.identity.dispatchId === run.dispatchId && call.identity.taskId.startsWith('$phase') && call.status !== 'exited'));
+      const uncertain =
+        Object.values(run.tasks).some((task) => task.status === 'running' && !task.success) ||
+        Object.values(run.calls).some(
+          (call) =>
+            call.identity.dispatchId === run.dispatchId &&
+            call.identity.taskId.startsWith('$phase') &&
+            call.status !== 'exited',
+        );
       if (uncertain) {
         const phase = lifecyclePhase(current.lifecycle) ?? 'build';
-        if ((run.retryUsed[phase] ?? 0) >= this.config.poll.maxRetries) throw new Error('恢复未知执行所需的自动重试额度已用完');
+        if ((run.retryUsed[phase] ?? 0) >= this.config.poll.maxRetries)
+          throw new Error('恢复未知执行所需的自动重试额度已用完');
         run.retryUsed[phase] = (run.retryUsed[phase] ?? 0) + 1;
       }
-      for (const call of Object.values(run.calls)) if (call.status !== 'exited') { call.status = 'exited'; call.exitedAt = new Date().toISOString(); }
-      for (const task of Object.values(run.tasks)) if (task.status === 'running' && !task.success) task.status = 'uncertain';
+      for (const call of Object.values(run.calls))
+        if (call.status !== 'exited') {
+          call.status = 'exited';
+          call.exitedAt = new Date().toISOString();
+        }
+      for (const task of Object.values(run.tasks))
+        if (task.status === 'running' && !task.success) task.status = 'uncertain';
       run.temporaryFiles = [];
       run.recoveryRequired = false;
     });
@@ -355,14 +485,23 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     const record = this.tracker.get(issueIid)!;
     for (const call of Object.values(record.run!.calls)) {
       if (call.status === 'exited') continue;
-      if (call.status !== 'queued' && !call.pid) throw new Error('调用缺少进程凭证，目录保持隔离，请人工核对');
+      if (call.status !== 'queued' && !call.pid)
+        throw new Error('调用缺少进程凭证，目录保持隔离，请人工核对');
       if (call.pid) {
-        try { process.kill(call.pid, 0); throw new Error(`旧进程 ${call.pid} 尚未退出`); }
-        catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+        try {
+          process.kill(call.pid, 0);
+          throw new Error(`旧进程 ${call.pid} 尚未退出`);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+        }
       }
     }
-    this.tracker.transaction(issueIid, current => {
-      for (const call of Object.values(current.run!.calls)) if (call.status !== 'exited') { call.status = 'exited'; call.exitedAt = new Date().toISOString(); }
+    this.tracker.transaction(issueIid, (current) => {
+      for (const call of Object.values(current.run!.calls))
+        if (call.status !== 'exited') {
+          call.status = 'exited';
+          call.exitedAt = new Date().toISOString();
+        }
       current.run!.recoveryRequired = false;
     });
   }
@@ -382,7 +521,9 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       await this.mainGit.fetch();
       // 已回收目录也必须先重建，再统一重置；保留分支和 PR 身份不代表沿用旧交付代码。
       if (!fsSync.existsSync(path.join(wtCtx.gitRootDir, '.git'))) await this.ensureWorktree(wtCtx);
-      await new GitOperations(wtCtx.gitRootDir).resetOwned(`origin/${this.config.project.baseBranch}`);
+      await new GitOperations(wtCtx.gitRootDir).resetOwned(
+        `origin/${this.config.project.baseBranch}`,
+      );
     });
     this.tracker.resetFull(issueIid);
   }
@@ -407,12 +548,17 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       await fs.rm(wsRoot, { recursive: true, force: true });
       logger.info('Workspace root cleaned up', { issueIid, dir: wsRoot });
     } catch (err) {
-      logger.warn('Failed to cleanup workspace root', { issueIid, dir: wsRoot, error: (err as Error).message });
+      logger.warn('Failed to cleanup workspace root', {
+        issueIid,
+        dir: wsRoot,
+        error: (err as Error).message,
+      });
     }
   }
 
   retryIssue(issueIid: number): boolean {
-    if (this.executions.has(issueIid)) throw new InvalidStateError('running', '旧执行尚未退出，请稍后重试');
+    if (this.executions.has(issueIid))
+      throw new InvalidStateError('running', '旧执行尚未退出，请稍后重试');
     const record = this.tracker.get(issueIid);
     if (!record || record.lifecycle.kind !== 'failed') return false;
     this.confirmStoppedCalls(issueIid);
@@ -420,11 +566,13 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
   }
 
   retryFromPhase(issueIid: number, phase: string): void {
-    if(this.executions.has(issueIid)) throw new InvalidStateError('running','任务仍在执行，请先中止或等待当前执行结束');
+    if (this.executions.has(issueIid))
+      throw new InvalidStateError('running', '任务仍在执行，请先中止或等待当前执行结束');
     const record = this.tracker.get(issueIid);
     if (!record) throw new IssueNotFoundError(issueIid);
 
-    if (phase === 'plan' && Object.values(record.run!.tasks).some(task => task.attemptNo > 0)) throw new Error('已有合并结果，请使用完整重做来重新规划');
+    if (phase === 'plan' && Object.values(record.run!.tasks).some((task) => task.attemptNo > 0))
+      throw new Error('已有合并结果，请使用完整重做来重新规划');
     const issueDef = this.getIssueSpecificPipelineDef(issueIid);
     if (!isRetryablePhase(issueDef, phase)) {
       throw new InvalidPhaseError(phase);
@@ -463,7 +611,8 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     const record = this.tracker.get(issueIid);
     if (!record) throw new IssueNotFoundError(issueIid);
     const phase = lifecyclePhase(record.lifecycle) ?? 'plan';
-    if (phase === 'plan' && Object.values(record.run!.tasks).some(task => task.attemptNo > 0)) throw new Error('任务图已执行，请使用完整重做重新规划');
+    if (phase === 'plan' && Object.values(record.run!.tasks).some((task) => task.attemptNo > 0))
+      throw new Error('任务图已执行，请使用完整重做重新规划');
     await this.stopIssue(issueIid, 'pause');
     this.tracker.resetToPhase(issueIid, phase, this.getIssueSpecificPipelineDef(issueIid));
     this.tracker.updatePhaseProgress(issueIid, phase, { sessionId: undefined });
@@ -473,7 +622,6 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     for (const controller of this.controllers.values()) controller.abort();
     await Promise.allSettled(this.executions.values());
   }
-
 
   private getIssueSpecificPipelineDef(issueIid: number): PipelineDef {
     return buildPlanModePipeline({
@@ -491,22 +639,54 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     const running = Promise.resolve().then(async () => {
       const current = this.tracker.get(issue.number);
       if (current && ['cancelled', 'completed'].includes(current.lifecycle.kind)) return;
-      await runWithIssueContext(issue.number, () => this._processIssueImpl(issue), controller.signal, {
-        processStarted: (pid, workDir) => {
-          const callId = randomUUID();
-          this.tracker.transaction(issue.number, record => {
-            const run = record.run!;
-            if (run.stopIntent) throw new Error('停止后不再启动命令');
-            const phase = lifecyclePhase(record.lifecycle) ?? 'setup';
-            run.calls[callId] = { identity: { issueNumber: issue.number, planRevision: run.planRevision, buildGeneration: run.buildGeneration, dispatchId: run.dispatchId!, taskId: '$process', attemptNo: run.phaseExecutions[phase] ?? 1, callId }, pid, workDir, status: 'running', startedAt: new Date().toISOString() };
-          });
-          return callId;
+      await runWithIssueContext(
+        issue.number,
+        () => this._processIssueImpl(issue),
+        controller.signal,
+        {
+          processStarted: (pid, workDir) => {
+            const callId = randomUUID();
+            this.tracker.transaction(issue.number, (record) => {
+              const run = record.run!;
+              if (run.stopIntent) throw new Error('停止后不再启动命令');
+              const phase = lifecyclePhase(record.lifecycle) ?? 'setup';
+              run.calls[callId] = {
+                identity: {
+                  issueNumber: issue.number,
+                  planRevision: run.planRevision,
+                  buildGeneration: run.buildGeneration,
+                  dispatchId: run.dispatchId!,
+                  taskId: '$process',
+                  attemptNo: run.phaseExecutions[phase] ?? 1,
+                  callId,
+                },
+                pid,
+                workDir,
+                status: 'running',
+                startedAt: new Date().toISOString(),
+              };
+            });
+            return callId;
+          },
+          processExited: (callId) => {
+            this.tracker.transaction(issue.number, (record) => {
+              const call = record.run!.calls[callId];
+              if (call) {
+                call.status = 'exited';
+                call.exitedAt = new Date().toISOString();
+              }
+            });
+          },
         },
-        processExited: callId => { this.tracker.transaction(issue.number, record => { const call = record.run!.calls[callId]; if (call) { call.status = 'exited'; call.exitedAt = new Date().toISOString(); } }); },
-      });
+      );
     });
     this.executions.set(issue.number, running);
-    try { await running; } finally { this.executions.delete(issue.number); this.controllers.delete(issue.number); }
+    try {
+      await running;
+    } finally {
+      this.executions.delete(issue.number);
+      this.controllers.delete(issue.number);
+    }
   }
 
   private buildDeps(issueNumber?: number): OrchestratorDeps {
@@ -525,7 +705,13 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       workspaceManager: this.workspaceManager,
       emitProgress: (number, step, msg) => this.emitProgress(number, step, msg),
       ensureWorktree: (wtCtx) => this.ensureWorktree(wtCtx),
-      installDependencies: (workDir, signal, force) => this.installDependencies(workDir, signal ?? (issueNumber === undefined ? undefined : this.controllers.get(issueNumber)?.signal), force),
+      installDependencies: (workDir, signal, force) =>
+        this.installDependencies(
+          workDir,
+          signal ??
+            (issueNumber === undefined ? undefined : this.controllers.get(issueNumber)?.signal),
+          force,
+        ),
       shouldAutoApprove: (labels) => this.shouldAutoApprove(labels),
       startPreviewServers: (wtCtx, issue) => this.startPreviewServers(wtCtx, issue),
       stopPreviewServers: (number) => this.stopPreviewServers(number),
@@ -536,19 +722,35 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
   }
 
   private async _processIssueImpl(issue: GitHubIssue): Promise<void> {
-    const branchName = this.tracker.get(issue.number)?.branchName ?? `${this.config.project.branchPrefix}-${issue.number}`;
+    const branchName =
+      this.tracker.get(issue.number)?.branchName ??
+      `${this.config.project.branchPrefix}-${issue.number}`;
     const wtCtx = this.computeWorktreeContext(issue.number, branchName);
 
     logger.info('Processing issue', {
-      number: issue.number, title: issue.title, branchName,
+      number: issue.number,
+      title: issue.title,
+      branchName,
       worktree: wtCtx.gitRootDir,
-
     });
 
     const supplement = this.supplementStore?.get(issue.number);
     const existingDemand = this.tracker.get(issue.number);
-    const approvedDemand = existingDemand?.run?.review?.decision === 'approved' ? this.tracker.store.readPlan(issue.number, existingDemand.run.planRevision, existingDemand.run.planDigest).demand : undefined;
-    const demand = approvedDemand ?? (existingDemand?.run?.review?.decision !== 'rejected' && existingDemand && existingDemand.lifecycle.kind !== 'pending' ? existingDemand.demandSpec : githubIssueToDemandSpec(issue, supplement));
+    const approvedDemand =
+      existingDemand?.run?.review?.decision === 'approved'
+        ? this.tracker.store.readPlan(
+            issue.number,
+            existingDemand.run.planRevision,
+            existingDemand.run.planDigest,
+          ).demand
+        : undefined;
+    const demand =
+      approvedDemand ??
+      (existingDemand?.run?.review?.decision !== 'rejected' &&
+      existingDemand &&
+      existingDemand.lifecycle.kind !== 'pending'
+        ? existingDemand.demandSpec
+        : githubIssueToDemandSpec(issue, supplement));
 
     let record = this.tracker.get(issue.number);
     const isRetry = !!record && record.lifecycle.kind === 'failed';
@@ -564,22 +766,36 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     }
 
     if (!record.pipelineMode) {
-      this.tracker.transaction(issue.number, current => { current.pipelineMode = this.pipelineDef.mode; });
+      this.tracker.transaction(issue.number, (current) => {
+        current.pipelineMode = this.pipelineDef.mode;
+      });
       record.pipelineMode = this.pipelineDef.mode;
     }
 
     if (record.run!.recoveryRequired) {
-      try { await this.recoverExecution(issue.number); }
-      catch (error) { this.tracker.markFailed(issue.number, (error as Error).message, false); return; }
+      try {
+        await this.recoverExecution(issue.number);
+      } catch (error) {
+        this.tracker.markFailed(issue.number, (error as Error).message, false);
+        return;
+      }
     }
-    this.tracker.transaction(issue.number, current => {
+    // setup 在工作流之前执行。自动重试从上一次 setup 失败恢复时，
+    // 先把 failed(auto) 转成 ready，成功 setup 后工作流才能从正确入口继续；
+    // 失败则由 FailureHandler 再次写回 failed 并消耗本次预算。
+    record = this.tracker.transaction(issue.number, (current) => {
       if (current.run!.stopIntent) throw new Error('任务已停止');
+      if (current.lifecycle.kind === 'failed' && current.lifecycle.retry === 'auto') {
+        applyIssueLifecycleEvent(current, { type: 'retry-requested' });
+      }
       current.run!.dispatchId = randomUUID();
       current.demandSpec = demand;
     });
     const issuePipelineDef = this.getIssueSpecificPipelineDef(issue.number);
     const phaseCtx: PhaseContext = {
-      demand, branchName, pipelineMode: issuePipelineDef.mode,
+      demand,
+      branchName,
+      pipelineMode: issuePipelineDef.mode,
       workDir: wtCtx.workDir,
     };
     if (record.ports) {
@@ -587,9 +803,14 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     }
 
     const ctx: IssueProcessingContext = {
-      issue, branchName, wtCtx, record, isRetry,
+      issue,
+      branchName,
+      wtCtx,
+      record,
+      isRetry,
       pipelineDef: issuePipelineDef,
-      demand, phaseCtx,
+      demand,
+      phaseCtx,
     };
 
     const deps = this.buildDeps(issue.number);
@@ -617,7 +838,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
   private shouldAutoApprove(issueLabels: string[]): boolean {
     const autoLabels = this.config.review.autoApproveLabels;
     if (!autoLabels.length) return false;
-    return issueLabels.some(l => autoLabels.includes(l));
+    return issueLabels.some((l) => autoLabels.includes(l));
   }
 
   private async startPreviewServers(
@@ -629,7 +850,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       const ports = await this.portAllocator.allocate(issue.number);
       wtCtx.ports = ports;
 
-      this.tracker.transaction(issue.number, current => {
+      this.tracker.transaction(issue.number, (current) => {
         current.ports = ports;
         current.previewStartedAt = new Date().toISOString();
       });
@@ -648,7 +869,11 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
         }
       }
 
-      this.emitProgress(issue.number, 'deploy_done', t('orchestrator.deployDoneProgress', { url: previewUrl ?? 'N/A' }));
+      this.emitProgress(
+        issue.number,
+        'deploy_done',
+        t('orchestrator.deployDoneProgress', { url: previewUrl ?? 'N/A' }),
+      );
       this.eventBus.emitTyped('pipeline:progress', {
         issueIid: issue.number,
         step: 'preview_ready',
@@ -663,9 +888,13 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       });
       this.portAllocator.release(issue.number);
       try {
-        await this.github.createIssueNote(issue.number,
-          `预览服务启动失败: ${(err as Error).message}\n请修正启动命令后重试浏览器验收。`);
-      } catch { /* ignore */ }
+        await this.github.createIssueNote(
+          issue.number,
+          `预览服务启动失败: ${(err as Error).message}\n请修正启动命令后重试浏览器验收。`,
+        );
+      } catch {
+        /* ignore */
+      }
       return null;
     }
   }
@@ -676,7 +905,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     this.portAllocator.release(issueIid);
     const record = this.tracker.get(issueIid);
     if (record?.ports) {
-      this.tracker.transaction(issueIid, current => {
+      this.tracker.transaction(issueIid, (current) => {
         current.ports = undefined;
         current.previewStartedAt = undefined;
       });
@@ -706,14 +935,35 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     for (const record of this.tracker.getAll()) {
       const number = getIssueNumber(record);
       for (const workspace of record.run?.workspaces ?? []) {
-        if (workspace.cleanedAt || Date.now() - Date.parse(workspace.createdAt) < retentionMs) continue;
+        if (workspace.cleanedAt || Date.now() - Date.parse(workspace.createdAt) < retentionMs)
+          continue;
         await this.mainGitMutex.runExclusive(async () => {
           const current = this.tracker.get(number)!;
-          if (current.run!.recoveryRequired || current.lifecycle.kind === 'paused' || Object.values(current.run!.tasks).some(task => task.workDir === workspace.directory) || Object.values(current.run!.calls).some(call => call.status !== 'exited' && (call.workDir === workspace.directory || isInside(workspace.directory, call.workDir)))) return;
+          if (
+            current.run!.recoveryRequired ||
+            current.lifecycle.kind === 'paused' ||
+            Object.values(current.run!.tasks).some(
+              (task) => task.workDir === workspace.directory,
+            ) ||
+            Object.values(current.run!.calls).some(
+              (call) =>
+                call.status !== 'exited' &&
+                (call.workDir === workspace.directory ||
+                  isInside(workspace.directory, call.workDir)),
+            )
+          )
+            return;
           assertOwnedDirectory(this.config.project.worktreeBaseDir, workspace.directory);
-          if (fsSync.existsSync(workspace.directory)) await this.mainGit.worktreeRemove(workspace.directory, true);
-          if (await this.mainGit.branchExists(workspace.branch)) await this.mainGit.deleteBranch(workspace.branch);
-          this.tracker.transaction(number, latest => { const saved = latest.run!.workspaces!.find(entry => entry.directory === workspace.directory); if (saved) saved.cleanedAt = new Date().toISOString(); });
+          if (fsSync.existsSync(workspace.directory))
+            await this.mainGit.worktreeRemove(workspace.directory, true);
+          if (await this.mainGit.branchExists(workspace.branch))
+            await this.mainGit.deleteBranch(workspace.branch);
+          this.tracker.transaction(number, (latest) => {
+            const saved = latest.run!.workspaces!.find(
+              (entry) => entry.directory === workspace.directory,
+            );
+            if (saved) saved.cleanedAt = new Date().toISOString();
+          });
         });
       }
     }
@@ -723,15 +973,26 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     const record = this.tracker.get(issueIid);
     if (!record) return;
 
-    if (record.lifecycle.kind !== 'completed' || record.run.recoveryRequired || this.executions.has(issueIid) || Object.values(record.run.calls).some(call => call.status !== 'exited')) throw new Error('任务仍需要工作目录，不能清理');
+    if (
+      record.lifecycle.kind !== 'completed' ||
+      record.run.recoveryRequired ||
+      this.executions.has(issueIid) ||
+      Object.values(record.run.calls).some((call) => call.status !== 'exited')
+    )
+      throw new Error('任务仍需要工作目录，不能清理');
     for (const workspace of record.run?.workspaces ?? []) {
       if (workspace.cleanedAt) continue;
       assertOwnedDirectory(this.config.project.worktreeBaseDir, workspace.directory);
       await this.mainGitMutex.runExclusive(async () => {
-        if (fsSync.existsSync(workspace.directory)) await this.mainGit.worktreeRemove(workspace.directory, true);
-        if (await this.mainGit.branchExists(workspace.branch)) await this.mainGit.deleteBranch(workspace.branch);
+        if (fsSync.existsSync(workspace.directory))
+          await this.mainGit.worktreeRemove(workspace.directory, true);
+        if (await this.mainGit.branchExists(workspace.branch))
+          await this.mainGit.deleteBranch(workspace.branch);
       });
-      this.tracker.transaction(issueIid, current => { const target = current.run!.workspaces!.find(w => w.directory === workspace.directory); if (target) target.cleanedAt = new Date().toISOString(); });
+      this.tracker.transaction(issueIid, (current) => {
+        const target = current.run!.workspaces!.find((w) => w.directory === workspace.directory);
+        if (target) target.cleanedAt = new Date().toISOString();
+      });
     }
     await this.stopPreviewServers(issueIid);
 
@@ -741,7 +1002,9 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       await this.cleanupWorkspaceRoot(issueIid);
     });
 
-    this.tracker.transaction(issueIid, current => { current.worktreeCleanedAt = new Date().toISOString(); });
+    this.tracker.transaction(issueIid, (current) => {
+      current.worktreeCleanedAt = new Date().toISOString();
+    });
     logger.info('Completed worktree reaped', { number: issueIid, dir: wtCtx.gitRootDir });
   }
 
@@ -760,14 +1023,14 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     wtCtx.ports = ports;
 
     try {
-      this.tracker.transaction(issueIid, current => {
+      this.tracker.transaction(issueIid, (current) => {
         current.ports = ports;
         current.previewStartedAt = new Date().toISOString();
       });
       await this.devServerManager.startServers(wtCtx, ports, getIssueContext()?.signal);
     } catch (err) {
       this.portAllocator.release(issueIid);
-      this.tracker.transaction(issueIid, current => {
+      this.tracker.transaction(issueIid, (current) => {
         current.ports = undefined;
         current.previewStartedAt = undefined;
       });
@@ -806,7 +1069,7 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       await this.ensureWorktree(wtCtx);
     });
 
-    this.tracker.transaction(issueIid, current => {
+    this.tracker.transaction(issueIid, (current) => {
       current.worktreeCleanedAt = undefined;
       current.completedAt = new Date().toISOString();
     });
@@ -847,16 +1110,29 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
     if (!record?.run?.delivery?.prNumber) throw new Error('任务尚未关联工作台 PR');
     const pr = await this.github.getPullRequestDetail(record.run.delivery.prNumber);
     if (pr.state !== 'open') throw new Error('只有开放的原 PR 可以修复冲突');
-    if (record.run.repairRounds >= this.config.verifyFixLoop.maxIterations) throw new Error('集成自动修复额度已用完');
+    if (record.run.repairRounds >= this.config.verifyFixLoop.maxIterations)
+      throw new Error('集成自动修复额度已用完');
     await this.mainGitMutex.runExclusive(() => this.mainGit.fetch());
-    this.tracker.transaction(issueIid, current => {
+    this.tracker.transaction(issueIid, (current) => {
       const run = current.run!;
-      if (this.executions.has(issueIid) || run.stopIntent || run.workflow.generation !== record.run!.workflow.generation || run.buildGeneration !== record.run!.buildGeneration) throw new Error('任务执行状态已改变，请重新确认冲突修复');
-      if (run.repairRounds >= this.config.verifyFixLoop.maxIterations) throw new Error('集成自动修复额度已用完');
+      if (
+        this.executions.has(issueIid) ||
+        run.stopIntent ||
+        run.workflow.generation !== record.run!.workflow.generation ||
+        run.buildGeneration !== record.run!.buildGeneration
+      )
+        throw new Error('任务执行状态已改变，请重新确认冲突修复');
+      if (run.repairRounds >= this.config.verifyFixLoop.maxIterations)
+        throw new Error('集成自动修复额度已用完');
       run.repairRounds++;
       run.buildEntry = 'repair-integration';
-      run.repairs.push({ round: run.repairRounds, source: 'pr-conflict', report: `将 origin/${this.config.project.baseBranch} 合并到当前分支并解决冲突，保留父需求和基线双方修改。随后重新完整验证。` });
-      run.verify = undefined; run.uat = undefined;
+      run.repairs.push({
+        round: run.repairRounds,
+        source: 'pr-conflict',
+        report: `将 origin/${this.config.project.baseBranch} 合并到当前分支并解决冲突，保留父需求和基线双方修改。随后重新完整验证。`,
+      });
+      run.verify = undefined;
+      run.uat = undefined;
       run.workflow.generation++;
       run.workflow.entry = 'build';
       current.deliveryPending = false;
@@ -865,5 +1141,4 @@ private async ensureNodeModules(workDir: string): Promise<boolean> { try { await
       applyIssueLifecycleEvent(current, { type: 'conflict-repair-started' });
     });
   }
-
 }

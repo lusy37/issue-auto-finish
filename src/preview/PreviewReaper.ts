@@ -62,7 +62,7 @@ export class PreviewReaper {
     if (this.timer) return;
 
     this.timer = setInterval(() => {
-      this.reap().catch(err => {
+      this.reap().catch((err) => {
         logger.error('Scheduled preview reap failed', { error: (err as Error).message });
       });
     }, this.intervalMs);

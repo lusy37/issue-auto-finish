@@ -1,7 +1,11 @@
 import { ISSUE_LABELS, withWorkbenchLabels } from '../../clients/IssueLabels.js';
 import { GitOperations } from '../../git/GitOperations.js';
 import { PlanPersistence } from '../../persistence/PlanPersistence.js';
-import type { IssueProcessingContext, OrchestratorDeps, SetupResult } from '../IssueProcessingContext.js';
+import type {
+  IssueProcessingContext,
+  OrchestratorDeps,
+  SetupResult,
+} from '../IssueProcessingContext.js';
 import { logger as rootLogger } from '../../logger.js';
 import { t } from '../../i18n/index.js';
 import { applyIssueLifecycleEvent } from '../../tracker/IssueLifecycle.js';
@@ -24,7 +28,10 @@ export async function executeSetup(
 
   // 1. 更新标签
   try {
-    await deps.github.updateIssueLabels(issue.number, withWorkbenchLabels(issue.labels, [ISSUE_LABELS.root, ISSUE_LABELS.processing]));
+    await deps.github.updateIssueLabels(
+      issue.number,
+      withWorkbenchLabels(issue.labels, [ISSUE_LABELS.root, ISSUE_LABELS.processing]),
+    );
   } catch (err) {
     logger.warn('Failed to update issue labels', { error: (err as Error).message });
   }
@@ -44,7 +51,7 @@ export async function executeSetup(
 
   // 4. 更新状态为 BranchCreated
   if (record.lifecycle.kind === 'pending') {
-    deps.tracker.transaction(issue.number, current => {
+    deps.tracker.transaction(issue.number, (current) => {
       applyIssueLifecycleEvent(current, { type: 'setup-completed' });
     });
   }
@@ -62,7 +69,12 @@ export async function executeSetup(
   const primaryWorkDir = wtCtx.workspace ? wtCtx.workspace.primary.workDir : wtCtx.workDir;
   const primaryGitRoot = wtCtx.workspace ? wtCtx.workspace.primary.gitRootDir : wtCtx.gitRootDir;
   const wtGit = new GitOperations(primaryGitRoot, deps.signal);
-  const wtPlan = new PlanPersistence(primaryWorkDir, issue.number, deps.tracker.store.dataDir, deps.tracker);
+  const wtPlan = new PlanPersistence(
+    primaryWorkDir,
+    issue.number,
+    deps.tracker.store.dataDir,
+    deps.tracker,
+  );
 
   wtPlan.ensureDir();
   wtPlan.writeIssueMeta({

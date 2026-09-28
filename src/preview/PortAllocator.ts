@@ -26,7 +26,10 @@ async function checkPortAvailable(port: number): Promise<boolean> {
   // Windows 上通配地址可与回环地址复用端口，先检查真实连接，避免误分配正在服务的端口。
   const listening = await new Promise<boolean>((resolve) => {
     const socket = net.connect({ port, host: '127.0.0.1' });
-    const finish = (value: boolean) => { socket.destroy(); resolve(value); };
+    const finish = (value: boolean) => {
+      socket.destroy();
+      resolve(value);
+    };
     socket.setTimeout(500, () => finish(true));
     socket.once('connect', () => finish(true));
     socket.once('error', () => finish(false));
@@ -90,8 +93,8 @@ export class PortAllocator {
 
     throw new PortExhaustionError(
       `No available port pair found for issue #${issueIid} ` +
-      `(scanned ${this.options.maxPorts} offsets from ` +
-      `backend=${this.options.backendPortBase} frontend=${this.options.frontendPortBase})`,
+        `(scanned ${this.options.maxPorts} offsets from ` +
+        `backend=${this.options.backendPortBase} frontend=${this.options.frontendPortBase})`,
     );
   }
 

@@ -71,5 +71,4 @@ export class EventBus extends EventEmitter {
   }
 }
 
-
 export const eventBus = new EventBus();

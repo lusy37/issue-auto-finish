@@ -58,19 +58,25 @@ function statusWeight(status: PhaseStatus): number {
 
 function activePhaseLabel(task: ExecutableTask): string {
   const phases = task.phaseProgress ?? [];
-  const active = phases.find(phase => phase.status === 'in_progress' || phase.status === 'gate_waiting');
+  const active = phases.find(
+    (phase) => phase.status === 'in_progress' || phase.status === 'gate_waiting',
+  );
   if (active) return active.label;
-  const failed = phases.find(phase => phase.status === 'failed');
+  const failed = phases.find((phase) => phase.status === 'failed');
   if (failed) return `${failed.label} · 失败`;
-  if (phases.length > 0 && phases.every(phase => phase.status === 'completed')) return '全部完成';
+  if (phases.length > 0 && phases.every((phase) => phase.status === 'completed')) return '全部完成';
   return '';
 }
 
 export function toWorkbenchRow(task: ExecutableTask): WorkbenchRow {
   const phases = task.phaseProgress ?? [];
-  const progressPercent = phases.length === 0
-    ? 0
-    : Math.round(phases.reduce((sum, phase) => sum + statusWeight(phase.status), 0) / phases.length * 100);
+  const progressPercent =
+    phases.length === 0
+      ? 0
+      : Math.round(
+          (phases.reduce((sum, phase) => sum + statusWeight(phase.status), 0) / phases.length) *
+            100,
+        );
   return {
     ...task,
     issueNumber: Number(task.taskId),
@@ -88,7 +94,10 @@ export function toWorkbenchRows(tasks: ExecutableTask[]): WorkbenchRow[] {
  * 由服务端生命周期和当前运行配置计算操作入口。
  * 页面只消费这个结果，不根据按钮文案自行推断业务状态。
  */
-export function getAllowedActions(record: IssueRecord, _meta?: PipelineMeta | null): AllowedAction[] {
+export function getAllowedActions(
+  record: IssueRecord,
+  _meta?: PipelineMeta | null,
+): AllowedAction[] {
   const kind = record.lifecycle.kind;
   const actions: AllowedAction[] = [];
   if (kind === 'skipped') actions.push('start');
@@ -101,4 +110,3 @@ export function getAllowedActions(record: IssueRecord, _meta?: PipelineMeta | nu
   if (kind !== 'completed' && kind !== 'cancelled') actions.push('cancel');
   return actions;
 }
-

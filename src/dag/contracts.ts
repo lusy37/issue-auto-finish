@@ -109,8 +109,21 @@ export interface IssueRun {
   /** 工作流节点状态，是运行恢复时的主要入口。 */
   workflow: WorkflowStorage;
   activeCalls?: Record<string, string>;
-  budgetHistory?: Array<{ planRevision: number; buildGeneration: number; retryUsed: Record<string, number>; phaseExecutions: Record<string, number>; repairRounds: number }>;
-  workspaces?: Array<{ directory: string; branch: string; taskId: string; attemptNo: number; createdAt: string; cleanedAt?: string }>;
+  budgetHistory?: Array<{
+    planRevision: number;
+    buildGeneration: number;
+    retryUsed: Record<string, number>;
+    phaseExecutions: Record<string, number>;
+    repairRounds: number;
+  }>;
+  workspaces?: Array<{
+    directory: string;
+    branch: string;
+    taskId: string;
+    attemptNo: number;
+    createdAt: string;
+    cleanedAt?: string;
+  }>;
   temporaryFiles?: string[];
   installedLockDigest?: string;
   version: number;
@@ -121,8 +134,20 @@ export interface IssueRun {
   buildGeneration: number;
   dispatchId?: string;
   stopIntent?: { kind: 'pause' | 'cancel' | 'redo'; requestedAt: string };
-  review?: { revision: number; decision: 'waiting' | 'approved' | 'rejected'; feedback?: string; source?: string };
-  reviewHistory?: Array<{ round: number; revision: number; feedback: string; timestamp: string; planSnapshot: string; reviewedSessionId?: string }>;
+  review?: {
+    revision: number;
+    decision: 'waiting' | 'approved' | 'rejected';
+    feedback?: string;
+    source?: string;
+  };
+  reviewHistory?: Array<{
+    round: number;
+    revision: number;
+    feedback: string;
+    timestamp: string;
+    planSnapshot: string;
+    reviewedSessionId?: string;
+  }>;
   tasks: Record<string, TaskRun>;
   calls: Record<string, CallRecord>;
   /** 按阶段记录已使用的重试次数，避免超出预算。 */
@@ -130,7 +155,14 @@ export interface IssueRun {
   phaseExecutions: Record<string, number>;
   buildEntry: 'execute-graph' | 'repair-integration';
   repairRounds: number;
-  repairs: Array<{ round: number; report: string; source: string; before?: string; after?: string; identity?: ExecutionIdentity }>;
+  repairs: Array<{
+    round: number;
+    report: string;
+    source: string;
+    before?: string;
+    after?: string;
+    identity?: ExecutionIdentity;
+  }>;
   integrationBase?: string;
   integrationHead?: string;
   candidateCommit?: string;
@@ -144,17 +176,29 @@ export interface IssueRun {
   recoveryRequired?: boolean;
 }
 export function newIssueRun(): IssueRun {
-  return { workflow: newWorkflowStorage(), version: 0, planRevision: 0, buildGeneration: 0, tasks: {}, calls: {}, retryUsed: {}, phaseExecutions: {}, buildEntry: 'execute-graph', repairRounds: 0, repairs: [] };
+  return {
+    workflow: newWorkflowStorage(),
+    version: 0,
+    planRevision: 0,
+    buildGeneration: 0,
+    tasks: {},
+    calls: {},
+    retryUsed: {},
+    phaseExecutions: {},
+    buildEntry: 'execute-graph',
+    repairRounds: 0,
+    repairs: [],
+  };
 }
 export function sameIdentity(a: ExecutionIdentity | undefined, b: ExecutionIdentity): boolean {
-  return !!a && (Object.keys(b) as Array<keyof ExecutionIdentity>).every(k => a[k] === b[k]);
+  return !!a && (Object.keys(b) as Array<keyof ExecutionIdentity>).every((k) => a[k] === b[k]);
 }
 export function planDigest(plan: Omit<TaskPlan, 'digest'>): string {
   return createHash('sha256').update(JSON.stringify(plan)).digest('hex');
 }
 export function renderPlan(plan: PlanContent): string {
   const lines = [`# ${plan.title}`, '', plan.description, '', '## 验收标准', ''];
-  lines.push(...plan.acceptanceCriteria.map(criteria => `- ${criteria}`));
+  lines.push(...plan.acceptanceCriteria.map((criteria) => `- ${criteria}`));
   lines.push('', '## 内部任务', '');
 
   for (const task of plan.tasks) {
@@ -169,7 +213,7 @@ export function renderPlan(plan: PlanContent): string {
       '',
       '**任务验收标准**',
       '',
-      ...task.acceptanceCriteria.map(criteria => `- ${criteria}`),
+      ...task.acceptanceCriteria.map((criteria) => `- ${criteria}`),
       '',
     );
   }

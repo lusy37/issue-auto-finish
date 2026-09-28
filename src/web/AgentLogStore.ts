@@ -19,9 +19,14 @@ export const MAX_LOGS_PER_ISSUE = 20000;
 export const LOG_TRIM_BATCH_SIZE = 1000;
 
 const DEBUG_EVENT_TYPES = new Set([
-  'thinking', 'content_block_start', 'content_block_delta',
-  'content_block_stop', 'message_start', 'message_delta',
-  'message_stop', 'ping',
+  'thinking',
+  'content_block_start',
+  'content_block_delta',
+  'content_block_stop',
+  'message_start',
+  'message_delta',
+  'message_stop',
+  'ping',
   'message', // 顶级消息框架 - 含 uuid/session_id 等协议元数据，无文本内容
 ]);
 
@@ -55,7 +60,10 @@ export class AgentLogStore {
     try {
       const raw = fs.readFileSync(filePath, 'utf-8').trim();
       if (!raw) return [];
-      return raw.split('\n').slice(-MAX_LOGS_PER_ISSUE).map(line => JSON.parse(line) as AgentLogEntry);
+      return raw
+        .split('\n')
+        .slice(-MAX_LOGS_PER_ISSUE)
+        .map((line) => JSON.parse(line) as AgentLogEntry);
     } catch (err) {
       logger.warn('Failed to read agent logs', { issueIid, error: (err as Error).message });
       return [];
@@ -82,9 +90,14 @@ export class AgentLogStore {
         const raw = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8').trim() : '';
         count = raw ? raw.split('\n').length : 0;
       }
-      fs.appendFileSync(filePath, `${JSON.stringify({ ...entry, summary: clampAgentSummary(entry.summary) })}\n`, 'utf-8');
+      fs.appendFileSync(
+        filePath,
+        `${JSON.stringify({ ...entry, summary: clampAgentSummary(entry.summary) })}\n`,
+        'utf-8',
+      );
       this.counts.set(issueIid, count + 1);
-      if (count + 1 >= MAX_LOGS_PER_ISSUE + LOG_TRIM_BATCH_SIZE) this.trimIfNeeded(issueIid, filePath);
+      if (count + 1 >= MAX_LOGS_PER_ISSUE + LOG_TRIM_BATCH_SIZE)
+        this.trimIfNeeded(issueIid, filePath);
     } catch (err) {
       logger.warn('Failed to write agent log', { issueIid, error: (err as Error).message });
     }
@@ -107,7 +120,16 @@ export class AgentLogStore {
   }
 
   private handleAgentOutput(payload: EventPayload): void {
-    const d = payload.data as { issueIid?: number; phase?: string; event?: { identity?: ExecutionIdentity; type?: string; content?: unknown; timestamp?: string } };
+    const d = payload.data as {
+      issueIid?: number;
+      phase?: string;
+      event?: {
+        identity?: ExecutionIdentity;
+        type?: string;
+        content?: unknown;
+        timestamp?: string;
+      };
+    };
     if (!d?.issueIid || !d.event) return;
 
     const eventType = d.event.type || 'raw';
@@ -135,5 +157,4 @@ export class AgentLogStore {
     };
     this.appendLog(d.issueIid, entry);
   }
-
 }

@@ -8,7 +8,6 @@ const AGENT_LOG_MAX = 500;
 
 const NORMAL_DISPLAY_TYPES = new Set(['assistant', 'system', 'thinking', 'raw', 'error']);
 
-
 export function useAgentLogs() {
   const agentLogs = ref<AgentLogEntry[]>([]);
   const agentAutoScroll = ref(true);
@@ -18,8 +17,8 @@ export function useAgentLogs() {
   const filteredLogs = computed(() => {
     const logs = debugMode.value
       ? agentLogs.value
-      : agentLogs.value.filter(log => NORMAL_DISPLAY_TYPES.has(log.type));
-    return logs.filter(log => log.summary.trim().length > 0);
+      : agentLogs.value.filter((log) => NORMAL_DISPLAY_TYPES.has(log.type));
+    return logs.filter((log) => log.summary.trim().length > 0);
   });
 
   function agentLogLabel(type: string): string {
@@ -47,7 +46,12 @@ export function useAgentLogs() {
     issueIid: number,
     selectedIid: Ref<number | undefined>,
     phase: string | undefined,
-    streamEvent: { identity?: AgentLogEntry['identity']; type?: string; content?: unknown; timestamp?: string },
+    streamEvent: {
+      identity?: AgentLogEntry['identity'];
+      type?: string;
+      content?: unknown;
+      timestamp?: string;
+    },
   ) {
     if (selectedIid.value !== issueIid) return;
     pushLog({

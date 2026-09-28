@@ -15,19 +15,28 @@ import type { ProjectKnowledge } from './ProjectKnowledge.js';
 
 const logger = rootLogger.child('KnowledgeStore');
 
-const indexSchema = z.object({
-  version: z.literal(1),
-  lastAnalyzedAt: z.string().optional(),
-  entries: z.array(z.object({
-    id: z.string().regex(/^[a-zA-Z0-9_-]+$/),
-    type: z.enum(['project-meta', 'custom', 'diary', 'memory', 'agent-rule']),
-    title: z.string(),
-    tags: z.array(z.string()),
-    source: z.object({ url: z.string().optional(), kind: z.literal('local').optional() }).passthrough().optional(),
-    createdAt: z.string(),
-    updatedAt: z.string(),
-  }).passthrough()),
-}).passthrough();
+const indexSchema = z
+  .object({
+    version: z.literal(1),
+    lastAnalyzedAt: z.string().optional(),
+    entries: z.array(
+      z
+        .object({
+          id: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+          type: z.enum(['project-meta', 'custom', 'diary', 'memory', 'agent-rule']),
+          title: z.string(),
+          tags: z.array(z.string()),
+          source: z
+            .object({ url: z.string().optional(), kind: z.literal('local').optional() })
+            .passthrough()
+            .optional(),
+          createdAt: z.string(),
+          updatedAt: z.string(),
+        })
+        .passthrough(),
+    ),
+  })
+  .passthrough();
 
 export class KnowledgeStore {
   private dataDir: string;
@@ -43,12 +52,12 @@ export class KnowledgeStore {
 
   list(type?: KnowledgeEntryType): KnowledgeEntryMeta[] {
     const idx = this.loadIndex();
-    return structuredClone(type ? idx.entries.filter(e => e.type === type) : idx.entries);
+    return structuredClone(type ? idx.entries.filter((e) => e.type === type) : idx.entries);
   }
 
   get(id: string): KnowledgeEntry | null {
     const idx = this.loadIndex();
-    const meta = idx.entries.find(e => e.id === id);
+    const meta = idx.entries.find((e) => e.id === id);
     if (!meta) return null;
     return { ...structuredClone(meta), content: this.readContent(id) };
   }
@@ -87,7 +96,7 @@ export class KnowledgeStore {
     patch: Partial<Pick<KnowledgeEntry, 'title' | 'content' | 'tags' | 'source'>>,
   ): KnowledgeEntry | null {
     const idx = structuredClone(this.loadIndex());
-    const metaIdx = idx.entries.findIndex(e => e.id === id);
+    const metaIdx = idx.entries.findIndex((e) => e.id === id);
     if (metaIdx < 0) return null;
 
     const meta = idx.entries[metaIdx];
@@ -111,7 +120,7 @@ export class KnowledgeStore {
   delete(id: string): boolean {
     const idx = structuredClone(this.loadIndex());
     const before = idx.entries.length;
-    idx.entries = idx.entries.filter(e => e.id !== id);
+    idx.entries = idx.entries.filter((e) => e.id !== id);
     if (idx.entries.length === before) return false;
 
     this.saveIndex(idx);
@@ -129,15 +138,18 @@ export class KnowledgeStore {
   search(query: string): KnowledgeEntryMeta[] {
     const idx = this.loadIndex();
     const lower = query.toLowerCase();
-    return structuredClone(idx.entries.filter(e =>
-      e.title.toLowerCase().includes(lower)
-      || e.tags.some(t => t.toLowerCase().includes(lower)),
-    ));
+    return structuredClone(
+      idx.entries.filter(
+        (e) =>
+          e.title.toLowerCase().includes(lower) ||
+          e.tags.some((t) => t.toLowerCase().includes(lower)),
+      ),
+    );
   }
 
   getProjectMeta(): KnowledgeEntry | null {
     const idx = this.loadIndex();
-    const meta = idx.entries.find(e => e.type === 'project-meta');
+    const meta = idx.entries.find((e) => e.type === 'project-meta');
     if (!meta) return null;
     return { ...structuredClone(meta), content: this.readContent(meta.id) };
   }
@@ -184,7 +196,7 @@ export class KnowledgeStore {
 
   getAllEntries(): KnowledgeEntry[] {
     const idx = this.loadIndex();
-    return idx.entries.map(meta => ({
+    return idx.entries.map((meta) => ({
       ...structuredClone(meta),
       content: this.readContent(meta.id),
     }));
@@ -209,9 +221,11 @@ export class KnowledgeStore {
       return this.index;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw new Error(`无法读取知识索引 ${this.indexPath}：${(error as Error).message}`, { cause: error });
+        throw new Error(`无法读取知识索引 ${this.indexPath}：${(error as Error).message}`, {
+          cause: error,
+        });
       }
-      if (fs.readdirSync(this.entriesDir).some(file => file.endsWith('.md'))) {
+      if (fs.readdirSync(this.entriesDir).some((file) => file.endsWith('.md'))) {
         throw new Error(`知识索引缺失但正文仍存在，请恢复索引：${this.indexPath}`);
       }
     }
@@ -231,7 +245,9 @@ export class KnowledgeStore {
     try {
       return fs.readFileSync(filePath, 'utf-8');
     } catch (error) {
-      throw new Error(`无法读取知识正文 ${filePath}：${(error as Error).message}`, { cause: error });
+      throw new Error(`无法读取知识正文 ${filePath}：${(error as Error).message}`, {
+        cause: error,
+      });
     }
   }
 

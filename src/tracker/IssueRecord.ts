@@ -72,8 +72,8 @@ export interface IssueRecord {
   phaseHistory: PhaseHistoryEntry[];
 }
 
-export type NewIssueRecord = Omit<IssueRecord, 'createdAt' | 'updatedAt' | 'run' | 'phaseHistory'>
-  & Partial<Pick<IssueRecord, 'run' | 'phaseHistory'>>;
+export type NewIssueRecord = Omit<IssueRecord, 'createdAt' | 'updatedAt' | 'run' | 'phaseHistory'> &
+  Partial<Pick<IssueRecord, 'run' | 'phaseHistory'>>;
 
 export function lifecyclePhase(lifecycle: IssueLifecycle): PhaseId | undefined {
   return 'phase' in lifecycle ? lifecycle.phase : undefined;

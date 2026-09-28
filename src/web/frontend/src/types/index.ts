@@ -1,10 +1,16 @@
-import type {IssueLifecycle} from '../../../../shared/workbench';
+import type { IssueLifecycle } from '../../../../shared/workbench';
 import type { PhaseHistoryEntry } from '../../../../shared/workbench';
-export type {IssueLifecycle} from '../../../../shared/workbench';
+export type { IssueLifecycle } from '../../../../shared/workbench';
 
 export type PipelineMode = string;
 
-export type PhaseStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'paused' | 'gate_waiting';
+export type PhaseStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'failed'
+  | 'paused'
+  | 'gate_waiting';
 
 export interface IssueRecord {
   run?: import('../../../../shared/workbench').IssueRun;
@@ -35,8 +41,12 @@ export interface IssueRecord {
 
 export const getIssueIid = (r: IssueRecord): number => Number(r.demandSpec.sourceRef.displayId);
 export const getIssueTitle = (r: IssueRecord): string => r.demandSpec.title;
-export const getReviewApprovalSource = (r: IssueRecord) => r.phaseHistory?.slice().reverse()
-  .find(entry => entry.phaseId === 'review' && entry.outcome === 'gate-approved')?.approvalSource;
+export const getReviewApprovalSource = (r: IssueRecord) =>
+  r.phaseHistory
+    ?.slice()
+    .reverse()
+    .find((entry) => entry.phaseId === 'review' && entry.outcome === 'gate-approved')
+    ?.approvalSource;
 
 export interface PhaseProgress {
   status: PhaseStatus;
@@ -127,7 +137,6 @@ export interface PlanFileSpec {
 // Knowledge types
 export type KnowledgeEntryType = 'project-meta' | 'custom' | 'memory' | 'agent-rule';
 
-
 export interface KnowledgeEntryMeta {
   id: string;
   type: KnowledgeEntryType;
@@ -162,8 +171,13 @@ export interface PipelineMeta {
 // ── 统一任务模型 ──
 
 export type UnifiedTaskStatus =
-  | 'idle' | 'preparing' | 'running' | 'waiting'
-  | 'merging' | 'completed' | 'failed';
+  | 'idle'
+  | 'preparing'
+  | 'running'
+  | 'waiting'
+  | 'merging'
+  | 'completed'
+  | 'failed';
 
 export type TaskKind = 'issue';
 
@@ -180,7 +194,13 @@ export interface ExecutableTask {
   lifecycle: IssueLifecycle;
   stateCategory?: string;
   displayLabel?: string;
-  phaseProgress?: { name: string; label: string; status: PhaseStatus; startedAt?: string; completedAt?: string }[];
+  phaseProgress?: {
+    name: string;
+    label: string;
+    status: PhaseStatus;
+    startedAt?: string;
+    completedAt?: string;
+  }[];
 }
 
 // ── Distill (知识蒸馏) ──

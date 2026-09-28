@@ -138,9 +138,24 @@ export interface VersionRecord {
 export type MemoryDistillAction =
   | { type: 'CREATE'; theme: MemoryTheme; title: string; content: string; diaryIds: string[] }
   | { type: 'MERGE'; memoryId: string; newEvidence: string[]; updatedContent?: string }
-  | { type: 'SUPERSEDE'; oldMemoryId: string; theme: MemoryTheme; title: string; content: string; diaryIds: string[] };
+  | {
+      type: 'SUPERSEDE';
+      oldMemoryId: string;
+      theme: MemoryTheme;
+      title: string;
+      content: string;
+      diaryIds: string[];
+    };
 
 export type RuleDistillAction =
-  | { type: 'CREATE'; ruleName: string; title: string; content: string; keywords: string[]; alwaysApply: boolean; sourceMemoryIds: string[] }
+  | {
+      type: 'CREATE';
+      ruleName: string;
+      title: string;
+      content: string;
+      keywords: string[];
+      alwaysApply: boolean;
+      sourceMemoryIds: string[];
+    }
   | { type: 'UPDATE'; ruleId: string; content: string; keywords?: string[] }
   | { type: 'DEPRECATE'; ruleId: string; reason: string };

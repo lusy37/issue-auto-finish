@@ -56,7 +56,7 @@ export function createPhase(name: string, ...args: PhaseArgs): PhaseExecutor {
 
 /** 校验 PipelineDef 中的所有 AI phase 都已注册，应在启动时调用 */
 export function validatePhaseRegistry(phaseNames: string[]): void {
-  const missing = phaseNames.filter(name => !PHASE_REGISTRY.has(name));
+  const missing = phaseNames.filter((name) => !PHASE_REGISTRY.has(name));
   if (missing.length > 0) {
     throw new UnregisteredPhasesError(missing, [...PHASE_REGISTRY.keys()]);
   }

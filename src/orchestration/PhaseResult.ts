@@ -1,8 +1,5 @@
 /** 阶段执行结果意图 */
-export type PhaseResult =
-  | CompletedIntent
-  | FailedIntent
-  | RequestRetryFromIntent;
+export type PhaseResult = CompletedIntent | FailedIntent | RequestRetryFromIntent;
 
 /** 阶段成功完成 */
 export interface CompletedIntent {

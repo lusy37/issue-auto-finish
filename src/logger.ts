@@ -35,12 +35,8 @@ class Logger {
     const issueCtx = getIssueContext();
     const issueTag = issueCtx ? ` [issue:${issueCtx.issueIid}]` : '';
 
-    const metaObj = issueCtx
-      ? { ...meta, correlationId: issueCtx.correlationId }
-      : meta;
-    const metaStr = metaObj && Object.keys(metaObj).length > 0
-      ? ` ${JSON.stringify(metaObj)}`
-      : '';
+    const metaObj = issueCtx ? { ...meta, correlationId: issueCtx.correlationId } : meta;
+    const metaStr = metaObj && Object.keys(metaObj).length > 0 ? ` ${JSON.stringify(metaObj)}` : '';
     return `${ts} ${level.toUpperCase().padEnd(5)} ${prefix}${issueTag} ${message}${metaStr}`;
   }
 

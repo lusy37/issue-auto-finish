@@ -29,20 +29,25 @@ export const en: Record<string, string> = {
   'state.paused': 'Paused',
 
   // Orchestrator messages
-  'orchestrator.retryComment': '🔄 **Auto-processing Retry**\n\nPrevious processing failed, retrying...',
-  'orchestrator.startComment': '🚀 **Auto-processing Started**\n\nDetected `auto-finish` label, starting automated analysis and implementation.',
+  'orchestrator.retryComment':
+    '🔄 **Auto-processing Retry**\n\nPrevious processing failed, retrying...',
+  'orchestrator.startComment':
+    '🚀 **Auto-processing Started**\n\nDetected `auto-finish` label, starting automated analysis and implementation.',
   'orchestrator.fetchProgress': 'Fetching latest code...',
   'orchestrator.worktreeProgress': 'Preparing working directory...',
   'orchestrator.installProgress': 'Installing project dependencies (npm install)...',
   'orchestrator.initPlanProgress': 'Initializing plan directory...',
   'orchestrator.phaseStartProgress': 'Ready, starting phases (from {phase})...',
-  'orchestrator.autoApproveComment': '⚡ **Review Auto-approved**\n\nDetected label matching `autoApproveLabels` configuration, automatically skipping review and proceeding to implementation.',
+  'orchestrator.autoApproveComment':
+    '⚡ **Review Auto-approved**\n\nDetected label matching `autoApproveLabels` configuration, automatically skipping review and proceeding to implementation.',
   'orchestrator.createPrProgress': 'Creating merge request...',
   'orchestrator.uploadScreenshotsProgress': 'Uploading E2E screenshots...',
   'orchestrator.mrSection': '\n\n🔗 Merge Request: {prUrl}',
   'orchestrator.mrFailSection': '\n\n⚠️ Failed to create merge request, please create manually.',
-  'orchestrator.completedComment': '✅ **Auto-processing Completed**\n\nAll phases completed. Branch: `{branch}`{mrSection}{previewSection}',
-  'orchestrator.failedComment': '❌ **Auto-processing Failed**\n\n{error}\n\nWill retry on next poll cycle (if max retries not exceeded).',
+  'orchestrator.completedComment':
+    '✅ **Auto-processing Completed**\n\nAll phases completed. Branch: `{branch}`{mrSection}{previewSection}',
+  'orchestrator.failedComment':
+    '❌ **Auto-processing Failed**\n\n{error}\n\nWill retry on next poll cycle (if max retries not exceeded).',
   'orchestrator.deployProgress': 'Starting Preview environment...',
   'orchestrator.deployDoneProgress': 'Preview environment ready: {url}',
   'orchestrator.previewComment.title': '🌐 **Preview Environment Ready**',
@@ -51,18 +56,22 @@ export const en: Record<string, string> = {
   'orchestrator.previewComment.frontend': 'Frontend',
   'orchestrator.previewComment.backendApi': 'Backend API',
   'orchestrator.previewComment.hint': 'Visit the frontend link to experience the changes.',
-  'orchestrator.previewComment.expiry': 'Preview will be cleaned up after PR merge, or expires in {hours}h.',
+  'orchestrator.previewComment.expiry':
+    'Preview will be cleaned up after PR merge, or expires in {hours}h.',
 
   // BasePhase messages
   'basePhase.aiStarting': 'Starting AI Agent ({label})...',
   'basePhase.aiResuming': 'Resuming previous AI session ({label})...',
-  'basePhase.resumePrompt': 'The previous execution was interrupted. Please check the existing progress in the working directory (including modified files and artifacts), and continue from where it left off. Do not repeat work that has already been completed.',
+  'basePhase.resumePrompt':
+    'The previous execution was interrupted. Please check the existing progress in the working directory (including modified files and artifacts), and continue from where it left off. Do not repeat work that has already been completed.',
   'basePhase.resumeFallback': 'Session resume failed, falling back to fresh execution',
-  'basePhase.rulesSection': '## Project Development Guidelines\nThe following are development guidelines related to this task. Please strictly follow them when coding:\n\n{rules}',
+  'basePhase.rulesSection':
+    '## Project Development Guidelines\nThe following are development guidelines related to this task. Please strictly follow them when coding:\n\n{rules}',
   'basePhase.error': 'Error: {message}',
 
   // IssuePoller messages
-  'poller.autoApproveComment': '⚡ **Review Auto-approved**\n\nDetected label matching `autoApproveLabels` configuration (matched: {labels}), automatically skipping review and proceeding to implementation.',
+  'poller.autoApproveComment':
+    '⚡ **Review Auto-approved**\n\nDetected label matching `autoApproveLabels` configuration (matched: {labels}), automatically skipping review and proceeding to implementation.',
 
   // Progress comment
   'progress.completed': 'Completed',
@@ -139,7 +148,6 @@ Please read the project's AGENTS.md first to understand the architecture, then p
 Ensure the Todolist is detailed enough that each step can be independently executed and verified.
 {outputConstraint}`,
 
-
   'prompt.rePlan': `You are a senior technical lead. The previous implementation plan was not approved. Please modify the plan based on review feedback.
 
 ## Issue Information
@@ -176,19 +184,27 @@ Please make substantive revisions to the plan you submitted earlier:
 Please submit the complete revised implementation plan.`,
 
   'prompt.e2eSuffix.title': '## E2E UI Verification (Enabled)',
-  'prompt.e2eSuffix.intro': 'E2E UI auto-verification is enabled for this change. Please perform the following additional steps:',
-  'prompt.e2eSuffix.previewNote': '**Preview environment is running (managed by the system, no manual startup needed):**',
+  'prompt.e2eSuffix.intro':
+    'E2E UI auto-verification is enabled for this change. Please perform the following additional steps:',
+  'prompt.e2eSuffix.previewNote':
+    '**Preview environment is running (managed by the system, no manual startup needed):**',
   'prompt.e2eSuffix.backend': 'Backend',
   'prompt.e2eSuffix.frontend': 'Frontend',
 
   // Conflict resolution
-  'conflict.startComment': '🔧 **Merge Conflict Resolution Started**\n\nAttempting to rebase branch `{branch}` onto latest `{baseBranch}`...',
-  'conflict.noConflictComment': '✅ **Rebase Successful, No Conflicts**\n\nBranch `{branch}` has been successfully rebased onto latest `{baseBranch}`, no conflict resolution needed.',
-  'conflict.resolvedComment': '✅ **Merge Conflict Resolution Completed**\n\nBranch `{branch}` has been successfully rebased onto latest `{baseBranch}`, all conflicts have been automatically resolved and verified.',
-  'conflict.failedComment': '❌ **Merge Conflict Resolution Failed**\n\n{error}\n\nRetry conflict resolution from the workbench.',
-  'conflict.mrResolvedComment': '✅ **Merge conflicts have been automatically resolved**\n\nThe source branch of this PR has been successfully rebased onto the latest target branch, conflicts have been automatically resolved. Please re-review the changes.',
+  'conflict.startComment':
+    '🔧 **Merge Conflict Resolution Started**\n\nAttempting to rebase branch `{branch}` onto latest `{baseBranch}`...',
+  'conflict.noConflictComment':
+    '✅ **Rebase Successful, No Conflicts**\n\nBranch `{branch}` has been successfully rebased onto latest `{baseBranch}`, no conflict resolution needed.',
+  'conflict.resolvedComment':
+    '✅ **Merge Conflict Resolution Completed**\n\nBranch `{branch}` has been successfully rebased onto latest `{baseBranch}`, all conflicts have been automatically resolved and verified.',
+  'conflict.failedComment':
+    '❌ **Merge Conflict Resolution Failed**\n\n{error}\n\nRetry conflict resolution from the workbench.',
+  'conflict.mrResolvedComment':
+    '✅ **Merge conflicts have been automatically resolved**\n\nThe source branch of this PR has been successfully rebased onto the latest target branch, conflicts have been automatically resolved. Please re-review the changes.',
   'conflict.startedMsg': '🔧 Conflict resolution started, please wait...',
-  'conflict.invalidState': 'Current state does not allow conflict resolution (current: {state}). Only allowed when Completed or after conflict resolution failure.',
+  'conflict.invalidState':
+    'Current state does not allow conflict resolution (current: {state}). Only allowed when Completed or after conflict resolution failure.',
   'conflict.noMr': 'Issue #{number} has no associated PR, cannot perform conflict resolution.',
 
   // Auto-update messages
@@ -200,11 +216,11 @@ Please submit the complete revised implementation plan.`,
   'update.completed': 'Update completed, service will restart automatically',
   'update.failed': 'Update failed: {error}',
 
-
   // Distill (Knowledge Distillation)
   'distill.diaryCreated': '📝 Experience diary recorded for Issue #{number} ({outcome})',
   'distill.started': '🧪 Knowledge distillation started...',
-  'distill.completed': '✅ Knowledge distillation complete — Memories: {memoryActions}, Rules: {ruleActions}, Vectors: {vectorIndexed}',
+  'distill.completed':
+    '✅ Knowledge distillation complete — Memories: {memoryActions}, Rules: {ruleActions}, Vectors: {vectorIndexed}',
   'distill.failed': '❌ Knowledge distillation failed: {error}',
   'distill.runEmpty': 'No diary data available for distillation',
   'distill.noUndistilled': 'No undistilled diaries (minimum {threshold} required)',
@@ -221,5 +237,6 @@ Please submit the complete revised implementation plan.`,
 
   // --- E2E Runner ---
   'e2e.runnerCreated': 'E2E verify phases will use dedicated AI runner ({mode})',
-  'e2e.runnerFallback': 'E2E AI runner binary ({binary}) not installed, falling back to main runner',
+  'e2e.runnerFallback':
+    'E2E AI runner binary ({binary}) not installed, falling back to main runner',
 };

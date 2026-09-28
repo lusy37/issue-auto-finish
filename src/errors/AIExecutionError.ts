@@ -8,7 +8,17 @@ export class AIExecutionError extends AppError {
   /** Agent was still actively producing output when timeout fired — soft failure */
   public readonly wasActiveAtTimeout: boolean;
 
-  constructor(phase: string, message: string, opts?: { output?: string; exitCode?: number | null; cause?: Error; isRetryable?: boolean; wasActiveAtTimeout?: boolean }) {
+  constructor(
+    phase: string,
+    message: string,
+    opts?: {
+      output?: string;
+      exitCode?: number | null;
+      cause?: Error;
+      isRetryable?: boolean;
+      wasActiveAtTimeout?: boolean;
+    },
+  ) {
     super('AI_EXECUTION_ERROR', message, opts?.cause);
     this.phase = phase;
     this.output = opts?.output;

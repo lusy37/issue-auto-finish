@@ -16,10 +16,16 @@ const logger = rootLogger.child('PhaseHelpers');
 
 // ── 安全评论 ──
 
-export async function safeComment(deps: OrchestratorDeps, issueId: number, message: string): Promise<void> {
+export async function safeComment(
+  deps: OrchestratorDeps,
+  issueId: number,
+  message: string,
+): Promise<void> {
   try {
     await deps.github.createIssueNote(issueId, message);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 // ── 产物同步到 Issue ──
@@ -37,7 +43,7 @@ export async function syncResultToIssue(
     const notes = operation ? await deps.github.listIssueNotes(issueId) : [];
     const commentOnce = async (key: string, body: string) => {
       const marker = operation ? `<!-- iaf-phase:${operation}:${key} -->` : '';
-      if (marker && notes.some(note => note.body.includes(marker))) return;
+      if (marker && notes.some((note) => note.body.includes(marker))) return;
       await safeComment(deps, issueId, marker ? `${body}\n${marker}` : body);
     };
     const enabled = isNoteSyncEnabledForIssue(displayId, deps.tracker, deps.config);
@@ -58,7 +64,11 @@ export async function syncResultToIssue(
       const summary = truncateToSummary(content);
       const docUrl = `${baseUrl}/doc/${displayId}/${file.filename}`;
       const comment = buildNoteSyncComment(
-        phaseName, file.label || phaseLabel, docUrl, dashboardUrl, summary,
+        phaseName,
+        file.label || phaseLabel,
+        docUrl,
+        dashboardUrl,
+        summary,
       );
 
       await commentOnce(file.filename, comment);

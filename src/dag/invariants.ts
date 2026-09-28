@@ -3,7 +3,7 @@ import type { IssueRun, PlanContent } from './contracts.js';
 
 /** 计划图的跨字段业务约束；字段形状由输入 Codec 负责。 */
 export function assertPlanInvariants(plan: PlanContent): void {
-  const tasks = new Map(plan.tasks.map(task => [task.id, task]));
+  const tasks = new Map(plan.tasks.map((task) => [task.id, task]));
   if (tasks.size !== plan.tasks.length) throw new Error('任务 ID 重复');
 
   const visiting = new Set<string>();
@@ -21,7 +21,7 @@ export function assertPlanInvariants(plan: PlanContent): void {
     visiting.delete(id);
     visited.add(id);
   };
-  tasks.forEach(task => visit(task.id));
+  tasks.forEach((task) => visit(task.id));
 }
 
 /**
@@ -36,20 +36,28 @@ export function assertIssueRunInvariants(run: IssueRun, issueNumber: number): vo
   }
   for (const [id, task] of Object.entries(run.tasks)) {
     if (task.taskId !== id) throw new Error('任务索引与身份不一致');
-    if (task.success && (
-      task.success.identity.issueNumber !== issueNumber
-      || task.success.identity.planRevision !== run.planRevision
-      || task.success.identity.buildGeneration !== run.buildGeneration
-      || task.success.identity.taskId !== id
-    )) throw new Error('成功凭证的计划或构建轮次不匹配');
+    if (
+      task.success &&
+      (task.success.identity.issueNumber !== issueNumber ||
+        task.success.identity.planRevision !== run.planRevision ||
+        task.success.identity.buildGeneration !== run.buildGeneration ||
+        task.success.identity.taskId !== id)
+    )
+      throw new Error('成功凭证的计划或构建轮次不匹配');
     if (['waiting-merge', 'merging', 'merged'].includes(task.status) && !task.success) {
       throw new Error('待合并任务缺少成功凭证');
     }
-    if (task.merge && (!task.success || (task.merge.stage !== 'rebasing' && !task.merge.postRebaseCommit))) {
+    if (
+      task.merge &&
+      (!task.success || (task.merge.stage !== 'rebasing' && !task.merge.postRebaseCommit))
+    ) {
       throw new Error('合并操作缺少结果提交');
     }
-    if (task.status === 'merged'
-      && (task.merge?.stage !== 'merged' || task.merge.integrationAfter !== task.merge.postRebaseCommit)) {
+    if (
+      task.status === 'merged' &&
+      (task.merge?.stage !== 'merged' ||
+        task.merge.integrationAfter !== task.merge.postRebaseCommit)
+    ) {
       throw new Error('已合并任务缺少完整集成凭证');
     }
   }

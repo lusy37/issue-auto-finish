@@ -7,32 +7,37 @@ export function buildRuleDistillPrompt(
   matureMemories: MemoryEntry[],
   existingRules: AgentRuleEntry[],
 ): string {
-  const memorySection = matureMemories.map((m, i) => {
-    return [
-      `### 成熟记忆 ${i + 1} (ID: ${m.id})`,
-      `- 主题: ${m.theme}`,
-      `- 标题: ${m.title}`,
-      `- 信心度: ${m.confidence}`,
-      `- 证据数: ${m.evidence.length}`,
-      `- 已提升为规则: ${m.promotedToRule ? '是' : '否'}`,
-      '',
-      m.content,
-    ].join('\n');
-  }).join('\n\n---\n\n');
+  const memorySection = matureMemories
+    .map((m, i) => {
+      return [
+        `### 成熟记忆 ${i + 1} (ID: ${m.id})`,
+        `- 主题: ${m.theme}`,
+        `- 标题: ${m.title}`,
+        `- 信心度: ${m.confidence}`,
+        `- 证据数: ${m.evidence.length}`,
+        `- 已提升为规则: ${m.promotedToRule ? '是' : '否'}`,
+        '',
+        m.content,
+      ].join('\n');
+    })
+    .join('\n\n---\n\n');
 
-  const ruleSection = existingRules.length > 0
-    ? existingRules.map((r, i) => {
-        return [
-          `### 现有规则 ${i + 1} (ID: ${r.id})`,
-          `- 规则名: ${r.ruleName}`,
-          `- 标题: ${r.title}`,
-          `- 关键词: ${r.keywords.join(', ')}`,
-          `- 已废弃: ${r.deprecated ? '是' : '否'}`,
-          '',
-          r.content.slice(0, 300) + (r.content.length > 300 ? '...' : ''),
-        ].join('\n');
-      }).join('\n\n')
-    : '（暂无现有规则）';
+  const ruleSection =
+    existingRules.length > 0
+      ? existingRules
+          .map((r, i) => {
+            return [
+              `### 现有规则 ${i + 1} (ID: ${r.id})`,
+              `- 规则名: ${r.ruleName}`,
+              `- 标题: ${r.title}`,
+              `- 关键词: ${r.keywords.join(', ')}`,
+              `- 已废弃: ${r.deprecated ? '是' : '否'}`,
+              '',
+              r.content.slice(0, 300) + (r.content.length > 300 ? '...' : ''),
+            ].join('\n');
+          })
+          .join('\n\n')
+      : '（暂无现有规则）';
 
   return `你是 AI Agent 规范制定专家。请分析以下成熟的经验记忆，判断哪些可以升级为 Agent 开发规则。
 

@@ -5,15 +5,25 @@ export class AsyncMutex {
   private locked = false;
   async runExclusive<T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     await this.acquire(signal);
-    try { signal?.throwIfAborted(); return await fn(); }
-    finally { this.release(); }
+    try {
+      signal?.throwIfAborted();
+      return await fn();
+    } finally {
+      this.release();
+    }
   }
   private acquire(signal?: AbortSignal): Promise<void> {
     signal?.throwIfAborted();
-    if (!this.locked) { this.locked = true; return Promise.resolve(); }
+    if (!this.locked) {
+      this.locked = true;
+      return Promise.resolve();
+    }
     return new Promise<void>((resolve, reject) => {
       const waiter = {
-        grant: () => { signal?.removeEventListener('abort', waiter.cancel); resolve(); },
+        grant: () => {
+          signal?.removeEventListener('abort', waiter.cancel);
+          resolve();
+        },
         cancel: () => {
           const index = this.queue.indexOf(waiter);
           if (index < 0) return;
@@ -27,8 +37,13 @@ export class AsyncMutex {
   }
   private release(): void {
     const next = this.queue.shift();
-    if (next) next.grant(); else this.locked = false;
+    if (next) next.grant();
+    else this.locked = false;
   }
-  get isLocked(): boolean { return this.locked; }
-  get queueLength(): number { return this.queue.length; }
+  get isLocked(): boolean {
+    return this.locked;
+  }
+  get queueLength(): number {
+    return this.queue.length;
+  }
 }

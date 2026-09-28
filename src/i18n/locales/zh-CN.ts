@@ -30,19 +30,23 @@ export const zhCN: Record<string, string> = {
 
   // Orchestrator messages
   'orchestrator.retryComment': '🔄 **自动处理重试中**\n\n检测到之前处理失败，正在重试...',
-  'orchestrator.startComment': '🚀 **自动处理开始**\n\n已检测到 `auto-finish` 标签，开始自动分析和实施。',
+  'orchestrator.startComment':
+    '🚀 **自动处理开始**\n\n已检测到 `auto-finish` 标签，开始自动分析和实施。',
   'orchestrator.fetchProgress': '正在拉取最新代码...',
   'orchestrator.worktreeProgress': '正在准备工作目录...',
   'orchestrator.installProgress': '正在安装项目依赖 (npm install)...',
   'orchestrator.initPlanProgress': '正在初始化计划目录...',
   'orchestrator.phaseStartProgress': '准备就绪，开始执行阶段 (从 {phase} 开始)...',
-  'orchestrator.autoApproveComment': '⚡ **审核自动通过**\n\n检测到标签匹配 `autoApproveLabels` 配置，已自动跳过审核进入实施阶段。',
+  'orchestrator.autoApproveComment':
+    '⚡ **审核自动通过**\n\n检测到标签匹配 `autoApproveLabels` 配置，已自动跳过审核进入实施阶段。',
   'orchestrator.createPrProgress': '正在创建合并请求...',
   'orchestrator.uploadScreenshotsProgress': '正在上传 E2E 截图...',
   'orchestrator.mrSection': '\n\n🔗 合并请求: {prUrl}',
   'orchestrator.mrFailSection': '\n\n⚠️ 合并请求创建失败，请手动创建。',
-  'orchestrator.completedComment': '✅ **自动处理完成**\n\n所有阶段已完成。分支: `{branch}`{mrSection}{previewSection}',
-  'orchestrator.failedComment': '❌ **自动处理失败**\n\n{error}\n\n将在下次轮询时重试（如果未超过最大重试次数）。',
+  'orchestrator.completedComment':
+    '✅ **自动处理完成**\n\n所有阶段已完成。分支: `{branch}`{mrSection}{previewSection}',
+  'orchestrator.failedComment':
+    '❌ **自动处理失败**\n\n{error}\n\n将在下次轮询时重试（如果未超过最大重试次数）。',
   'orchestrator.deployProgress': '正在启动 Preview 环境...',
   'orchestrator.deployDoneProgress': 'Preview 环境已就绪: {url}',
   'orchestrator.previewComment.title': '🌐 **Preview Environment 已就绪**',
@@ -56,13 +60,16 @@ export const zhCN: Record<string, string> = {
   // BasePhase messages
   'basePhase.aiStarting': '正在启动 AI Agent ({label})...',
   'basePhase.aiResuming': '正在恢复上一次中断的 AI 会话 ({label})...',
-  'basePhase.resumePrompt': '上一次执行因中断而终止。请检查当前工作目录中已有的进度（包括已修改的文件和产物），从中断处继续完成任务。不要重复已经完成的工作。',
+  'basePhase.resumePrompt':
+    '上一次执行因中断而终止。请检查当前工作目录中已有的进度（包括已修改的文件和产物），从中断处继续完成任务。不要重复已经完成的工作。',
   'basePhase.resumeFallback': '会话恢复失败，降级为全新执行',
-  'basePhase.rulesSection': '## 项目开发规范参考\n以下是与本次任务相关的开发规范，请在编码时严格遵循：\n\n{rules}',
+  'basePhase.rulesSection':
+    '## 项目开发规范参考\n以下是与本次任务相关的开发规范，请在编码时严格遵循：\n\n{rules}',
   'basePhase.error': '错误: {message}',
 
   // IssuePoller messages
-  'poller.autoApproveComment': '⚡ **审核自动通过**\n\n检测到标签匹配 `autoApproveLabels` 配置（匹配: {labels}），已自动跳过审核进入实施阶段。',
+  'poller.autoApproveComment':
+    '⚡ **审核自动通过**\n\n检测到标签匹配 `autoApproveLabels` 配置（匹配: {labels}），已自动跳过审核进入实施阶段。',
 
   // Progress comment
   'progress.completed': '已完成',
@@ -136,7 +143,6 @@ export const zhCN: Record<string, string> = {
 完整计划使用 title、description、acceptanceCriteria、tasks 字段，最终只返回严格 JSON，不输出 Markdown 文档。
 {outputConstraint}`,
 
-
   'prompt.rePlan': `你是资深技术负责人。之前的实施计划未通过审核，请根据审核反馈修改计划。
 
 ## Issue 信息
@@ -179,13 +185,18 @@ export const zhCN: Record<string, string> = {
   'prompt.e2eSuffix.frontend': '前端',
 
   // Conflict resolution
-  'conflict.startComment': '🔧 **合并冲突修复开始**\n\n正在尝试将分支 `{branch}` rebase 到最新的 `{baseBranch}`...',
-  'conflict.noConflictComment': '✅ **Rebase 成功，没有冲突**\n\n分支 `{branch}` 已成功 rebase 到最新的 `{baseBranch}`，无需冲突修复。',
-  'conflict.resolvedComment': '✅ **合并冲突修复完成**\n\n分支 `{branch}` 已成功 rebase 到最新的 `{baseBranch}`，所有冲突已自动解决并通过验证。',
+  'conflict.startComment':
+    '🔧 **合并冲突修复开始**\n\n正在尝试将分支 `{branch}` rebase 到最新的 `{baseBranch}`...',
+  'conflict.noConflictComment':
+    '✅ **Rebase 成功，没有冲突**\n\n分支 `{branch}` 已成功 rebase 到最新的 `{baseBranch}`，无需冲突修复。',
+  'conflict.resolvedComment':
+    '✅ **合并冲突修复完成**\n\n分支 `{branch}` 已成功 rebase 到最新的 `{baseBranch}`，所有冲突已自动解决并通过验证。',
   'conflict.failedComment': '❌ **合并冲突修复失败**\n\n{error}\n\n请在工作台中重试冲突修复。',
-  'conflict.mrResolvedComment': '✅ **合并冲突已自动修复**\n\n此 PR 的源分支已成功 rebase 到最新的目标分支，冲突已自动解决。请重新审查变更。',
+  'conflict.mrResolvedComment':
+    '✅ **合并冲突已自动修复**\n\n此 PR 的源分支已成功 rebase 到最新的目标分支，冲突已自动解决。请重新审查变更。',
   'conflict.startedMsg': '🔧 冲突修复已启动，处理中请稍候...',
-  'conflict.invalidState': '当前状态不允许冲突修复（当前: {state}）。仅在 Completed 或冲突修复失败后可触发。',
+  'conflict.invalidState':
+    '当前状态不允许冲突修复（当前: {state}）。仅在 Completed 或冲突修复失败后可触发。',
   'conflict.noMr': 'Issue #{number} 没有关联的 PR，无法执行冲突修复。',
 
   // Auto-update messages
@@ -197,11 +208,11 @@ export const zhCN: Record<string, string> = {
   'update.completed': '更新完成，服务将自动重启',
   'update.failed': '更新失败: {error}',
 
-
   // Distill (知识蒸馏)
   'distill.diaryCreated': '📝 已记录 Issue #{number} 的经验日记（{outcome}）',
   'distill.started': '🧪 知识蒸馏开始...',
-  'distill.completed': '✅ 知识蒸馏完成 — 记忆: {memoryActions} 条, 规则: {ruleActions} 条, 向量: {vectorIndexed} 条',
+  'distill.completed':
+    '✅ 知识蒸馏完成 — 记忆: {memoryActions} 条, 规则: {ruleActions} 条, 向量: {vectorIndexed} 条',
   'distill.failed': '❌ 知识蒸馏失败: {error}',
   'distill.runEmpty': '暂无可蒸馏的日记数据',
   'distill.noUndistilled': '暂无未蒸馏的日记（最少需要 {threshold} 条）',

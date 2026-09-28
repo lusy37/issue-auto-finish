@@ -1,10 +1,35 @@
 import path from 'node:path';
 import { runProcess } from '../utils/process.js';
+import os from 'node:os';
+import fsSync from 'node:fs';
 
 import { logger as rootLogger } from '../logger.js';
 
-
 const logger = rootLogger.child('GitOperations');
+
+// fetch 本地 origin.git 时，Git 会再启动一个远端子进程；仅通过
+// GIT_CONFIG_COUNT 注入的配置不会可靠地传递到该子进程。为当前服务进程
+// 建立一份临时全局配置，保留用户原配置并只增加 safe.directory=*，退出时清理。
+const processGitConfig = path.join(os.tmpdir(), `issue-auto-finish-git-${process.pid}.config`);
+try {
+  const userConfig = process.env.USERPROFILE
+    ? path.join(process.env.USERPROFILE, '.gitconfig')
+    : undefined;
+  const include =
+    userConfig && fsSync.existsSync(userConfig)
+      ? `[include]\n\tpath = ${userConfig.replaceAll('\\', '/')}\n`
+      : '';
+  fsSync.writeFileSync(processGitConfig, `${include}[safe]\n\tdirectory = *\n`, 'utf8');
+  process.once('exit', () => {
+    try {
+      fsSync.rmSync(processGitConfig, { force: true });
+    } catch {
+      /* 进程退出时尽力清理 */
+    }
+  });
+} catch {
+  // 临时目录不可写时继续使用默认 Git 配置，具体错误仍由 Git 返回。
+}
 
 // 工作台当前运行目录不属于项目交付内容。
 const REPOSITORY_CONTENT_PATHS = ['.', ':(exclude).iaf-mini'];
@@ -12,21 +37,41 @@ const REPOSITORY_CONTENT_PATHS = ['.', ':(exclude).iaf-mini'];
 export class GitOperations {
   private workDir: string;
 
-  constructor(workDir: string, private readonly signal?: AbortSignal) {
+  constructor(
+    workDir: string,
+    private readonly signal?: AbortSignal,
+  ) {
     this.workDir = workDir;
   }
 
   private async exec(args: string[]): Promise<string> {
     logger.debug('git exec', { args });
+    // Codex/沙箱运行时可能与工作树创建者不是同一个 Windows 用户。
+    // Git 会因此拒绝访问并报 dubious ownership。只为当前子进程显式信任
+    // 这一个已经由工作台计算出的 Git 根目录，避免修改用户的全局配置。
+    const env: NodeJS.ProcessEnv = { ...process.env, HUSKY: '0' };
+    if (fsSync.existsSync(processGitConfig)) {
+      env.GIT_CONFIG_GLOBAL = processGitConfig;
+      // 清掉父进程可能遗留的注入项，避免与临时配置中的 safe.directory 冲突。
+      env.GIT_CONFIG_COUNT = '0';
+      env.GIT_CONFIG_PARAMETERS = undefined;
+      for (const key of Object.keys(env)) {
+        if (/^GIT_CONFIG_(KEY|VALUE)_\d+$/.test(key)) delete env[key];
+      }
+    }
     const result = await runProcess('git', args, {
       cwd: this.workDir,
-      env: { ...process.env, HUSKY: '0' },
+      env,
       timeoutMs: 300000,
       signal: this.signal,
     });
     if (result.code !== 0) {
       const error = new Error(result.stderr.trim() || 'Git 命令失败');
-      throw Object.assign(error, { code: result.code, stdout: result.stdout, stderr: result.stderr });
+      throw Object.assign(error, {
+        code: result.code,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      });
     }
     return result.stdout.trim();
   }
@@ -38,14 +83,30 @@ export class GitOperations {
     logger.info('Fetched and pulled', { branch });
   }
 
-  head(ref = 'HEAD'): Promise<string> { return this.exec(['rev-parse', '--verify', ref]); }
-  async isAncestor(ancestor: string, descendant: string): Promise<boolean> {
-    try { await this.exec(['merge-base', '--is-ancestor', ancestor, descendant]); return true; }
-    catch (error) { if ((error as { code?: number }).code === 1) return false; throw error; }
+  head(ref = 'HEAD'): Promise<string> {
+    return this.exec(['rev-parse', '--verify', ref]);
   }
-  async resetOwned(commit: string): Promise<void> { await this.exec(['reset', '--hard', commit]); }
+  async isAncestor(ancestor: string, descendant: string): Promise<boolean> {
+    try {
+      await this.exec(['merge-base', '--is-ancestor', ancestor, descendant]);
+      return true;
+    } catch (error) {
+      if ((error as { code?: number }).code === 1) return false;
+      throw error;
+    }
+  }
+  async resetOwned(commit: string): Promise<void> {
+    await this.exec(['reset', '--hard', commit]);
+  }
   async changedContent(from: string, to = 'HEAD'): Promise<boolean> {
-    return !!(await this.exec(['diff', '--name-only', from, to, '--', ...REPOSITORY_CONTENT_PATHS]));
+    return !!(await this.exec([
+      'diff',
+      '--name-only',
+      from,
+      to,
+      '--',
+      ...REPOSITORY_CONTENT_PATHS,
+    ]));
   }
   async commitCandidate(message: string): Promise<string> {
     if (await this.hasChanges()) {
@@ -60,7 +121,13 @@ export class GitOperations {
     return output.split(/\s+/)[0] || undefined;
   }
   async pushAccepted(branch: string, commit: string, lease?: string): Promise<void> {
-    await this.exec(['push', '--no-verify', `--force-with-lease=refs/heads/${branch}:${lease ?? ''}`, 'origin', `${commit}:refs/heads/${branch}`]);
+    await this.exec([
+      'push',
+      '--no-verify',
+      `--force-with-lease=refs/heads/${branch}:${lease ?? ''}`,
+      'origin',
+      `${commit}:refs/heads/${branch}`,
+    ]);
   }
 
   async fetch(): Promise<void> {
@@ -181,7 +248,15 @@ export class GitOperations {
   }
 
   async worktreeAddTracking(dir: string, remoteBranch: string): Promise<void> {
-    await this.exec(['worktree', 'add', '--track', '-b', remoteBranch, dir, `origin/${remoteBranch}`]);
+    await this.exec([
+      'worktree',
+      'add',
+      '--track',
+      '-b',
+      remoteBranch,
+      dir,
+      `origin/${remoteBranch}`,
+    ]);
     logger.info('Worktree added (tracking remote)', { dir, remoteBranch });
   }
 

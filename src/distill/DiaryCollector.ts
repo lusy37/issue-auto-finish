@@ -106,7 +106,10 @@ export class DiaryCollector {
   }
 
   /** 核心采集逻辑 */
-  async collectDiary(issueIid: number, outcome: 'completed' | 'failed'): Promise<DiaryEntry | null> {
+  async collectDiary(
+    issueIid: number,
+    outcome: 'completed' | 'failed',
+  ): Promise<DiaryEntry | null> {
     try {
       const record = this.tracker.get(issueIid);
       if (!record) {
@@ -119,8 +122,15 @@ export class DiaryCollector {
       const progress = record.phaseProgress;
       const reviewHistory = plan?.readReviewHistory() ?? [];
 
-      const executionKey = [issueIid, record.resetGeneration ?? 0, retryAttempts(record), outcome, record.phaseHistory.length].join(':');
-      if (this.diaryStore.getByIssueIid(issueIid).some(d => d.executionKey === executionKey)) return null;
+      const executionKey = [
+        issueIid,
+        record.resetGeneration ?? 0,
+        retryAttempts(record),
+        outcome,
+        record.phaseHistory.length,
+      ].join(':');
+      if (this.diaryStore.getByIssueIid(issueIid).some((d) => d.executionKey === executionKey))
+        return null;
       const timing = this.buildTiming(record, progress);
       const failure = outcome === 'failed' ? this.buildFailure(record) : undefined;
       const interventions = this.buildInterventions(record, progress, reviewHistory);
@@ -170,7 +180,8 @@ export class DiaryCollector {
       for (const [phaseName, phaseProgress] of Object.entries(progress)) {
         if (phaseProgress.startedAt) {
           const endTime = phaseProgress.completedAt ?? finishedAt;
-          const durationMs = new Date(endTime).getTime() - new Date(phaseProgress.startedAt).getTime();
+          const durationMs =
+            new Date(endTime).getTime() - new Date(phaseProgress.startedAt).getTime();
           phaseTimings.push({
             phase: phaseName,
             durationMs: Math.max(0, durationMs),
@@ -189,9 +200,7 @@ export class DiaryCollector {
   }
 
   /** 构建失败信息 */
-  private buildFailure(
-    record: IssueRecord,
-  ): DiaryEntry['failure'] {
+  private buildFailure(record: IssueRecord): DiaryEntry['failure'] {
     const failed = record.lifecycle.kind === 'failed' ? record.lifecycle : undefined;
     return {
       failedAtPhase: failed?.phase ?? 'unknown',
@@ -250,9 +259,10 @@ export class DiaryCollector {
   /** 把一轮驳回压缩成单行摘要：第 N 轮 + 截断后的 feedback。 */
   private summarizeRejection(round: ReviewRound): string {
     const feedback = round.feedback.replace(/\s+/g, ' ').trim();
-    const truncated = feedback.length > REVIEW_FEEDBACK_SUMMARY_MAX
-      ? `${feedback.slice(0, REVIEW_FEEDBACK_SUMMARY_MAX)}...`
-      : feedback;
+    const truncated =
+      feedback.length > REVIEW_FEEDBACK_SUMMARY_MAX
+        ? `${feedback.slice(0, REVIEW_FEEDBACK_SUMMARY_MAX)}...`
+        : feedback;
     return `第 ${round.round} 轮驳回: ${truncated}`;
   }
 }

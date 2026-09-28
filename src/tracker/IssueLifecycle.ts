@@ -42,27 +42,52 @@ export class InvalidLifecycleTransitionError extends Error {
 
 /** 持久化边界的最小结构校验；跨字段业务规则由 invariant 函数负责。 */
 export function assertIssueLifecycleShape(value: unknown): asserts value is IssueLifecycle {
-  if (!value || typeof value !== 'object' || !('kind' in value)) throw new Error('业务生命周期缺失或无效');
+  if (!value || typeof value !== 'object' || !('kind' in value))
+    throw new Error('业务生命周期缺失或无效');
   const lifecycle = value as Record<string, unknown>;
   const kind = lifecycle.kind;
-  if (!['pending', 'skipped', 'ready', 'running', 'waiting', 'paused', 'failed', 'delivering', 'completed', 'cancelled'].includes(String(kind))) {
+  if (
+    ![
+      'pending',
+      'skipped',
+      'ready',
+      'running',
+      'waiting',
+      'paused',
+      'failed',
+      'delivering',
+      'completed',
+      'cancelled',
+    ].includes(String(kind))
+  ) {
     throw new Error('业务生命周期缺失或无效');
   }
-  if (['running', 'waiting', 'paused'].includes(String(kind))
-    && (typeof lifecycle.phase !== 'string' || !PHASE_IDS.includes(lifecycle.phase as PhaseId))) {
+  if (
+    ['running', 'waiting', 'paused'].includes(String(kind)) &&
+    (typeof lifecycle.phase !== 'string' || !PHASE_IDS.includes(lifecycle.phase as PhaseId))
+  ) {
     throw new Error('业务生命周期阶段无效');
   }
-  if (kind === 'waiting' && lifecycle.planRevision !== undefined
-    && (!Number.isInteger(lifecycle.planRevision) || Number(lifecycle.planRevision) <= 0)) {
+  if (
+    kind === 'waiting' &&
+    lifecycle.planRevision !== undefined &&
+    (!Number.isInteger(lifecycle.planRevision) || Number(lifecycle.planRevision) <= 0)
+  ) {
     throw new Error('等待状态的计划版本无效');
   }
   if (kind === 'failed') {
     const error = lifecycle.error as Record<string, unknown> | undefined;
-    if (!['auto', 'manual'].includes(String(lifecycle.retry)) || !error || typeof error.message !== 'string') {
+    if (
+      !['auto', 'manual'].includes(String(lifecycle.retry)) ||
+      !error ||
+      typeof error.message !== 'string'
+    ) {
       throw new Error('失败生命周期缺少错误或重试策略');
     }
-    if (lifecycle.phase !== undefined
-      && (typeof lifecycle.phase !== 'string' || !PHASE_IDS.includes(lifecycle.phase as PhaseId))) {
+    if (
+      lifecycle.phase !== undefined &&
+      (typeof lifecycle.phase !== 'string' || !PHASE_IDS.includes(lifecycle.phase as PhaseId))
+    ) {
       throw new Error('失败生命周期阶段无效');
     }
   }
@@ -70,7 +95,10 @@ export function assertIssueLifecycleShape(value: unknown): asserts value is Issu
 
 /** 校验生命周期事件，不参与计算 LangGraph 下一节点。 */
 // 生命周期说明与完整转换表见 docs/issue-lifecycle.md；此处不决定图的执行位置。
-export function reduceIssueLifecycle(current: IssueLifecycle, event: IssueLifecycleEvent): IssueLifecycle {
+export function reduceIssueLifecycle(
+  current: IssueLifecycle,
+  event: IssueLifecycleEvent,
+): IssueLifecycle {
   switch (event.type) {
     case 'setup-completed':
       if (current.kind === 'pending' || current.kind === 'ready') return { kind: 'ready' };
@@ -79,8 +107,13 @@ export function reduceIssueLifecycle(current: IssueLifecycle, event: IssueLifecy
       if (current.kind === 'skipped') return { kind: 'pending' };
       break;
     case 'phase-started':
-      if (current.kind === 'ready' || current.kind === 'pending'
-        || (current.kind === 'failed' && current.retry === 'auto' && (!current.phase || current.phase === event.phase))) {
+      if (
+        current.kind === 'ready' ||
+        current.kind === 'pending' ||
+        (current.kind === 'failed' &&
+          current.retry === 'auto' &&
+          (!current.phase || current.phase === event.phase))
+      ) {
         return { kind: 'running', phase: event.phase };
       }
       break;
@@ -89,8 +122,13 @@ export function reduceIssueLifecycle(current: IssueLifecycle, event: IssueLifecy
       break;
     case 'gate-interrupted':
       if (current.kind === 'waiting' && current.phase === event.phase) {
-        if (current.phase === 'review' && current.planRevision !== undefined
-          && event.planRevision !== undefined && current.planRevision !== event.planRevision) break;
+        if (
+          current.phase === 'review' &&
+          current.planRevision !== undefined &&
+          event.planRevision !== undefined &&
+          current.planRevision !== event.planRevision
+        )
+          break;
         return current;
       }
       if (current.kind === 'running' && current.phase === event.phase) {
@@ -98,21 +136,32 @@ export function reduceIssueLifecycle(current: IssueLifecycle, event: IssueLifecy
       }
       break;
     case 'gate-resolved':
-      if ((current.kind === 'waiting' || current.kind === 'running') && current.phase === event.phase) {
-        if (current.kind === 'waiting' && current.phase === 'review' && current.planRevision !== event.planRevision) {
+      if (
+        (current.kind === 'waiting' || current.kind === 'running') &&
+        current.phase === event.phase
+      ) {
+        if (
+          current.kind === 'waiting' &&
+          current.phase === 'review' &&
+          current.planRevision !== event.planRevision
+        ) {
           throw new InvalidLifecycleTransitionError(current, event, '审核计划版本或等待状态已改变');
         }
         return event.action === 'approve' ? { kind: 'ready' } : { kind: 'pending' };
       }
       break;
     case 'phase-failed':
-      if (['pending', 'ready', 'running', 'failed', 'delivering'].includes(current.kind)
-        && !(current.kind === 'running' && event.phase && current.phase !== event.phase)) {
+      if (
+        ['pending', 'ready', 'running', 'failed', 'delivering'].includes(current.kind) &&
+        !(current.kind === 'running' && event.phase && current.phase !== event.phase)
+      ) {
         return { kind: 'failed', phase: event.phase, retry: event.retry, error: event.error };
       }
       break;
     case 'pause-requested':
-      if (['pending', 'ready', 'running', 'waiting', 'failed', 'delivering'].includes(current.kind)) {
+      if (
+        ['pending', 'ready', 'running', 'waiting', 'failed', 'delivering'].includes(current.kind)
+      ) {
         return { kind: 'paused', phase: event.phase };
       }
       break;
@@ -132,7 +181,8 @@ export function reduceIssueLifecycle(current: IssueLifecycle, event: IssueLifecy
       if (current.kind === 'delivering') return { kind: 'completed' };
       break;
     case 'cancel-requested':
-      if (current.kind !== 'completed' && current.kind !== 'cancelled') return { kind: 'cancelled' };
+      if (current.kind !== 'completed' && current.kind !== 'cancelled')
+        return { kind: 'cancelled' };
       break;
     case 'full-redo-requested':
       return { kind: 'pending' };
@@ -143,24 +193,31 @@ export function reduceIssueLifecycle(current: IssueLifecycle, event: IssueLifecy
   throw new InvalidLifecycleTransitionError(current, event);
 }
 
-export function applyIssueLifecycleEvent(record: IssueRecord, event: IssueLifecycleEvent): IssueLifecycle {
+export function applyIssueLifecycleEvent(
+  record: IssueRecord,
+  event: IssueLifecycleEvent,
+): IssueLifecycle {
   const next = reduceIssueLifecycle(record.lifecycle, event);
   record.lifecycle = structuredClone(next);
   return next;
 }
 
 export function isLifecycleSchedulable(lifecycle: IssueLifecycle): boolean {
-  return lifecycle.kind === 'pending'
-    || lifecycle.kind === 'ready'
-    || (lifecycle.kind === 'failed' && lifecycle.retry === 'auto');
+  return (
+    lifecycle.kind === 'pending' ||
+    lifecycle.kind === 'ready' ||
+    (lifecycle.kind === 'failed' && lifecycle.retry === 'auto')
+  );
 }
 
 export function assertReviewInvariant(record: IssueRecord): void {
   const lifecycle = record.lifecycle;
   if (lifecycle.kind !== 'waiting' || lifecycle.phase !== 'review') return;
-  if (lifecycle.planRevision === undefined
-    || lifecycle.planRevision !== record.run.planRevision
-    || record.run.review?.decision !== 'waiting') {
+  if (
+    lifecycle.planRevision === undefined ||
+    lifecycle.planRevision !== record.run.planRevision ||
+    record.run.review?.decision !== 'waiting'
+  ) {
     throw new Error('Review 等待状态与计划版本不一致');
   }
 }

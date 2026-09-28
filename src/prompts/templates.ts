@@ -44,20 +44,25 @@ export function getKnowledgeForPrompt(enabled = true): Record<string, string> {
     codeStyleParts.push(...k.codeStyle.additionalRules);
   }
 
-  const knownIssueLines = enabled ? k.knownIssues.map(issue => `- ${issue.description}${issue.advice ? `，${issue.advice}` : ''}`) : [];
+  const knownIssueLines = enabled
+    ? k.knownIssues.map(
+        (issue) => `- ${issue.description}${issue.advice ? `，${issue.advice}` : ''}`,
+      )
+    : [];
 
   return {
     dependencyCheckPath: k.toolchain.dependencyCheckPath ?? 'node_modules/.bin/eslint',
     installCommand: k.toolchain.installCommand,
-    installFallbackCommand: k.toolchain.installFallbackCommand ?? `${k.toolchain.installCommand} --ignore-scripts`,
+    installFallbackCommand:
+      k.toolchain.installFallbackCommand ?? `${k.toolchain.installCommand} --ignore-scripts`,
     lintCommand: k.toolchain.lintCommand ?? 'npm run lint',
     buildCommand: k.toolchain.buildCommand ?? 'npm run build',
     testCommand: k.toolchain.testCommand ?? 'npm test',
-    testFilesCommand: k.toolchain.testFilesCommand
-      ?? `${k.toolchain.testCommand ?? 'npm test'} -- <涉及变更的测试文件>`,
-    knownIssuesSection: knownIssueLines.length > 0
-      ? knownIssueLines.join('\n')
-      : '- 无已知预存问题',
+    testFilesCommand:
+      k.toolchain.testFilesCommand ??
+      `${k.toolchain.testCommand ?? 'npm test'} -- <涉及变更的测试文件>`,
+    knownIssuesSection:
+      knownIssueLines.length > 0 ? knownIssueLines.join('\n') : '- 无已知预存问题',
     codeStyleDescription: enabled ? codeStyleParts.join('、') : '遵循项目现有代码风格',
     // E2E related
     e2eDir: k.structure.e2eDir ?? 'e2e',
@@ -123,7 +128,9 @@ export interface ReviewRoundForPrompt {
 
 /** 上轮完整快照属于审核契约，不能静默截断后让模型据不完整方案重新规划。 */
 function buildRejectedPlanSection(snapshot: string | undefined): string {
-  return snapshot ? `\n\n## 上一轮被驳回的完整实施计划\n\n<rejected-plan>\n${snapshot}\n</rejected-plan>` : '';
+  return snapshot
+    ? `\n\n## 上一轮被驳回的完整实施计划\n\n<rejected-plan>\n${snapshot}\n</rejected-plan>`
+    : '';
 }
 
 /** 计划保持只读；驳回时携带上一轮快照和审核反馈。 */
@@ -133,9 +140,11 @@ export function buildReviewFeedbackResumePrompt(
 ): string {
   if (history.length === 0) return '';
   const latest = history[history.length - 1];
-  const allRoundsLines = history.map(
-    r => t('prompt.rePlanRound', { round: r.round, timestamp: r.timestamp, feedback: r.feedback }),
-  ).join('\n\n');
+  const allRoundsLines = history
+    .map((r) =>
+      t('prompt.rePlanRound', { round: r.round, timestamp: r.timestamp, feedback: r.feedback }),
+    )
+    .join('\n\n');
   const supplementSection = supplementText ? `\n\n${supplementText}` : '';
   const prompt = t('prompt.rePlanResume', {
     historyCount: history.length,
@@ -148,17 +157,20 @@ export function buildReviewFeedbackResumePrompt(
 
 export function rePlanPrompt(ctx: PromptContext, history: ReviewRoundForPrompt[]): string {
   const supplementSection = ctx.supplementText ? `\n\n${ctx.supplementText}` : '';
-  const feedbackLines = history.map(
-    r => t('prompt.rePlanRound', { round: r.round, timestamp: r.timestamp, feedback: r.feedback })
-  ).join('\n\n');
+  const feedbackLines = history
+    .map((r) =>
+      t('prompt.rePlanRound', { round: r.round, timestamp: r.timestamp, feedback: r.feedback }),
+    )
+    .join('\n\n');
 
   const latestSnapshot = history.length > 0 ? history[history.length - 1].planSnapshot : undefined;
   const rejectedPlanSection = buildRejectedPlanSection(latestSnapshot);
 
-  const rePlanReadInstruction = (rejectedPlanSection
-        ? '请先阅读:\n- AGENTS.md (项目架构)\n\n上文已直接给出上一轮被驳回的方案全文，请基于该方案对照反馈做修改。'
-        : '请先阅读:\n- AGENTS.md (项目架构)\n\n参考之前的审核反馈历史来改进计划。');
-  const rePlanOutputInstruction = '请基于上一轮被驳回的实施计划做实质性修改：\n- 针对每条审核反馈给出可验证的调整（说明改了什么、为什么、影响范围）\n- 不要原样照搬被驳回方案，也不要只做措辞润色\n- 避免空洞口号（如"提升健壮性"），代之以具体的设计/接口/步骤/验收标准\n\n请输出修改后的完整新版结构化计划，使用规定的 JSON 字段。';
+  const rePlanReadInstruction = rejectedPlanSection
+    ? '请先阅读:\n- AGENTS.md (项目架构)\n\n上文已直接给出上一轮被驳回的方案全文，请基于该方案对照反馈做修改。'
+    : '请先阅读:\n- AGENTS.md (项目架构)\n\n参考之前的审核反馈历史来改进计划。';
+  const rePlanOutputInstruction =
+    '请基于上一轮被驳回的实施计划做实质性修改：\n- 针对每条审核反馈给出可验证的调整（说明改了什么、为什么、影响范围）\n- 不要原样照搬被驳回方案，也不要只做措辞润色\n- 避免空洞口号（如"提升健壮性"），代之以具体的设计/接口/步骤/验收标准\n\n请输出修改后的完整新版结构化计划，使用规定的 JSON 字段。';
   const outputConstraint = PLAN_OUTPUT_CONSTRAINT;
 
   const base = t('prompt.rePlan', {
@@ -178,11 +190,22 @@ export function rePlanPrompt(ctx: PromptContext, history: ReviewRoundForPrompt[]
 
 export function issueProgressComment(phase: string, status: string, detail?: string): string {
   const emoji: Record<string, string> = {
-    analysis: '🔍', design: '📐', implement: '💻', verify: '✅',
-    plan: '📋', review: '👀', build: '🔨', uat: '🧪',
+    analysis: '🔍',
+    design: '📐',
+    implement: '💻',
+    verify: '✅',
+    plan: '📋',
+    review: '👀',
+    build: '🔨',
+    uat: '🧪',
   };
   const icon = emoji[phase] || '📋';
-  const statusKey = status === 'completed' ? 'progress.completed' : status === 'failed' ? 'progress.failed' : 'progress.inProgress';
+  const statusKey =
+    status === 'completed'
+      ? 'progress.completed'
+      : status === 'failed'
+        ? 'progress.failed'
+        : 'progress.inProgress';
   const statusText = t(statusKey);
   let msg = t('progress.comment', { icon, phase, status: statusText });
   if (detail) {

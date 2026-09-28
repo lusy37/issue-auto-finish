@@ -1,18 +1,18 @@
-import { writeJsonAtomicSync } from "../utils/atomicFile.js";
-import type { DiaryStore } from "./DiaryStore.js";
-import type { MemoryDistiller } from "./MemoryDistiller.js";
-import type { AgentRuleDistiller } from "./AgentRuleDistiller.js";
-import type { KnowledgeStore } from "../knowledge/KnowledgeStore.js";
-import { eventBus } from "../events/EventBus.js";
-import fs from "node:fs";
-import path from "node:path";
-import { randomUUID } from "node:crypto";
-import { resolveDataDir } from "../paths.js";
+import { writeJsonAtomicSync } from '../utils/atomicFile.js';
+import type { DiaryStore } from './DiaryStore.js';
+import type { MemoryDistiller } from './MemoryDistiller.js';
+import type { AgentRuleDistiller } from './AgentRuleDistiller.js';
+import type { KnowledgeStore } from '../knowledge/KnowledgeStore.js';
+import { eventBus } from '../events/EventBus.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { resolveDataDir } from '../paths.js';
 export interface DistillRun {
   id: string;
   startedAt: string;
   finishedAt?: string;
-  status: "running" | "completed" | "failed";
+  status: 'running' | 'completed' | 'failed';
   error?: string;
   result?: unknown;
 }
@@ -30,47 +30,47 @@ export class DistillScheduler {
   private runs: DistillRun[];
   constructor(
     private deps: DistillSchedulerDeps,
-    dataDir = path.join(resolveDataDir(), "distill"),
+    dataDir = path.join(resolveDataDir(), 'distill'),
   ) {
-    this.file = path.join(dataDir, "runs.json");
+    this.file = path.join(dataDir, 'runs.json');
     if (fs.existsSync(this.file)) {
-      const saved = JSON.parse(fs.readFileSync(this.file, "utf8"));
-      if (saved.format !== "iaf-mini/v1" || !Array.isArray(saved.runs))
-        throw new Error("不支持的蒸馏记录格式");
+      const saved = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+      if (saved.format !== 'iaf-mini/v1' || !Array.isArray(saved.runs))
+        throw new Error('不支持的蒸馏记录格式');
       this.runs = saved.runs;
       for (const run of this.runs)
-        if (run.status === "running") {
-          run.status = "failed";
-          run.error = "上次蒸馏被服务重启中断，请重新执行";
+        if (run.status === 'running') {
+          run.status = 'failed';
+          run.error = '上次蒸馏被服务重启中断，请重新执行';
           run.finishedAt = new Date().toISOString();
         }
       this.save();
     } else this.runs = [];
   }
   private save() {
-    writeJsonAtomicSync(this.file, { format: "iaf-mini/v1", runs: this.runs });
+    writeJsonAtomicSync(this.file, { format: 'iaf-mini/v1', runs: this.runs });
   }
   async runDistill(options?: { force?: boolean }) {
     if (this.deps.enabled === false) throw new Error('经验蒸馏已关闭，请在设置中开启并重启服务');
-    if (this.running) throw new Error("已有蒸馏任务正在执行");
+    if (this.running) throw new Error('已有蒸馏任务正在执行');
     this.running = true;
     const run: DistillRun = {
       id: randomUUID(),
       startedAt: new Date().toISOString(),
-      status: "running",
+      status: 'running',
     };
     try {
       this.runs.unshift(run);
       this.save();
-      eventBus.emitTyped("distill:started", {});
+      eventBus.emitTyped('distill:started', {});
       const memory = await this.deps.memoryDistiller.distill(options);
       const rule = await this.deps.agentRuleDistiller.distill();
-      run.status = "completed";
+      run.status = 'completed';
       run.result = { memory, rule };
-      eventBus.emitTyped("distill:completed", { memory, rule });
+      eventBus.emitTyped('distill:completed', { memory, rule });
       return { memory, rule };
     } catch (error) {
-      run.status = "failed";
+      run.status = 'failed';
       run.error = (error as Error).message;
       throw error;
     } finally {
@@ -86,8 +86,8 @@ export class DistillScheduler {
       runs: this.runs,
       diaryCount: this.deps.diaryStore.count(),
       undistilledDiaryCount: this.deps.diaryStore.undistilledCount(),
-      memoryCount: this.deps.knowledgeStore.list("memory").length,
-      ruleCount: this.deps.knowledgeStore.list("agent-rule").length,
+      memoryCount: this.deps.knowledgeStore.list('memory').length,
+      ruleCount: this.deps.knowledgeStore.list('agent-rule').length,
     };
   }
 }

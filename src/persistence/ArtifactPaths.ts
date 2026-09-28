@@ -7,7 +7,11 @@ export function resolveIssueArtifactsDir(issueNumber: number, dataDir = resolveD
 }
 
 /** 产物只接受文件名，不能借路径片段读写其他 Issue 或项目文件。 */
-export function resolveIssueArtifactPath(issueNumber: number, filename: string, dataDir = resolveDataDir()): string {
+export function resolveIssueArtifactPath(
+  issueNumber: number,
+  filename: string,
+  dataDir = resolveDataDir(),
+): string {
   if (!filename || filename === '.' || filename === '..' || /[/\\\0:]/.test(filename)) {
     throw new Error('产物名称必须是单个文件名');
   }

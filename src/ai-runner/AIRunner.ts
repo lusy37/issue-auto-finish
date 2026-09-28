@@ -35,7 +35,7 @@ export interface RunResult {
   errorMessage?: string;
   sessionId?: string;
   exitCode: number | null;
-  timeoutType?: "wall-clock" | "idle";
+  timeoutType?: 'wall-clock' | 'idle';
   wasActiveAtTimeout?: boolean;
 }
 export interface AIRunner {

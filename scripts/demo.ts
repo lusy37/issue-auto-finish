@@ -439,7 +439,7 @@ console.log(
   `本地演示工作台：http://127.0.0.1:${values.WEB_PORT}\n模拟 AI 与平台，真实 Git 和浏览器。`,
 );
 try {
-  await main();
+  await main({ backgroundScheduling: process.env.IAF_DEMO_SHOWCASE !== 'true' });
 } catch (error) {
   server.close();
   throw error;

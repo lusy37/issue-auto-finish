@@ -2,7 +2,6 @@
 import { it, expect, vi, afterEach } from 'vitest';
 import { effectScope, reactive } from 'vue';
 import { useIssueGraphs } from '../../src/web/frontend/src/composables/useIssueGraphs.js';
-import { repairProgress } from '../../src/web/frontend/src/composables/repairProgress.js';
 import { usePipeline, loadPipelineMeta } from '../../src/web/frontend/src/composables/usePipeline.js';
 import type { IssueGraphs } from '../../src/shared/workflowGraphs.js';
 import type { IssueRecord } from '../../src/web/frontend/src/types/index.js';
@@ -43,8 +42,4 @@ it('元数据失败后可重试，并发只发一次；本轮阶段优先', asyn
   const issue: IssueRecord = { run, lifecycle: { kind: 'running', phase: 'build' }, branchName: 'iaf-2', demandSpec: { demandId: '2', sourceRef: { source: 'github-issue', externalId: '2' }, title: '需求', description: '测试' }, createdAt: '', updatedAt: '' };
   expect(usePipeline().getPhaseNames(issue)).not.toContain('uat');
   expect(usePipeline().isEditableDoc('01-plan.md')).toBe(false);
-  run.repairRounds = 2; run.buildEntry = 'repair-integration';
-  expect(repairProgress(JSON.parse(JSON.stringify(issue)), 3)).toMatchObject({ iteration: 2, active: true, lastPassed: false });
-  issue.lifecycle = { kind: 'paused', phase: 'build' };
-  expect(repairProgress(issue, 3)?.active).toBe(false);
 });

@@ -45,9 +45,6 @@ export interface TaskSummary {
   averageDurationMs: number | null;
   retries: number;
   interventions: number;
-  phases: Record<
-    string,
-    { runs: number; durationMs: number; failures: number }
-  >;
+  phases: Record<string, { runs: number; durationMs: number; failures: number }>;
   uat: { passed: number; failed: number; passRate: number | null };
 }

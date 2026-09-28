@@ -62,17 +62,22 @@ export class WorktreeReaper {
   start(): void {
     if (this.timer) return;
     if (!this.enabled) {
-      logger.info('WorktreeReaper disabled (cleanupEnabled=false) — worktrees retained indefinitely');
+      logger.info(
+        'WorktreeReaper disabled (cleanupEnabled=false) — worktrees retained indefinitely',
+      );
       return;
     }
 
     this.timer = setInterval(() => {
-      this.reap().catch(err => {
+      this.reap().catch((err) => {
         logger.error('Scheduled worktree reap failed', { error: (err as Error).message });
       });
     }, this.intervalMs);
 
-    logger.info('WorktreeReaper started', { intervalMs: this.intervalMs, retentionMs: this.retentionMs });
+    logger.info('WorktreeReaper started', {
+      intervalMs: this.intervalMs,
+      retentionMs: this.retentionMs,
+    });
   }
 
   stop(): void {
@@ -94,7 +99,8 @@ export class WorktreeReaper {
     try {
       await this.orchestrator.cleanupExpiredTaskWorkspaces(this.retentionMs);
       const now = Date.now();
-      { const orchestrator = this.orchestrator;
+      {
+        const orchestrator = this.orchestrator;
         const tracker = orchestrator.getTracker();
         for (const record of tracker.getAll()) {
           if (!this.shouldReap(record, now)) continue;
@@ -134,7 +140,11 @@ export class WorktreeReaper {
 
   /** 判定某条记录是否到达回收条件：终态 + 未清理 + 已超过保留期。 */
   private shouldReap(record: IssueRecord, now: number): boolean {
-    if (record.run?.recoveryRequired || Object.values(record.run?.calls ?? {}).some(call => call.status !== 'exited')) return false;
+    if (
+      record.run?.recoveryRequired ||
+      Object.values(record.run?.calls ?? {}).some((call) => call.status !== 'exited')
+    )
+      return false;
     if (record.lifecycle.kind !== 'completed') return false;
     if (record.worktreeCleanedAt) return false;
     if (!record.completedAt) return false;

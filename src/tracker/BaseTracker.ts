@@ -1,8 +1,8 @@
 import { TRACKER_FORMAT } from '../shared/runtime/formats.js';
-import { writeJsonAtomicSync } from "../utils/atomicFile.js";
-import fs from "node:fs";
-import path from "node:path";
-import { logger as rootLogger } from "../logger.js";
+import { writeJsonAtomicSync } from '../utils/atomicFile.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { logger as rootLogger } from '../logger.js';
 
 /**
  * BaseTracker — JSON 文件持久化的泛型 Tracker 基类。
@@ -18,12 +18,7 @@ export abstract class BaseTracker<TRecord> {
   protected readonly collectionKey: string;
   protected readonly trackerName: string;
 
-  constructor(
-    dataDir: string,
-    filename: string,
-    collectionKey: string,
-    trackerName: string,
-  ) {
+  constructor(dataDir: string, filename: string, collectionKey: string, trackerName: string) {
     this.collectionKey = collectionKey;
     this.trackerName = trackerName;
     this.filePath = path.join(dataDir, filename);
@@ -32,14 +27,16 @@ export abstract class BaseTracker<TRecord> {
   }
   protected load(): Record<string, Record<string, TRecord>> {
     if (!fs.existsSync(this.filePath)) return { [this.collectionKey]: {} };
-    const parsed = JSON.parse(fs.readFileSync(this.filePath, "utf8"));
+    const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf8'));
     if (
       parsed?.format !== TRACKER_FORMAT ||
       !parsed[this.collectionKey] ||
-      typeof parsed[this.collectionKey] !== "object" ||
+      typeof parsed[this.collectionKey] !== 'object' ||
       Array.isArray(parsed[this.collectionKey])
     )
-      throw new Error(`存储数据格式无效：需要 ${TRACKER_FORMAT} 格式及 ${this.collectionKey} 对象。请检查文件：${this.filePath}`);
+      throw new Error(
+        `存储数据格式无效：需要 ${TRACKER_FORMAT} 格式及 ${this.collectionKey} 对象。请检查文件：${this.filePath}`,
+      );
     return { [this.collectionKey]: parsed[this.collectionKey] };
   }
 
@@ -56,15 +53,13 @@ export abstract class BaseTracker<TRecord> {
       wrapped.syscall = cause.syscall;
       wrapped.path = cause.path ?? this.filePath;
       wrapped.cause = cause;
-      rootLogger
-        .child(this.trackerName)
-        .error("Failed to persist tracker data", {
-          filePath: this.filePath,
-          code: cause.code,
-          errno: cause.errno,
-          syscall: cause.syscall,
-          message: cause.message,
-        });
+      rootLogger.child(this.trackerName).error('Failed to persist tracker data', {
+        filePath: this.filePath,
+        code: cause.code,
+        errno: cause.errno,
+        syscall: cause.syscall,
+        message: cause.message,
+      });
       throw wrapped;
     }
   }
@@ -74,30 +69,28 @@ export abstract class BaseTracker<TRecord> {
     try {
       const dir = path.dirname(this.filePath);
       if (!fs.existsSync(dir)) return;
-      const atomicPrefix = path.basename(this.filePath) + ".tmp-";
+      const atomicPrefix = path.basename(this.filePath) + '.tmp-';
       let removed = 0;
       for (const name of fs.readdirSync(dir)) {
-        const atomic = name.startsWith(atomicPrefix) && /^\d{10}[a-f0-9]{6}$/.test(name.slice(atomicPrefix.length));
+        const atomic =
+          name.startsWith(atomicPrefix) &&
+          /^\d{10}[a-f0-9]{6}$/.test(name.slice(atomicPrefix.length));
         if (atomic) {
           this.safeUnlinkTmp(path.join(dir, name));
           removed += 1;
         }
       }
       if (removed > 0) {
-        rootLogger
-          .child(this.trackerName)
-          .info("Cleaned up stale tracker temp files", {
-            dir,
-            removed,
-          });
+        rootLogger.child(this.trackerName).info('Cleaned up stale tracker temp files', {
+          dir,
+          removed,
+        });
       }
     } catch (err) {
       // 清理只是防御性操作，失败不影响主流程
-      rootLogger
-        .child(this.trackerName)
-        .warn("Failed to cleanup stale temp files", {
-          error: (err as Error).message,
-        });
+      rootLogger.child(this.trackerName).warn('Failed to cleanup stale temp files', {
+        error: (err as Error).message,
+      });
     }
   }
 

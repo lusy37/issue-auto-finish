@@ -26,7 +26,12 @@ export const issueContext = new AsyncLocalStorage<IssueCtx>();
  * Run `fn` within an issue-scoped context.
  * A new `correlationId` is generated automatically.
  */
-export function runWithIssueContext<T>(number: number, fn: () => T, signal?: AbortSignal, lifecycle?: Pick<IssueCtx, 'processStarted' | 'processExited'>): T {
+export function runWithIssueContext<T>(
+  number: number,
+  fn: () => T,
+  signal?: AbortSignal,
+  lifecycle?: Pick<IssueCtx, 'processStarted' | 'processExited'>,
+): T {
   return issueContext.run(
     { issueIid: number, correlationId: randomUUID(), signal, ...lifecycle },
     fn,

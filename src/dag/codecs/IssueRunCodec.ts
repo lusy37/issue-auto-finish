@@ -31,7 +31,15 @@ const mergeSchema = z.object({
 });
 const taskSchema = z.object({
   taskId: text,
-  status: z.enum(['pending', 'running', 'waiting-merge', 'merging', 'merged', 'failed', 'uncertain']),
+  status: z.enum([
+    'pending',
+    'running',
+    'waiting-merge',
+    'merging',
+    'merged',
+    'failed',
+    'uncertain',
+  ]),
   attemptNo: counter,
   conflictCallsUsed: counter.max(MAX_CONFLICT_REPAIR_CALLS),
   identity: identitySchema.optional(),
@@ -49,89 +57,114 @@ const receiptSchema = z.object({
   reportPath: text,
   runId: text.optional(),
 });
-const runSchema = z.object({
-  workflow: z.unknown(),
-  version: counter,
-  planRevision: counter,
-  planDigest: text.optional(),
-  buildGeneration: counter,
-  dispatchId: text.optional(),
-  stopIntent: z.object({ kind: z.enum(['pause', 'cancel', 'redo']), requestedAt: text }).optional(),
-  review: z.object({
-    revision: counter,
-    decision: z.enum(['waiting', 'approved', 'rejected']),
-    feedback: z.string().optional(),
-    source: z.string().optional(),
-  }).optional(),
-  activeCalls: z.record(z.string(), text).optional(),
-  reviewHistory: z.array(z.object({
-    round: counter,
-    revision: counter,
-    feedback: z.string(),
-    timestamp: text,
-    planSnapshot: z.string(),
-    reviewedSessionId: text.optional(),
-  })).optional(),
-  budgetHistory: z.array(z.object({
+const runSchema = z
+  .object({
+    workflow: z.unknown(),
+    version: counter,
     planRevision: counter,
+    planDigest: text.optional(),
     buildGeneration: counter,
+    dispatchId: text.optional(),
+    stopIntent: z
+      .object({ kind: z.enum(['pause', 'cancel', 'redo']), requestedAt: text })
+      .optional(),
+    review: z
+      .object({
+        revision: counter,
+        decision: z.enum(['waiting', 'approved', 'rejected']),
+        feedback: z.string().optional(),
+        source: z.string().optional(),
+      })
+      .optional(),
+    activeCalls: z.record(z.string(), text).optional(),
+    reviewHistory: z
+      .array(
+        z.object({
+          round: counter,
+          revision: counter,
+          feedback: z.string(),
+          timestamp: text,
+          planSnapshot: z.string(),
+          reviewedSessionId: text.optional(),
+        }),
+      )
+      .optional(),
+    budgetHistory: z
+      .array(
+        z.object({
+          planRevision: counter,
+          buildGeneration: counter,
+          retryUsed: z.record(z.string(), counter),
+          phaseExecutions: z.record(z.string(), counter),
+          repairRounds: counter,
+        }),
+      )
+      .optional(),
+    installedLockDigest: text.optional(),
+    tasks: z.record(z.string(), taskSchema),
+    calls: z.record(
+      z.string(),
+      z.object({
+        identity: identitySchema,
+        workDir: text,
+        status: z.enum(['queued', 'running', 'exited', 'uncertain']),
+        pid: z.number().int().positive().optional(),
+        startedAt: text.optional(),
+        exitedAt: text.optional(),
+      }),
+    ),
     retryUsed: z.record(z.string(), counter),
     phaseExecutions: z.record(z.string(), counter),
+    buildEntry: z.enum(['execute-graph', 'repair-integration']),
     repairRounds: counter,
-  })).optional(),
-  installedLockDigest: text.optional(),
-  tasks: z.record(z.string(), taskSchema),
-  calls: z.record(z.string(), z.object({
-    identity: identitySchema,
-    workDir: text,
-    status: z.enum(['queued', 'running', 'exited', 'uncertain']),
-    pid: z.number().int().positive().optional(),
-    startedAt: text.optional(),
-    exitedAt: text.optional(),
-  })),
-  retryUsed: z.record(z.string(), counter),
-  phaseExecutions: z.record(z.string(), counter),
-  buildEntry: z.enum(['execute-graph', 'repair-integration']),
-  repairRounds: counter,
-  repairs: z.array(z.object({
-    round: counter,
-    report: z.string(),
-    source: text,
-    before: text.optional(),
-    after: text.optional(),
-    identity: identitySchema.optional(),
-  })),
-  integrationBase: text.optional(),
-  integrationHead: text.optional(),
-  candidateCommit: text.optional(),
-  verify: receiptSchema.optional(),
-  uat: receiptSchema.optional(),
-  delivery: z.object({
-    repository: text,
-    issueNumber: z.number().int().positive(),
-    sourceBranch: text,
-    targetBranch: text,
-    marker: text,
-    creation: z.enum(['unstarted', 'unknown', 'confirmed']),
-    prNumber: z.number().int().positive().optional(),
-    prUrl: text.optional(),
-    remoteCommit: text.optional(),
-    pushedCommit: text.optional(),
-    issueWrittenCommit: text.optional(),
-    issueWriteIntent: z.object({ commit: text, marker: text, requestedAt: text }).optional(),
-    pushIntent: z.object({ commit: text, lease: text.optional() }).optional(),
-  }).optional(),
-  workspaces: z.array(z.object({
-    directory: text,
-    branch: text,
-    taskId: text,
-    attemptNo: counter,
-    createdAt: text,
-    cleanedAt: text.optional(),
-  })).optional(),
-  temporaryFiles: z.array(text).optional(),
-  recoveryRequired: z.boolean().optional(),
-}).passthrough();
+    repairs: z.array(
+      z.object({
+        round: counter,
+        report: z.string(),
+        source: text,
+        before: text.optional(),
+        after: text.optional(),
+        identity: identitySchema.optional(),
+      }),
+    ),
+    integrationBase: text.optional(),
+    integrationHead: text.optional(),
+    candidateCommit: text.optional(),
+    verify: receiptSchema.optional(),
+    uat: receiptSchema.optional(),
+    delivery: z
+      .object({
+        repository: text,
+        issueNumber: z.number().int().positive(),
+        sourceBranch: text,
+        targetBranch: text,
+        marker: text,
+        creation: z.enum(['unstarted', 'unknown', 'confirmed']),
+        prNumber: z.number().int().positive().optional(),
+        prUrl: text.optional(),
+        remoteCommit: text.optional(),
+        pushedCommit: text.optional(),
+        issueWrittenCommit: text.optional(),
+        issueWriteIntent: z.object({ commit: text, marker: text, requestedAt: text }).optional(),
+        pushIntent: z.object({ commit: text, lease: text.optional() }).optional(),
+      })
+      .optional(),
+    workspaces: z
+      .array(
+        z.object({
+          directory: text,
+          branch: text,
+          taskId: text,
+          attemptNo: counter,
+          createdAt: text,
+          cleanedAt: text.optional(),
+        }),
+      )
+      .optional(),
+    temporaryFiles: z.array(text).optional(),
+    recoveryRequired: z.boolean().optional(),
+  })
+  .passthrough();
 
 /** 聚合文件边界只验证字段形状；跨字段与父子身份规则由 invariant 层处理。 */
 export function assertIssueRunShape(value: unknown): asserts value is IssueRun {

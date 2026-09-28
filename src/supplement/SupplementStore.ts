@@ -6,8 +6,13 @@ import { logger as rootLogger } from '../logger.js';
 
 const logger = rootLogger.child('SupplementStore');
 const supplementSchema = z.object({
-  requirements: z.string(), acceptanceCriteria: z.string(), scope: z.string(),
-  constraints: z.string(), references: z.string(), freeText: z.string(), updatedAt: z.string(),
+  requirements: z.string(),
+  acceptanceCriteria: z.string(),
+  scope: z.string(),
+  constraints: z.string(),
+  references: z.string(),
+  freeText: z.string(),
+  updatedAt: z.string(),
 });
 
 export interface SupplementInfo {
@@ -70,5 +75,4 @@ export class SupplementStore {
       return false;
     }
   }
-
 }

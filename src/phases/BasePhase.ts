@@ -20,13 +20,12 @@ import type { PhaseResult, PhaseError, ArtifactRef } from '../orchestration/Phas
 import { logger as rootLogger, Logger } from '../logger.js';
 import { t } from '../i18n/index.js';
 
-/** Format a {key→count} map as "k1×n1, k2×n2" sorted by count desc; returns undefined when empty. */
+/** 将计数按降序格式化为 "k1×n1, k2×n2"；空映射返回 undefined。 */
 function formatCountsByDesc(counts: Map<string, number>): string | undefined {
   if (counts.size === 0) return undefined;
   const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]);
   return entries.map(([k, v]) => `${k}×${v}`).join(', ');
 }
-
 
 export interface PhaseContext {
   onTemporaryFile?: (file: string, present: boolean) => void;
@@ -117,13 +116,14 @@ export abstract class BasePhase {
         sessionId: resumeInfo.sessionId,
       });
       result = await this.runWithResumeFallback(
-        displayId, resumeInfo.sessionId!, this.getResumePrompt(ctx) + (rules ? `\n\n${t('basePhase.rulesSection', { rules })}` : ''),
-        prompt, callbacks?.onStreamEvent,
+        displayId,
+        resumeInfo.sessionId!,
+        this.getResumePrompt(ctx) + (rules ? `\n\n${t('basePhase.rulesSection', { rules })}` : ''),
+        prompt,
+        callbacks?.onStreamEvent,
       );
     } else {
-      result = await this.runAI(
-        displayId, prompt, undefined, callbacks?.onStreamEvent,
-      );
+      result = await this.runAI(displayId, prompt, undefined, callbacks?.onStreamEvent);
     }
 
     if (!result.success) {
@@ -134,11 +134,22 @@ export abstract class BasePhase {
 
     this.persistSessionId(displayId, result.sessionId);
     if (this.phaseName === 'plan') {
-      if (result.output.trim().length < BasePhase.MIN_ARTIFACT_BYTES) return { kind: 'failed', error: { message: '计划内容为空或不完整', retryable: 'hard-no-auto' } };
-      try { this.plan.writePlan(renderPlan(decodePlanContent(parseJsonOutput(result.output)))); }
-      catch (error) { return { kind: 'failed', error: { message: `结构化计划无效：${(error as Error).message}`, retryable: 'hard' } }; }
+      if (result.output.trim().length < BasePhase.MIN_ARTIFACT_BYTES)
+        return {
+          kind: 'failed',
+          error: { message: '计划内容为空或不完整', retryable: 'hard-no-auto' },
+        };
+      try {
+        this.plan.writePlan(renderPlan(decodePlanContent(parseJsonOutput(result.output))));
+      } catch (error) {
+        return {
+          kind: 'failed',
+          error: { message: `结构化计划无效：${(error as Error).message}`, retryable: 'hard' },
+        };
+      }
     }
-    if (this.phaseName === 'verify') this.plan.writeFile(ARTIFACTS.verifyReport.filename, result.output);
+    if (this.phaseName === 'verify')
+      this.plan.writeFile(ARTIFACTS.verifyReport.filename, result.output);
     try {
       await this.validatePhaseOutput(ctx, displayId, expectedResultFiles);
     } catch (err) {
@@ -159,7 +170,6 @@ export abstract class BasePhase {
   }
 
   protected abstract buildPrompt(ctx: PhaseContext): string;
-
 
   protected getResumePrompt(_ctx: PhaseContext): string {
     return t('basePhase.resumePrompt');
@@ -188,7 +198,10 @@ export abstract class BasePhase {
     const result = await this.aiRunner.run({
       prompt,
       workDir: this.plan.baseDir,
-      ...buildCallOptions(configuredCallPolicy(this.config.ai), this.phaseName === 'plan' ? 'plan' : 'verify'),
+      ...buildCallOptions(
+        configuredCallPolicy(this.config.ai),
+        this.phaseName === 'plan' ? 'plan' : 'verify',
+      ),
       phaseName: this.phaseName,
       sessionId: options?.sessionId,
       continueSession: options?.continueSession,
@@ -218,10 +231,15 @@ export abstract class BasePhase {
     fullPrompt: string,
     onStreamEvent?: (event: StreamEvent) => void,
   ): Promise<RunResult> {
-    const result = await this.runAI(displayId, resumePrompt, {
-      sessionId,
-      continueSession: true,
-    }, onStreamEvent);
+    const result = await this.runAI(
+      displayId,
+      resumePrompt,
+      {
+        sessionId,
+        continueSession: true,
+      },
+      onStreamEvent,
+    );
 
     if (!result.success && this.isResumeFailure(result)) {
       this.logger.warn(t('basePhase.resumeFallback'), {
@@ -264,7 +282,7 @@ export abstract class BasePhase {
       /billing/,
       /quota.*exceeded/,
     ];
-    if (permanentPatterns.some(p => p.test(msg))) {
+    if (permanentPatterns.some((p) => p.test(msg))) {
       return { message, retryable: 'hard-no-auto', rawOutput };
     }
 
@@ -284,7 +302,8 @@ export abstract class BasePhase {
     }
 
     if (result.output.length === 0 && result.exitCode !== null && result.exitCode !== 0) {
-      const isConfigError = msg.includes('model') || msg.includes('api key') || msg.includes('authentication');
+      const isConfigError =
+        msg.includes('model') || msg.includes('api key') || msg.includes('authentication');
       return !isConfigError;
     }
 
@@ -295,10 +314,14 @@ export abstract class BasePhase {
     if (sessionId) this.sessionStore?.updatePhaseProgress(issueIid, this.phaseName, { sessionId });
   }
 
-  protected toArtifactRefs(files: ReadonlyArray<{ filename: string; label: string }>): readonly ArtifactRef[] {
-    return files.map(f => ({ filename: f.filename, label: f.label }));
+  protected toArtifactRefs(
+    files: ReadonlyArray<{ filename: string; label: string }>,
+  ): readonly ArtifactRef[] {
+    return files.map((f) => ({ filename: f.filename, label: f.label }));
   }
-  protected async resolveRules(_ctx: PhaseContext): Promise<string | null> { return resolvePromptRules(this.config.knowledge.enabled); }
+  protected async resolveRules(_ctx: PhaseContext): Promise<string | null> {
+    return resolvePromptRules(this.config.knowledge.enabled);
+  }
 
   protected async validatePhaseOutput(
     ctx: PhaseContext,
@@ -328,8 +351,6 @@ export abstract class BasePhase {
       this.logger.error(msg, { phase: this.phaseName, displayId: _displayId });
       throw new Error(msg);
     }
-
-
   }
 
   private captureStreamSummary(event: StreamEvent): void {

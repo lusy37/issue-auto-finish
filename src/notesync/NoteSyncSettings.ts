@@ -46,8 +46,11 @@ export function buildNoteSyncComment(
   summary: string,
 ): string {
   const emoji: Record<string, string> = {
-    verify: '✅', uat: '🧪',
-    plan: '📋', review: '👀', build: '🔨',
+    verify: '✅',
+    uat: '🧪',
+    plan: '📋',
+    review: '👀',
+    build: '🔨',
   };
   const icon = emoji[phaseName] || '📋';
   return [

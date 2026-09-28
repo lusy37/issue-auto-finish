@@ -1,8 +1,8 @@
 import { isWorkbenchLabel } from './IssueLabels.js';
 import { GITHUB_MAX_AUTO_WAIT_MS } from '../errors/GitHubPolicy.js';
-import { GitHubApiError } from "../errors/index.js";
-import { RetryPolicy } from "../utils/RetryPolicy.js";
-import { Semaphore } from "../utils/Semaphore.js";
+import { GitHubApiError } from '../errors/index.js';
+import { RetryPolicy } from '../utils/RetryPolicy.js';
+import { Semaphore } from '../utils/Semaphore.js';
 
 export interface GitHubConfig {
   apiUrl: string;
@@ -88,10 +88,10 @@ interface RawNote {
   user: User;
   created_at: string;
 }
-export const AGENT_NOTE_MARKER = "\n\n<!-- issue-auto-finish-agent -->";
+export const AGENT_NOTE_MARKER = '\n\n<!-- issue-auto-finish-agent -->';
 const user = (u?: User) => ({
-  username: u?.login ?? "",
-  name: u?.name ?? u?.login ?? "",
+  username: u?.login ?? '',
+  name: u?.name ?? u?.login ?? '',
 });
 
 export class GitHubClient {
@@ -104,11 +104,8 @@ export class GitHubClient {
     maxDelayMs: GITHUB_MAX_AUTO_WAIT_MS,
     jitterFactor: 0,
     isRetryable: (error) =>
-      error instanceof GitHubApiError
-        ? error.isRetryable
-        : error instanceof TypeError,
-    getBaseDelay: (error) =>
-      error instanceof GitHubApiError ? error.retryAfterMs : undefined,
+      error instanceof GitHubApiError ? error.isRetryable : error instanceof TypeError,
+    getBaseDelay: (error) => (error instanceof GitHubApiError ? error.retryAfterMs : undefined),
   });
   constructor(config: GitHubConfig) {
     this.config = this.validate(config);
@@ -116,58 +113,52 @@ export class GitHubClient {
   private validate(config: GitHubConfig): GitHubConfig {
     if (
       !/^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9_.-]+$/.test(config.repository) ||
-      config.repository.endsWith("/..")
+      config.repository.endsWith('/..')
     )
-      throw new Error("GitHub 仓库必须是 owner/repo 格式");
+      throw new Error('GitHub 仓库必须是 owner/repo 格式');
     const url = new URL(config.apiUrl);
     if (
       url.username ||
       url.password ||
       url.search ||
       url.hash ||
-      !["http:", "https:"].includes(url.protocol)
+      !['http:', 'https:'].includes(url.protocol)
     )
-      throw new Error("GitHub API 地址格式无效");
-    if (!config.token.trim()) throw new Error("GitHub 令牌不能为空");
-    return { ...config, apiUrl: config.apiUrl.replace(/\/$/, "") };
+      throw new Error('GitHub API 地址格式无效');
+    if (!config.token.trim()) throw new Error('GitHub 令牌不能为空');
+    return { ...config, apiUrl: config.apiUrl.replace(/\/$/, '') };
   }
   get webBaseUrl(): string {
     const url = new URL(this.config.apiUrl);
-    return url.hostname === "api.github.com"
-      ? "https://github.com"
-      : url.origin;
+    return url.hostname === 'api.github.com' ? 'https://github.com' : url.origin;
   }
   get repositoryUrl(): string {
     return `${this.webBaseUrl}/${this.config.repository}`;
   }
   private get base(): string {
-    return `${this.config.apiUrl}/repos/${this.config.repository.split("/").map(encodeURIComponent).join("/")}`;
+    return `${this.config.apiUrl}/repos/${this.config.repository.split('/').map(encodeURIComponent).join('/')}`;
   }
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {},
-  ): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const send = async () => {
       const response = await fetch(this.base + endpoint, {
         ...options,
-        redirect: "error",
+        redirect: 'error',
         signal: options.signal ?? AbortSignal.timeout(30000),
         headers: {
-          Accept: "application/vnd.github+json",
+          Accept: 'application/vnd.github+json',
           Authorization: `Bearer ${this.config.token}`,
-          "X-GitHub-Api-Version": "2026-03-10",
-          "Content-Type": "application/json",
+          'X-GitHub-Api-Version': '2026-03-10',
+          'Content-Type': 'application/json',
         },
       });
       if (!response.ok) {
         const body = await response.text(),
-          wait = response.headers.get("retry-after"),
-          reset = response.headers.get("x-ratelimit-reset");
+          wait = response.headers.get('retry-after'),
+          reset = response.headers.get('x-ratelimit-reset');
         const limited =
           response.status === 429 ||
           (response.status === 403 &&
-            (wait !== null ||
-              response.headers.get("x-ratelimit-remaining") === "0"));
+            (wait !== null || response.headers.get('x-ratelimit-remaining') === '0'));
         const delay = wait
           ? /^\d+$/.test(wait)
             ? Number(wait) * 1000
@@ -177,30 +168,28 @@ export class GitHubClient {
             : 60000;
         throw new GitHubApiError(
           response.status,
-          `GitHub 请求失败 ${response.status}${limited ? "（限流，请稍后重试）" : ""}: ${body}`,
+          `GitHub 请求失败 ${response.status}${limited ? '（限流，请稍后重试）' : ''}: ${body}`,
           body,
           limited,
           limited ? Math.max(1000, delay || 60000) : undefined,
         );
       }
-      return response.status === 204
-        ? (undefined as T)
-        : ((await response.json()) as T);
+      return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
     };
     // 创建请求响应丢失时结果未知，由上层核对，禁止自动重发。
     return this.requests.run(() =>
-      options.method === "POST" ? send() : this.retry.execute(send, endpoint),
+      options.method === 'POST' ? send() : this.retry.execute(send, endpoint),
     );
   }
   private issue(raw: RawIssue): GitHubIssue {
-    if (raw.pull_request) throw new Error("所选编号是 PR，请选择普通 Issue");
+    if (raw.pull_request) throw new Error('所选编号是 PR，请选择普通 Issue');
     return {
       id: raw.id,
       number: raw.number,
       title: raw.title,
-      description: raw.body ?? "",
+      description: raw.body ?? '',
       state: raw.state,
-      labels: raw.labels.map((l) => (typeof l === "string" ? l : l.name)),
+      labels: raw.labels.map((l) => (typeof l === 'string' ? l : l.name)),
       author: user(raw.user),
       assignees: raw.assignees?.map(user),
       created_at: raw.created_at,
@@ -217,7 +206,7 @@ export class GitHubClient {
       number: raw.number,
       title: raw.title,
       html_url: raw.html_url || `${this.repositoryUrl}/pull/${raw.number}`,
-      state: raw.merged ? "merged" : raw.state,
+      state: raw.merged ? 'merged' : raw.state,
       source_branch: raw.head?.ref,
       target_branch: raw.base?.ref,
     };
@@ -229,40 +218,34 @@ export class GitHubClient {
     const repo = await this.request<{
       full_name: string;
       default_branch: string;
-    }>("");
+    }>('');
     return { fullName: repo.full_name, defaultBranch: repo.default_branch };
   }
-  async createIssue(
-    title: string,
-    description: string,
-    labels?: string[],
-  ): Promise<GitHubIssue> {
+  async createIssue(title: string, description: string, labels?: string[]): Promise<GitHubIssue> {
     await this.ensureLabels(labels ?? []);
     return this.issue(
-      await this.request<RawIssue>("/issues", {
-        method: "POST",
+      await this.request<RawIssue>('/issues', {
+        method: 'POST',
         body: JSON.stringify({ title, body: description, labels }),
       }),
     );
   }
-  async listIssues(state = "open", labels?: string): Promise<GitHubIssue[]> {
+  async listIssues(state = 'open', labels?: string): Promise<GitHubIssue[]> {
     const items: GitHubIssue[] = [];
     for (let page = 1; page <= 100; page++) {
       const params = new URLSearchParams({
         state,
-        per_page: "100",
+        per_page: '100',
         page: String(page),
-        sort: "created",
-        direction: "asc",
+        sort: 'created',
+        direction: 'asc',
       });
-      if (labels) params.set("labels", labels);
+      if (labels) params.set('labels', labels);
       const batch = await this.request<RawIssue[]>(`/issues?${params}`);
-      items.push(
-        ...batch.filter((i) => !i.pull_request).map((i) => this.issue(i)),
-      );
+      items.push(...batch.filter((i) => !i.pull_request).map((i) => this.issue(i)));
       if (batch.length < 100) return items;
     }
-    throw new Error("Issue 超过一次查询的 10000 条上限，请缩小标签或状态范围");
+    throw new Error('Issue 超过一次查询的 10000 条上限，请缩小标签或状态范围');
   }
   async listIssuesAdvanced(
     options: {
@@ -274,9 +257,7 @@ export class GitHubClient {
     } = {},
   ): Promise<{ issues: GitHubIssue[]; total: number }> {
     const q = options.search?.trim().toLowerCase();
-    const items = (
-      await this.listIssues(options.state ?? "open", options.labels)
-    ).filter(
+    const items = (await this.listIssues(options.state ?? 'open', options.labels)).filter(
       (i) => !q || `${i.title}\n${i.description}`.toLowerCase().includes(q),
     );
     const size = Math.min(100, Math.max(1, options.perPage || 20)),
@@ -288,34 +269,28 @@ export class GitHubClient {
   }
   async createIssueNote(number: number, body: string): Promise<void> {
     await this.request(`/issues/${number}/comments`, {
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify({ body: body + AGENT_NOTE_MARKER }),
     });
   }
   private async ensureLabels(labels: string[]): Promise<void> {
-    for (const name of labels.filter(
-      isWorkbenchLabel,
-    )) {
+    for (const name of labels.filter(isWorkbenchLabel)) {
       if (this.labels.has(name)) continue;
       try {
         await this.request(`/labels/${encodeURIComponent(name)}`);
       } catch (error) {
-        if (!(error instanceof GitHubApiError) || error.statusCode !== 404)
-          throw error;
+        if (!(error instanceof GitHubApiError) || error.statusCode !== 404) throw error;
         try {
-          await this.request("/labels", {
-            method: "POST",
+          await this.request('/labels', {
+            method: 'POST',
             body: JSON.stringify({
               name,
-              color: "6366f1",
-              description: "Issue Auto-Finish 任务状态",
+              color: '6366f1',
+              description: 'Issue Auto-Finish 任务状态',
             }),
           });
         } catch (creationError) {
-          if (
-            !(creationError instanceof GitHubApiError) ||
-            creationError.statusCode !== 422
-          )
+          if (!(creationError instanceof GitHubApiError) || creationError.statusCode !== 422)
             throw creationError;
           await this.request(`/labels/${encodeURIComponent(name)}`);
         }
@@ -326,36 +301,31 @@ export class GitHubClient {
   async updateIssueLabels(number: number, labels: string[]): Promise<void> {
     await this.ensureLabels(labels);
     await this.request(`/issues/${number}/labels`, {
-      method: "PUT",
+      method: 'PUT',
       body: JSON.stringify({ labels }),
     });
   }
   async addLabel(number: number, label: string): Promise<void> {
     await this.ensureLabels([label]);
     await this.request(`/issues/${number}/labels`, {
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify({ labels: [label] }),
     });
   }
   async removeLabelsWithPrefix(number: number, prefix: string): Promise<void> {
     const issue = await this.getIssueDetail(number);
-    const labels = issue.labels.filter(
-      (l) => l !== prefix && !l.startsWith(prefix + ":"),
-    );
-    if (labels.length !== issue.labels.length)
-      await this.updateIssueLabels(number, labels);
+    const labels = issue.labels.filter((l) => l !== prefix && !l.startsWith(prefix + ':'));
+    if (labels.length !== issue.labels.length) await this.updateIssueLabels(number, labels);
   }
-  async createPullRequest(
-    options: CreatePullRequestOptions,
-  ): Promise<GitHubPullRequest> {
+  async createPullRequest(options: CreatePullRequestOptions): Promise<GitHubPullRequest> {
     return this.pull(
-      await this.request<RawPull>("/pulls", {
-        method: "POST",
+      await this.request<RawPull>('/pulls', {
+        method: 'POST',
         body: JSON.stringify({
           head: options.sourceBranch,
           base: options.targetBranch,
           title: options.title,
-          body: options.description ?? "",
+          body: options.description ?? '',
         }),
       }),
     );
@@ -363,11 +333,11 @@ export class GitHubClient {
   async findPullRequestByBranch(
     source: string,
     target: string,
-    state = "open",
+    state = 'open',
   ): Promise<GitHubPullRequest | null> {
-    const head = `${this.config.repository.split("/")[0]}:${source}`;
+    const head = `${this.config.repository.split('/')[0]}:${source}`;
     const pulls = await this.request<RawPull[]>(
-      `/pulls?${new URLSearchParams({ state, head, base: target, per_page: "100" })}`,
+      `/pulls?${new URLSearchParams({ state, head, base: target, per_page: '100' })}`,
     );
     return pulls.length ? this.pull(pulls[0]) : null;
   }
@@ -375,29 +345,29 @@ export class GitHubClient {
     const raw = await this.request<RawPull>(`/pulls/${number}`);
     return {
       ...this.pull(raw),
-      has_conflicts: raw.mergeable === false && raw.mergeable_state === "dirty",
-      merge_status: raw.mergeable_state ?? "unknown",
+      has_conflicts: raw.mergeable === false && raw.mergeable_state === 'dirty',
+      merge_status: raw.mergeable_state ?? 'unknown',
     };
   }
   async listPullRequests(): Promise<GitHubPullRequest[]> {
     const result: GitHubPullRequest[] = [];
     for (let page = 1; page <= 100; page++) {
       const batch = await this.request<RawPull[]>(`/pulls?state=all&per_page=100&page=${page}`);
-      result.push(...batch.map(raw => this.pull(raw)));
+      result.push(...batch.map((raw) => this.pull(raw)));
       if (batch.length < 100) return result;
     }
     throw new Error('PR 查询结果不完整，不能可靠核对交付身份');
   }
   async closePullRequest(number: number): Promise<void> {
     await this.request(`/pulls/${number}`, {
-      method: "PATCH",
-      body: JSON.stringify({ state: "closed" }),
+      method: 'PATCH',
+      body: JSON.stringify({ state: 'closed' }),
     });
   }
   async closeIssue(number: number): Promise<void> {
     await this.request(`/issues/${number}`, {
-      method: "PATCH",
-      body: JSON.stringify({ state: "closed" }),
+      method: 'PATCH',
+      body: JSON.stringify({ state: 'closed' }),
     });
   }
   async createPullRequestNote(number: number, body: string): Promise<void> {
@@ -412,25 +382,21 @@ export class GitHubClient {
       result.push(
         ...batch.map((n) => ({
           id: n.id,
-          body: n.body ?? "",
+          body: n.body ?? '',
           author: user(n.user),
           created_at: n.created_at,
         })),
       );
       if (batch.length < 100) return result;
     }
-    throw new Error("评论超过查询上限，无法可靠核对交付结果");
+    throw new Error('评论超过查询上限，无法可靠核对交付结果');
   }
   async deleteIssueNote(_number: number, noteId: number): Promise<void> {
-    await this.request(`/issues/comments/${noteId}`, { method: "DELETE" });
+    await this.request(`/issues/comments/${noteId}`, { method: 'DELETE' });
   }
-  async updateIssueNote(
-    _number: number,
-    noteId: number,
-    body: string,
-  ): Promise<void> {
+  async updateIssueNote(_number: number, noteId: number, body: string): Promise<void> {
     await this.request(`/issues/comments/${noteId}`, {
-      method: "PATCH",
+      method: 'PATCH',
       body: JSON.stringify({ body }),
     });
   }

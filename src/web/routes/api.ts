@@ -2,7 +2,10 @@ import { ISSUE_LABELS } from '../../clients/IssueLabels.js';
 import { inspectWorkflow, GraphSnapshotChangedError } from '../../orchestrator/inspectWorkflow.js';
 import { ARTIFACTS } from '../../shared/runtime/artifacts.js';
 import { renderPlan } from '../../dag/contracts.js';
-import { resolveIssueArtifactsDir, resolveIssueArtifactPath } from '../../persistence/ArtifactPaths.js';
+import {
+  resolveIssueArtifactsDir,
+  resolveIssueArtifactPath,
+} from '../../persistence/ArtifactPaths.js';
 import { PlanPersistence } from '../../persistence/PlanPersistence.js';
 import { githubIssueToDemandSpec } from '../../demand/adapters/GitHubAdapter.js';
 import express, { type Request, type Response } from 'express';
@@ -23,9 +26,17 @@ import { IssueService } from '../../orchestrator/IssueService.js';
 import { GitOperations } from '../../git/GitOperations.js';
 import { GitHubClient } from '../../clients/GitHubClient.js';
 import { SupplementStore } from '../../supplement/SupplementStore.js';
-import { buildPlanModePipeline, getPipelineDef, getAllPipelineDefs } from '../../pipeline/PipelineMetadata.js';
+import {
+  buildPlanModePipeline,
+  getPipelineDef,
+  getAllPipelineDefs,
+} from '../../pipeline/PipelineMetadata.js';
 import type { PipelineDef } from '../../pipeline/PipelineMetadata.js';
-import { collectPipelineArtifacts, getGatePhase, getRetryablePhases } from '../../pipeline/PipelineProjection.js';
+import {
+  collectPipelineArtifacts,
+  getGatePhase,
+  getRetryablePhases,
+} from '../../pipeline/PipelineProjection.js';
 import { eventBus, EventPayload } from '../../events/EventBus.js';
 import { GateActionError } from '../../orchestration/index.js';
 import { getNoteSyncEnabled, setNoteSyncOverride } from '../../notesync/NoteSyncSettings.js';
@@ -42,11 +53,16 @@ import type { WorktreeReaper } from '../../workspace/WorktreeReaper.js';
 
 const logger = rootLogger.child('ApiRoutes');
 
-/** Stream event types filtered from the SSE stream (protocol-level metadata with no user-facing value). */
+/** 从 SSE 流中过滤的协议元数据事件，不直接面向用户。 */
 const DEBUG_SSE_EVENT_TYPES = new Set([
-  'thinking', 'content_block_start', 'content_block_delta',
-  'content_block_stop', 'message_start', 'message_delta',
-  'message_stop', 'ping',
+  'thinking',
+  'content_block_start',
+  'content_block_delta',
+  'content_block_stop',
+  'message_start',
+  'message_delta',
+  'message_stop',
+  'ping',
   'message', // 顶级消息框架 - 含 uuid/session_id 等协议元数据
 ]);
 
@@ -63,7 +79,9 @@ function readPackageVersion(): string {
         }
       }
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return 'unknown';
 }
 
@@ -100,7 +118,17 @@ function buildPreviewInfo(number: number, orch: IssueService) {
 }
 
 export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> {
-  const { tracker, config: cfg, agentLogStore: logStore, orchestrator: orch, github, supplementStore, poller, previewReaper, worktreeReaper } = deps;
+  const {
+    tracker,
+    config: cfg,
+    agentLogStore: logStore,
+    orchestrator: orch,
+    github,
+    supplementStore,
+    poller,
+    previewReaper,
+    worktreeReaper,
+  } = deps;
   const router = Router();
   // 在首次异步请求前占用编号，防止并发启动覆盖同一个任务。
   const startingIssues = new Set<number>();
@@ -111,9 +139,11 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     const modes: Record<string, unknown> = {};
     for (const def of allDefs) {
       modes[def.mode] = {
-        phases: def.phases.map(p => ({ name: p.name, label: p.label, kind: p.kind })),
-        artifacts: collectPipelineArtifacts(def).map(a => ({
-          filename: a.filename, label: a.label, editable: a.editable,
+        phases: def.phases.map((p) => ({ name: p.name, label: p.label, kind: p.kind })),
+        artifacts: collectPipelineArtifacts(def).map((a) => ({
+          filename: a.filename,
+          label: a.label,
+          editable: a.editable,
         })),
         retryablePhases: getRetryablePhases(def),
       };
@@ -130,7 +160,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
   router.get('/api/issues', (_req: Request, res: Response) => {
     const issues = tracker.getAll();
-    const enriched = issues.map(r => {
+    const enriched = issues.map((r) => {
       const stateCategory = issueStateCategory(r);
       return { ...r, stateCategory, planDocs: getIssuePlanDocs(getIssueNumber(r), r) };
     });
@@ -150,7 +180,10 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     res.json({ ...record, preview, worktree, planDocs: getIssuePlanDocs(number, record) });
   });
 
-  function getIssuePipelineDef(number: number, record: IssueRecord | undefined = tracker.get(number)): PipelineDef {
+  function getIssuePipelineDef(
+    number: number,
+    record: IssueRecord | undefined = tracker.get(number),
+  ): PipelineDef {
     const mode = record?.pipelineMode ?? orch.getPipelineDef().mode;
     return mode === 'plan-mode'
       ? buildPlanModePipeline({ e2eEnabled: isE2eEnabledForIssue(number, tracker, cfg) })
@@ -158,8 +191,10 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   }
 
   function getIssuePlanDocs(number: number, record: IssueRecord | undefined = tracker.get(number)) {
-    return collectPipelineArtifacts(getIssuePipelineDef(number, record))
-      .map(artifact => ({ file: artifact.filename, label: artifact.label }));
+    return collectPipelineArtifacts(getIssuePipelineDef(number, record)).map((artifact) => ({
+      file: artifact.filename,
+      label: artifact.label,
+    }));
   }
 
   router.get('/api/issues/:number/plans/:filename', async (req: Request, res: Response) => {
@@ -167,7 +202,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     const filename = req.params.filename;
     const def = getIssuePipelineDef(number);
     const allowed = [
-      ...collectPipelineArtifacts(def).map(f => f.filename),
+      ...collectPipelineArtifacts(def).map((f) => f.filename),
       ARTIFACTS.issueMeta.filename,
     ];
     if (!allowed.includes(filename)) {
@@ -181,7 +216,9 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     }
     if (filename.endsWith('.json')) {
       if (req.query.format === 'html') {
-        const html = await marked('```json\n' + JSON.stringify(JSON.parse(content), null, 2) + '\n```');
+        const html = await marked(
+          '```json\n' + JSON.stringify(JSON.parse(content), null, 2) + '\n```',
+        );
         res.type('html').send(html);
         return;
       }
@@ -208,20 +245,41 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
   const persistedControl = (number: number) => {
     const record = tracker.get(number);
-    return record && { lifecycle: record.lifecycle, version: record.run.version, stopIntent: record.run.stopIntent ?? null, planRevision: record.run.planRevision, buildGeneration: record.run.buildGeneration };
+    return (
+      record && {
+        lifecycle: record.lifecycle,
+        version: record.run.version,
+        stopIntent: record.run.stopIntent ?? null,
+        planRevision: record.run.planRevision,
+        buildGeneration: record.run.buildGeneration,
+      }
+    );
   };
 
   router.post('/api/issues/:number/retry', (req: Request, res: Response) => {
     const number = parseInt(req.params.number, 10);
-    if (Object.values(tracker.get(number)?.run?.calls ?? {}).some(call => call.status !== 'exited')) { res.status(409).json({ error: '旧调用尚未确认退出，请先中止并核对进程' }); return; }
+    if (
+      Object.values(tracker.get(number)?.run?.calls ?? {}).some((call) => call.status !== 'exited')
+    ) {
+      res.status(409).json({ error: '旧调用尚未确认退出，请先中止并核对进程' });
+      return;
+    }
     let ok: boolean;
-    try { ok = orch.retryIssue(number); }
-    catch (error) { res.status(409).json({ error: (error as Error).message }); return; }
+    try {
+      ok = orch.retryIssue(number);
+    } catch (error) {
+      res.status(409).json({ error: (error as Error).message });
+      return;
+    }
     if (!ok) {
       res.status(400).json({ error: 'Issue is not in failed state or not found' });
       return;
     }
-    res.json({ success: true, control: persistedControl(number), message: `Issue #${number} reset for retry` });
+    res.json({
+      success: true,
+      control: persistedControl(number),
+      message: `Issue #${number} reset for retry`,
+    });
   });
 
   router.post('/api/issues/:number/cancel', async (req: Request, res: Response) => {
@@ -233,12 +291,15 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     }
 
     try {
-
       // 停止意图落盘且进程退出后，才释放父 Issue 额度。
       await orch.cancelIssue(number);
       poller?.forceReleaseIssue(number);
 
-      res.json({ success: true, control: persistedControl(number), message: `Issue #${number} cancelled` });
+      res.json({
+        success: true,
+        control: persistedControl(number),
+        message: `Issue #${number} cancelled`,
+      });
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
     }
@@ -247,11 +308,14 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   router.post('/api/issues/:number/restart', async (req: Request, res: Response) => {
     const number = parseInt(req.params.number, 10);
     try {
-
       await orch.restartIssue(number);
       // 必须在 restartIssue 完成后再释放，否则 drive() 会在清理期间重新拾取 issue
       poller?.forceReleaseIssue(number);
-      res.json({ success: true, control: persistedControl(number), message: `Issue #${number} restarted` });
+      res.json({
+        success: true,
+        control: persistedControl(number),
+        message: `Issue #${number} restarted`,
+      });
     } catch (err) {
       const msg = (err as Error).message;
       logger.error('Restart failed', { number, error: msg });
@@ -271,7 +335,11 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     try {
       orch.retryFromPhase(number, phase);
       poller?.forceReleaseIssue(number);
-      res.json({ success: true, control: persistedControl(number), message: `Issue #${number} reset to phase: ${phase}` });
+      res.json({
+        success: true,
+        control: persistedControl(number),
+        message: `Issue #${number} reset to phase: ${phase}`,
+      });
     } catch (err) {
       const msg = (err as Error).message;
       logger.error('Retry-from-phase failed', { number, phase, error: msg });
@@ -286,7 +354,11 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     try {
       await orch.abortIssue(number);
       poller?.forceReleaseIssue(number);
-      res.json({ success: true, control: persistedControl(number), message: `Issue #${number} aborted` });
+      res.json({
+        success: true,
+        control: persistedControl(number),
+        message: `Issue #${number} aborted`,
+      });
     } catch (err) {
       const msg = (err as Error).message;
       logger.error('Abort failed', { number, error: msg });
@@ -298,7 +370,11 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     const number = parseInt(req.params.number, 10);
     try {
       orch.continueIssue(number);
-      res.json({ success: true, control: persistedControl(number), message: `Issue #${number} continued` });
+      res.json({
+        success: true,
+        control: persistedControl(number),
+        message: `Issue #${number} continued`,
+      });
     } catch (err) {
       const msg = (err as Error).message;
       logger.error('Continue failed', { number, error: msg });
@@ -311,7 +387,11 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     try {
       await orch.redoPhase(number);
       poller?.forceReleaseIssue(number);
-      res.json({ success: true, control: persistedControl(number), message: `Issue #${number} phase redone` });
+      res.json({
+        success: true,
+        control: persistedControl(number),
+        message: `Issue #${number} phase redone`,
+      });
     } catch (err) {
       const msg = (err as Error).message;
       logger.error('Redo-phase failed', { number, error: msg });
@@ -322,9 +402,14 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   router.put('/api/issues/:number/plans/:filename', (req: Request, res: Response) => {
     const number = parseInt(req.params.number, 10);
     const filename = req.params.filename;
-    if (filename === ARTIFACTS.plan.filename) { res.status(403).json({ error: '计划由结构化版本生成，只能通过审核反馈重新规划' }); return; }
+    if (filename === ARTIFACTS.plan.filename) {
+      res.status(403).json({ error: '计划由结构化版本生成，只能通过审核反馈重新规划' });
+      return;
+    }
     const def = getIssuePipelineDef(number);
-    const editableFiles = collectPipelineArtifacts(def).filter(f => f.editable).map(f => f.filename);
+    const editableFiles = collectPipelineArtifacts(def)
+      .filter((f) => f.editable)
+      .map((f) => f.filename);
     if (!editableFiles.includes(filename)) {
       res.status(400).json({ error: `File not editable. Allowed: ${editableFiles.join(', ')}` });
       return;
@@ -347,20 +432,42 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
   router.get('/api/issues/:number/graphs', async (req: Request, res: Response) => {
     const number = Number(req.params.number);
-    if (!tracker.get(number)) { res.status(404).json({ error: 'Issue 不存在' }); return; }
-    try { res.json(await inspectWorkflow(tracker, number)); }
-    catch (error) {
-      res.status(error instanceof GraphSnapshotChangedError ? 409 : 500).json({ error: (error as Error).message });
+    if (!tracker.get(number)) {
+      res.status(404).json({ error: 'Issue 不存在' });
+      return;
+    }
+    try {
+      res.json(await inspectWorkflow(tracker, number));
+    } catch (error) {
+      res
+        .status(error instanceof GraphSnapshotChangedError ? 409 : 500)
+        .json({ error: (error as Error).message });
     }
   });
 
   router.get('/api/issues/:number/tasks', (req: Request, res: Response) => {
     const number = Number(req.params.number);
     const record = tracker.get(number);
-    if (!record) { res.status(404).json({ error: 'Issue 不存在' }); return; }
+    if (!record) {
+      res.status(404).json({ error: 'Issue 不存在' });
+      return;
+    }
     const run = record.run!;
-    const plan = run.planRevision && run.planDigest ? tracker.store.readPlan(number, run.planRevision, run.planDigest) : undefined;
-    res.json({ version: run.version, workflowGeneration: run.workflow.generation, planRevision: run.planRevision, buildGeneration: run.buildGeneration, control: run.stopIntent, tasks: plan?.tasks.filter(task => run.tasks[task.id]).map(task => ({ ...task, ...run.tasks[task.id] })) ?? [] });
+    const plan =
+      run.planRevision && run.planDigest
+        ? tracker.store.readPlan(number, run.planRevision, run.planDigest)
+        : undefined;
+    res.json({
+      version: run.version,
+      workflowGeneration: run.workflow.generation,
+      planRevision: run.planRevision,
+      buildGeneration: run.buildGeneration,
+      control: run.stopIntent,
+      tasks:
+        plan?.tasks
+          .filter((task) => run.tasks[task.id])
+          .map((task) => ({ ...task, ...run.tasks[task.id] })) ?? [],
+    });
   });
 
   router.get('/api/issues/:number/logs', (req: Request, res: Response) => {
@@ -370,7 +477,13 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(404).json({ error: 'Issue not found' });
       return;
     }
-    const logs = logStore.getLogs(number).filter(entry => (!req.query.taskId || entry.identity?.taskId === req.query.taskId) && (!req.query.attemptNo || entry.identity?.attemptNo === Number(req.query.attemptNo)));
+    const logs = logStore
+      .getLogs(number)
+      .filter(
+        (entry) =>
+          (!req.query.taskId || entry.identity?.taskId === req.query.taskId) &&
+          (!req.query.attemptNo || entry.identity?.attemptNo === Number(req.query.attemptNo)),
+      );
     res.json(logs);
   });
 
@@ -451,7 +564,11 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       issueTitle?: string;
       supplement?: Record<string, string>;
     };
-    if (typeof body.issueIid !== 'number' || !Number.isSafeInteger(body.issueIid) || body.issueIid < 1) {
+    if (
+      typeof body.issueIid !== 'number' ||
+      !Number.isSafeInteger(body.issueIid) ||
+      body.issueIid < 1
+    ) {
       res.status(400).json({ error: '需要正整数 Issue 编号 issueIid' });
       return;
     }
@@ -465,8 +582,12 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     startingIssues.add(body.issueIid);
     try {
       let demandSpec: DemandSpec;
-      try { demandSpec = githubIssueToDemandSpec(await github.getIssueDetail(body.issueIid)); }
-      catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+      try {
+        demandSpec = githubIssueToDemandSpec(await github.getIssueDetail(body.issueIid));
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+        return;
+      }
 
       try {
         await github.addLabel(body.issueIid, ISSUE_LABELS.root);
@@ -502,7 +623,13 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
   router.post('/api/issues/:number/approve-plan', async (req: Request, res: Response) => {
     const revisionRecord = tracker.get(Number(req.params.number));
-    if (!Number.isInteger(req.body?.planRevision) || req.body.planRevision !== revisionRecord?.run?.planRevision) { res.status(409).json({ error: '审核版本已过期或缺失，请刷新计划后重试' }); return; }
+    if (
+      !Number.isInteger(req.body?.planRevision) ||
+      req.body.planRevision !== revisionRecord?.run?.planRevision
+    ) {
+      res.status(409).json({ error: '审核版本已过期或缺失，请刷新计划后重试' });
+      return;
+    }
     const number = parseInt(req.params.number, 10);
     const record = tracker.get(number);
     if (!record) {
@@ -511,7 +638,9 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     }
     const lifecycle = record.lifecycle;
     if (lifecycle.kind !== 'waiting') {
-      res.status(400).json({ error: `Issue is not waiting for review (current lifecycle: ${lifecycle.kind})` });
+      res
+        .status(400)
+        .json({ error: `Issue is not waiting for review (current lifecycle: ${lifecycle.kind})` });
       return;
     }
 
@@ -531,7 +660,10 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     try {
       await orch.applyGateAction(number, { action: 'approve' }, req.body.planRevision);
       logger.info('Plan approved', { number });
-      res.json({ success: true, message: `Issue #${number} plan approved, will resume on next drive cycle` });
+      res.json({
+        success: true,
+        message: `Issue #${number} plan approved, will resume on next drive cycle`,
+      });
     } catch (err) {
       if (err instanceof GateActionError) {
         res.status(409).json({ error: err.message });
@@ -548,7 +680,13 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
   router.post('/api/issues/:number/reject-plan', async (req: Request, res: Response) => {
     const revisionRecord = tracker.get(Number(req.params.number));
-    if (!Number.isInteger(req.body?.planRevision) || req.body.planRevision !== revisionRecord?.run?.planRevision) { res.status(409).json({ error: '审核版本已过期或缺失，请刷新计划后重试' }); return; }
+    if (
+      !Number.isInteger(req.body?.planRevision) ||
+      req.body.planRevision !== revisionRecord?.run?.planRevision
+    ) {
+      res.status(409).json({ error: '审核版本已过期或缺失，请刷新计划后重试' });
+      return;
+    }
     const number = parseInt(req.params.number, 10);
     const record = tracker.get(number);
     if (!record) {
@@ -557,7 +695,9 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     }
     const lifecycle = record.lifecycle;
     if (lifecycle.kind !== 'waiting') {
-      res.status(400).json({ error: `Issue is not waiting for review (current lifecycle: ${lifecycle.kind})` });
+      res
+        .status(400)
+        .json({ error: `Issue is not waiting for review (current lifecycle: ${lifecycle.kind})` });
       return;
     }
     const { feedback } = req.body as { feedback?: string };
@@ -583,7 +723,10 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     try {
       await orch.applyGateAction(number, { action: 'reject', feedback }, req.body.planRevision);
       logger.info('Plan rejected', { number, feedback: feedback.slice(0, 100) });
-      res.json({ success: true, message: `Issue #${number} plan rejected, will re-plan on next drive cycle` });
+      res.json({
+        success: true,
+        message: `Issue #${number} plan rejected, will re-plan on next drive cycle`,
+      });
     } catch (err) {
       if (err instanceof GateActionError) {
         res.status(409).json({ error: err.message });
@@ -600,7 +743,13 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
   router.post('/api/issues/:number/skip-review', async (req: Request, res: Response) => {
     const revisionRecord = tracker.get(Number(req.params.number));
-    if (!Number.isInteger(req.body?.planRevision) || req.body.planRevision !== revisionRecord?.run?.planRevision) { res.status(409).json({ error: '审核版本已过期或缺失，请刷新计划后重试' }); return; }
+    if (
+      !Number.isInteger(req.body?.planRevision) ||
+      req.body.planRevision !== revisionRecord?.run?.planRevision
+    ) {
+      res.status(409).json({ error: '审核版本已过期或缺失，请刷新计划后重试' });
+      return;
+    }
     const number = parseInt(req.params.number, 10);
     const record = tracker.get(number);
     if (!record) {
@@ -609,7 +758,9 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     }
     const lifecycle = record.lifecycle;
     if (lifecycle.kind !== 'waiting') {
-      res.status(400).json({ error: `Issue is not waiting for review (current lifecycle: ${lifecycle.kind})` });
+      res
+        .status(400)
+        .json({ error: `Issue is not waiting for review (current lifecycle: ${lifecycle.kind})` });
       return;
     }
     // skip-review 与 approve-plan 等价，同样严格校验 lifecycle.phase。
@@ -674,16 +825,19 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       return;
     }
 
-    const filename = typeof req.query.file === 'string' && req.query.file.trim()
-      ? req.query.file.trim()
-      : ARTIFACTS.plan.filename;
+    const filename =
+      typeof req.query.file === 'string' && req.query.file.trim()
+        ? req.query.file.trim()
+        : ARTIFACTS.plan.filename;
     if (!/^[\w.-]+$/.test(filename)) {
       res.status(400).json({ error: 'Invalid file name' });
       return;
     }
 
-    const currentContent = filename === ARTIFACTS.plan.filename && record.run?.planRevision
-      ? renderPlan(tracker.store.readPlan(number, record.run.planRevision, record.run.planDigest)) : null;
+    const currentContent =
+      filename === ARTIFACTS.plan.filename && record.run?.planRevision
+        ? renderPlan(tracker.store.readPlan(number, record.run.planRevision, record.run.planDigest))
+        : null;
     const history = record.run?.reviewHistory ?? [];
     const lastRound = history.length > 0 ? history[history.length - 1] : null;
     const baselineSnapshot = lastRound?.planSnapshot ?? null;
@@ -709,9 +863,6 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
   // --- Agent interactive dialog response ---
 
-
-
-
   // --- Note Sync toggle endpoints ---
 
   router.put('/api/issues/:number/note-sync', (req: Request, res: Response) => {
@@ -723,7 +874,9 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     }
     const { enabled } = req.body as { enabled?: boolean | null };
     const value = enabled === null ? undefined : enabled;
-    tracker.transaction(number, current => { current.issueNoteSyncEnabled = value; });
+    tracker.transaction(number, (current) => {
+      current.issueNoteSyncEnabled = value;
+    });
     logger.info('Issue note-sync toggled', { number, enabled: value });
     res.json({ success: true, issueNoteSyncEnabled: value ?? null });
   });
@@ -826,7 +979,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   router.get('/api/system/status', (_req: Request, res: Response) => {
     const runningPreviews = orch.getDevServerManager().getRunningIssues();
     const allIssues = tracker.getAll();
-    const failedCount = allIssues.filter(r => r.lifecycle.kind === 'failed').length;
+    const failedCount = allIssues.filter((r) => r.lifecycle.kind === 'failed').length;
     res.json({
       uptime: Date.now() - startTime,
       startedAt: new Date(startTime).toISOString(),
@@ -887,7 +1040,9 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     res.flushHeaders();
 
     const heartbeat = setInterval(() => {
-      res.write(`event: heartbeat\ndata: ${JSON.stringify({ time: new Date().toISOString() })}\n\n`);
+      res.write(
+        `event: heartbeat\ndata: ${JSON.stringify({ time: new Date().toISOString() })}\n\n`,
+      );
     }, 15_000);
 
     const handler = (_eventName: string | symbol, payload: EventPayload) => {
@@ -921,15 +1076,21 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     const title = record ? getTitle(record) : `Issue #${number}`;
 
     const def = getIssuePipelineDef(number);
-    const allowed = collectPipelineArtifacts(def).map(f => f.filename);
+    const allowed = collectPipelineArtifacts(def).map((f) => f.filename);
     if (!allowed.includes(filename)) {
-      res.status(400).type('html').send(renderDocPage(number, title, t('api.invalidFilename'), filename));
+      res
+        .status(400)
+        .type('html')
+        .send(renderDocPage(number, title, t('api.invalidFilename'), filename));
       return;
     }
 
     const content = await readPlanFile(number, filename, tracker);
     if (content === null) {
-      res.status(404).type('html').send(renderDocPage(number, title, t('api.docNotGenerated'), filename));
+      res
+        .status(404)
+        .type('html')
+        .send(renderDocPage(number, title, t('api.docNotGenerated'), filename));
       return;
     }
 
@@ -943,7 +1104,12 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
 const DOC_LABELS_FUNC = (filename: string): string => t(`docLabel.${filename}`) || filename;
 
-function renderDocPage(number: number, issueTitle: string, htmlBody: string, filename: string): string {
+function renderDocPage(
+  number: number,
+  issueTitle: string,
+  htmlBody: string,
+  filename: string,
+): string {
   const docLabel = DOC_LABELS_FUNC(filename);
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -995,11 +1161,17 @@ function renderDocPage(number: number, issueTitle: string, htmlBody: string, fil
 }
 
 function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 /** 审核历史与工作目录是否存在无关，仅以聚合状态为准。 */
-function loadReviewHistory(number: number, tracker: IssueTracker) { return tracker.get(number)?.run?.reviewHistory ?? []; }
+function loadReviewHistory(number: number, tracker: IssueTracker) {
+  return tracker.get(number)?.run?.reviewHistory ?? [];
+}
 
 async function readPlanFile(
   issueIid: number,

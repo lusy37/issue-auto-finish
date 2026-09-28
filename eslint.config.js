@@ -50,6 +50,23 @@ export default [
     },
   },
 
+  {
+    files: ['src/**/*.ts'],
+    ignores: ['src/web/frontend/**'],
+    rules: {
+      'max-len': [
+        'error',
+        {
+          code: 100,
+          ignoreUrls: true,
+          ignoreStrings: true,
+          ignoreTemplateLiterals: true,
+          ignoreRegExpLiterals: true,
+        },
+      ],
+    },
+  },
+
   // Frontend Vue files — spread flat/essential to keep processor intact
   ...pluginVue.configs['flat/essential'].map((cfg) => ({
     ...cfg,
@@ -75,6 +92,7 @@ export default [
     rules: {
       ...tsRules,
       'no-undef': 'off',
+      'max-len': ['error', { code: 100, ignoreUrls: true }],
       'vue/multi-word-component-names': 'off',
       // Vue 3 reactive prop 子字段双向绑定（v-model="prop.nested.field"）是项目内
       // 统一的 form/settings 模式（参考 SettingsPanel/SetupWizard/E2eConfigSection），
@@ -102,6 +120,7 @@ export default [
     rules: {
       ...tsRules,
       'no-undef': 'off',
+      'max-len': ['error', { code: 100, ignoreUrls: true }],
     },
   },
 

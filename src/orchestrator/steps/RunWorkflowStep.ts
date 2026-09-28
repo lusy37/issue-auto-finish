@@ -1,7 +1,10 @@
-
 import type { GitOperations } from '../../git/GitOperations.js';
 import type { PlanPersistence } from '../../persistence/PlanPersistence.js';
-import type { IssueProcessingContext, OrchestratorDeps, WorkflowRunResult } from '../IssueProcessingContext.js';
+import type {
+  IssueProcessingContext,
+  OrchestratorDeps,
+  WorkflowRunResult,
+} from '../IssueProcessingContext.js';
 import { IssueWorkflow } from '../IssueWorkflow.js';
 import { DagPhaseRunner } from '../DagPhaseRunner.js';
 import { isShuttingDown } from '../../shutdown/ShutdownSignal.js';
@@ -43,7 +46,14 @@ export async function runWorkflow(
           deps.signal?.throwIfAborted();
           const ports = await deps.startPreviewServers(ctx.wtCtx, ctx.issue);
           deps.signal?.throwIfAborted();
-          if (!ports) return { kind: 'failed', error: { message: '预览服务启动失败，请检查预览日志和启动命令', retryable: 'hard-no-auto' } };
+          if (!ports)
+            return {
+              kind: 'failed',
+              error: {
+                message: '预览服务启动失败，请检查预览日志和启动命令',
+                retryable: 'hard-no-auto',
+              },
+            };
           ctx.phaseCtx.ports = ports;
           ctx.wtCtx.ports = ports;
           serversStarted = true;
@@ -52,33 +62,42 @@ export async function runWorkflow(
         return phaseRunner.run(spec, phaseContext);
       },
     },
-      checkShutdown: () => {
-        if (isShuttingDown()) throw new ServiceShutdownError();
-      },
-      autoReview: () => {
-        if (!deps.config.review.enabled) {
-          if (!wtPlan.isArtifactReady(ARTIFACTS.plan.filename)) throw new Error('完整计划尚未保存，不能按配置自动通过审核');
-          logger.info('计划已保存，按配置自动通过审核', { number: issueIid });
-          return 'configuration';
-        }
-        if (deps.shouldAutoApprove(ctx.issue.labels ?? [])) {
-          logger.info('Auto-approving review gate by label match', { number: issueIid });
-          return 'label';
-        }
-        return undefined;
-      },
+    checkShutdown: () => {
+      if (isShuttingDown()) throw new ServiceShutdownError();
+    },
+    autoReview: () => {
+      if (!deps.config.review.enabled) {
+        if (!wtPlan.isArtifactReady(ARTIFACTS.plan.filename))
+          throw new Error('完整计划尚未保存，不能按配置自动通过审核');
+        logger.info('计划已保存，按配置自动通过审核', { number: issueIid });
+        return 'configuration';
+      }
+      if (deps.shouldAutoApprove(ctx.issue.labels ?? [])) {
+        logger.info('Auto-approving review gate by label match', { number: issueIid });
+        return 'label';
+      }
+      return undefined;
+    },
     publish: async (phaseId, operation) => {
-      await syncResultToIssue(getPhaseArtifacts(phaseId), issueIid, phaseId, deps, issueIid, wtPlan, operation);
+      await syncResultToIssue(
+        getPhaseArtifacts(phaseId),
+        issueIid,
+        phaseId,
+        deps,
+        issueIid,
+        wtPlan,
+        operation,
+      );
     },
     deliver: () => deliverIssueStep(ctx, deps, { serversStarted }),
     context: {
-    issueIid,
-    demand: ctx.demand,
-    branchName: ctx.branchName,
-    workDir: ctx.wtCtx.workDir,
-    pipelineMode: ctx.pipelineDef.mode,
-    ports: ctx.phaseCtx.ports,
-    workspace: ctx.phaseCtx.workspace,
+      issueIid,
+      demand: ctx.demand,
+      branchName: ctx.branchName,
+      workDir: ctx.wtCtx.workDir,
+      pipelineMode: ctx.pipelineDef.mode,
+      ports: ctx.phaseCtx.ports,
+      workspace: ctx.phaseCtx.workspace,
     },
   });
   await workflow.drive();

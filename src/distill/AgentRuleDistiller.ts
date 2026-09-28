@@ -125,25 +125,26 @@ export class AgentRuleDistiller {
       if (!full) continue;
       try {
         const memory = JSON.parse(full.content) as MemoryEntry;
-        if (
-          memory.confidence >= this.confidenceThreshold &&
-          !memory.promotedToRule
-        ) {
+        if (memory.confidence >= this.confidenceThreshold && !memory.promotedToRule) {
           // 检查是否被其他 memory superseded
-          const isSuperseded = entries.some(e => {
+          const isSuperseded = entries.some((e) => {
             if (e.id === meta.id) return false;
             const f = this.knowledgeStore.get(e.id);
             if (!f) return false;
             try {
               const m = JSON.parse(f.content) as MemoryEntry;
               return m.supersedes === memory.id;
-            } catch { return false; }
+            } catch {
+              return false;
+            }
           });
           if (!isSuperseded) {
             memories.push(memory);
           }
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
 
     return memories;
@@ -152,20 +153,25 @@ export class AgentRuleDistiller {
   /** 加载现有 agent-rule 条目 */
   private loadExistingRules(): AgentRuleEntry[] {
     const entries = this.knowledgeStore.list('agent-rule');
-    return entries.map(meta => {
-      const full = this.knowledgeStore.get(meta.id);
-      if (!full) return null;
-      try {
-        return JSON.parse(full.content) as AgentRuleEntry;
-      } catch { return null; }
-    }).filter((r): r is AgentRuleEntry => r !== null);
+    return entries
+      .map((meta) => {
+        const full = this.knowledgeStore.get(meta.id);
+        if (!full) return null;
+        try {
+          return JSON.parse(full.content) as AgentRuleEntry;
+        } catch {
+          return null;
+        }
+      })
+      .filter((r): r is AgentRuleEntry => r !== null);
   }
 
   /** 解析 AI 输出 */
   private parseActions(output: string): RuleDistillAction[] {
     try {
       const parsed = parseJsonOutput(output);
-      if (!parsed || typeof parsed !== 'object' || !('actions' in parsed)) throw new Error('蒸馏结果缺少 actions');
+      if (!parsed || typeof parsed !== 'object' || !('actions' in parsed))
+        throw new Error('蒸馏结果缺少 actions');
       return ruleActionsSchema.parse(parsed.actions);
     } catch (err) {
       logger.warn('Failed to parse AI rule distill output', {
@@ -188,7 +194,9 @@ export class AgentRuleDistiller {
         this.deprecateRule(action, existingRules);
         break;
       default:
-        logger.warn('Unknown rule distill action type', { type: (action as { type: string }).type });
+        logger.warn('Unknown rule distill action type', {
+          type: (action as { type: string }).type,
+        });
     }
   }
 
@@ -239,7 +247,7 @@ export class AgentRuleDistiller {
     action: Extract<RuleDistillAction, { type: 'UPDATE' }>,
     existingRules: AgentRuleEntry[],
   ): void {
-    const existing = existingRules.find(r => r.id === action.ruleId);
+    const existing = existingRules.find((r) => r.id === action.ruleId);
     if (!existing) {
       logger.warn('Cannot update: rule not found', { ruleId: action.ruleId });
       return;
@@ -263,7 +271,9 @@ export class AgentRuleDistiller {
           });
           break;
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
 
     // 同步 Markdown 文件
@@ -286,7 +296,7 @@ export class AgentRuleDistiller {
     action: Extract<RuleDistillAction, { type: 'DEPRECATE' }>,
     existingRules: AgentRuleEntry[],
   ): void {
-    const existing = existingRules.find(r => r.id === action.ruleId);
+    const existing = existingRules.find((r) => r.id === action.ruleId);
     if (!existing) {
       logger.warn('Cannot deprecate: rule not found', { ruleId: action.ruleId });
       return;
@@ -308,7 +318,9 @@ export class AgentRuleDistiller {
           });
           break;
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
 
     // 删除 Markdown 文件
@@ -379,7 +391,9 @@ export class AgentRuleDistiller {
             content: JSON.stringify(memory),
           });
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
   }
 }

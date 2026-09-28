@@ -14,7 +14,7 @@ export class ConcurrencyLimiter {
         resolve();
       };
       const abort = () => {
-        this.queue = this.queue.filter(entry => entry !== start);
+        this.queue = this.queue.filter((entry) => entry !== start);
         reject(new Error('等待 AI 额度时已取消'));
       };
       if (this.active < this.limit) start();
@@ -31,6 +31,10 @@ export class ConcurrencyLimiter {
       this.queue.shift()?.();
     };
   }
-  get running(): number { return this.active; }
-  get waiting(): number { return this.queue.length; }
+  get running(): number {
+    return this.active;
+  }
+  get waiting(): number {
+    return this.queue.length;
+  }
 }

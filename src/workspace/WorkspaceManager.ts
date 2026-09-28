@@ -1,5 +1,5 @@
-import type {RepoContext,WorkspaceContext} from './WorkspaceTypes.js';
-export type {RepoContext,WorkspaceContext} from './WorkspaceTypes.js';
+import type { RepoContext, WorkspaceContext } from './WorkspaceTypes.js';
+export type { RepoContext, WorkspaceContext } from './WorkspaceTypes.js';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { GitOperations } from '../git/GitOperations.js';
@@ -75,11 +75,17 @@ export class WorkspaceManager {
       if (entries.length === 0) {
         await fs.rmdir(wsCtx.workspaceRoot);
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   /** 从配置重建单仓库的工作区信息，供创建与恢复工作区共用。 */
-  buildPrimaryContext(issueIid: number, globalBaseBranch: string, globalBranchPrefix?: string): RepoContext {
+  buildPrimaryContext(
+    issueIid: number,
+    globalBaseBranch: string,
+    globalBranchPrefix?: string,
+  ): RepoContext {
     const wsRoot = this.getWorkspaceRoot(issueIid);
     const primary = this.wsConfig.primary;
     const defaultPrefix = globalBranchPrefix ?? primary.branchPrefix ?? 'feat/issue';
@@ -108,11 +114,13 @@ export class WorkspaceManager {
     branchName: string,
     baseBranch: string,
   ): Promise<void> {
-
-
     const worktrees = await this.mainGit.worktreeList();
 
-    if (worktrees.some(dir => path.resolve(dir).toLowerCase() === path.resolve(repoDir).toLowerCase())) {
+    if (
+      worktrees.some(
+        (dir) => path.resolve(dir).toLowerCase() === path.resolve(repoDir).toLowerCase(),
+      )
+    ) {
       try {
         await fs.access(path.join(repoDir, '.git'));
         logger.info('Reusing existing primary worktree', { dir: repoDir });
@@ -142,7 +150,10 @@ export class WorkspaceManager {
     await this.mainGit.worktreeAdd(repoDir, branchName, `origin/${baseBranch}`);
   }
 
-  private async ensureBaseBranchRef(baseBranch: string, git: GitOperations = this.mainGit): Promise<void> {
+  private async ensureBaseBranchRef(
+    baseBranch: string,
+    git: GitOperations = this.mainGit,
+  ): Promise<void> {
     const remoteRef = `origin/${baseBranch}`;
     if (await git.refExists(remoteRef)) return;
 
@@ -156,16 +167,21 @@ export class WorkspaceManager {
     if (!(await git.refExists(remoteRef))) {
       throw new InvalidStateError(
         `基准分支 ${remoteRef} 不存在。请检查 BASE_BRANCH 配置（当前值: "${baseBranch}"），` +
-        `确认远端仓库存在该分支，或执行 git fetch origin`,
+          `确认远端仓库存在该分支，或执行 git fetch origin`,
       );
     }
     logger.info('Base branch ref recovered via targeted fetch', { remoteRef });
   }
-private async cleanStaleDir(dir: string): Promise<void> {
- const relative=path.relative(path.resolve(this.worktreeBaseDir),path.resolve(dir));
- if(!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('工作区路径越界');
- if(await this.dirExists(dir)) { const entries=await fs.readdir(dir); if(entries.length) throw new Error('工作区目录存在未登记文件，请手动核对：'+dir); await fs.rmdir(dir); }
-}
+  private async cleanStaleDir(dir: string): Promise<void> {
+    const relative = path.relative(path.resolve(this.worktreeBaseDir), path.resolve(dir));
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative))
+      throw new Error('工作区路径越界');
+    if (await this.dirExists(dir)) {
+      const entries = await fs.readdir(dir);
+      if (entries.length) throw new Error('工作区目录存在未登记文件，请手动核对：' + dir);
+      await fs.rmdir(dir);
+    }
+  }
 
   private async dirExists(dir: string): Promise<boolean> {
     try {

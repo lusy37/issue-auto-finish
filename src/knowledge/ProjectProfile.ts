@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { KNOWLEDGE_DEFAULTS } from "./KnowledgeDefaults.js";
-import { loadKnowledge, saveKnowledge } from "./KnowledgeLoader.js";
+import { z } from 'zod';
+import { KNOWLEDGE_DEFAULTS } from './KnowledgeDefaults.js';
+import { loadKnowledge, saveKnowledge } from './KnowledgeLoader.js';
 
 const text = z.string().max(10000);
 export const profileSchema = z.object({
@@ -23,10 +23,10 @@ export function readProjectProfile(): ProjectProfile {
     language: knowledge.structure.primaryLanguage,
     frameworks: knowledge.structure.frameworks,
     installCommand: knowledge.toolchain.installCommand,
-    lintCommand: knowledge.toolchain.lintCommand ?? "",
-    buildCommand: knowledge.toolchain.buildCommand ?? "",
-    testCommand: knowledge.toolchain.testCommand ?? "",
-    rules: knowledge.agentKnowledge.conventions.join("\n"),
+    lintCommand: knowledge.toolchain.lintCommand ?? '',
+    buildCommand: knowledge.toolchain.buildCommand ?? '',
+    testCommand: knowledge.toolchain.testCommand ?? '',
+    rules: knowledge.agentKnowledge.conventions.join('\n'),
   };
 }
 
@@ -44,9 +44,7 @@ export function writeProjectProfile(input: unknown): ProjectProfile {
     buildCommand: profile.buildCommand,
     testCommand: profile.testCommand,
   };
-  knowledge.agentKnowledge.conventions = profile.rules
-    .split("\n")
-    .filter(Boolean);
+  knowledge.agentKnowledge.conventions = profile.rules.split('\n').filter(Boolean);
   saveKnowledge(knowledge);
   return profile;
 }

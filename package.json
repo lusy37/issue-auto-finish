@@ -55,6 +55,7 @@
     "doctor": "tsx src/cli/index.ts doctor",
     "init": "tsx src/cli/index.ts init",
     "demo": "tsx scripts/demo.ts",
+    "demo:showcase": "tsx scripts/showcase.ts",
     "test:codex": "tsx scripts/codex-smoke.ts",
     "test:windows": "vitest run tests/integration/windows-preview.test.ts"
   },

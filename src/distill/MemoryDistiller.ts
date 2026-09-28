@@ -51,7 +51,9 @@ export class MemoryDistiller {
    * 执行记忆蒸馏。
    * @returns 处理的日记数和创建/更新的 memory 数。
    */
-  async distill(options?: { force?: boolean }): Promise<{ processedDiaries: number; actions: number }> {
+  async distill(options?: {
+    force?: boolean;
+  }): Promise<{ processedDiaries: number; actions: number }> {
     const undistilled = this.diaryStore.getUndistilled();
 
     // force 模式跳过阈值检查（手动触发）
@@ -94,7 +96,7 @@ export class MemoryDistiller {
     if (actions.length === 0) {
       logger.info('No distillation actions returned by AI');
       // 仍然标记日记为已蒸馏
-      this.diaryStore.markDistilled(undistilled.map(d => d.id));
+      this.diaryStore.markDistilled(undistilled.map((d) => d.id));
       return { processedDiaries: undistilled.length, actions: 0 };
     }
 
@@ -114,7 +116,7 @@ export class MemoryDistiller {
     }
 
     // 标记日记为已蒸馏
-    this.diaryStore.markDistilled(undistilled.map(d => d.id));
+    this.diaryStore.markDistilled(undistilled.map((d) => d.id));
 
     logger.info('Memory distillation complete', {
       processedDiaries: undistilled.length,
@@ -127,22 +129,25 @@ export class MemoryDistiller {
   /** 从 KnowledgeStore 加载现有 memory 条目 */
   private loadExistingMemories(): MemoryEntry[] {
     const entries = this.knowledgeStore.list('memory');
-    return entries.map(meta => {
-      const full = this.knowledgeStore.get(meta.id);
-      if (!full) return null;
-      try {
-        return JSON.parse(full.content) as MemoryEntry;
-      } catch {
-        return null;
-      }
-    }).filter((m): m is MemoryEntry => m !== null);
+    return entries
+      .map((meta) => {
+        const full = this.knowledgeStore.get(meta.id);
+        if (!full) return null;
+        try {
+          return JSON.parse(full.content) as MemoryEntry;
+        } catch {
+          return null;
+        }
+      })
+      .filter((m): m is MemoryEntry => m !== null);
   }
 
   /** 解析 AI 输出的 actions */
   private parseActions(output: string): MemoryDistillAction[] {
     try {
       const parsed = parseJsonOutput(output);
-      if (!parsed || typeof parsed !== 'object' || !('actions' in parsed)) throw new Error('蒸馏结果缺少 actions');
+      if (!parsed || typeof parsed !== 'object' || !('actions' in parsed))
+        throw new Error('蒸馏结果缺少 actions');
       return memoryActionsSchema.parse(parsed.actions);
     } catch (err) {
       logger.warn('Failed to parse AI distillation output', {
@@ -200,7 +205,11 @@ export class MemoryDistiller {
       timestamp: new Date().toISOString(),
     });
 
-    logger.info('Created new memory', { id: memoryEntry.id, theme: action.theme, title: action.title });
+    logger.info('Created new memory', {
+      id: memoryEntry.id,
+      theme: action.theme,
+      title: action.title,
+    });
   }
 
   /** 合并新证据到已有 memory */
@@ -208,7 +217,7 @@ export class MemoryDistiller {
     action: Extract<MemoryDistillAction, { type: 'MERGE' }>,
     existingMemories: MemoryEntry[],
   ): void {
-    const existing = existingMemories.find(m => m.id === action.memoryId);
+    const existing = existingMemories.find((m) => m.id === action.memoryId);
     if (!existing) {
       logger.warn('Cannot merge: memory not found', { memoryId: action.memoryId });
       return;
@@ -236,7 +245,9 @@ export class MemoryDistiller {
           });
           break;
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
 
     this.versionStore.append({
@@ -256,7 +267,7 @@ export class MemoryDistiller {
     action: Extract<MemoryDistillAction, { type: 'SUPERSEDE' }>,
     existingMemories: MemoryEntry[],
   ): void {
-    const oldMemory = existingMemories.find(m => m.id === action.oldMemoryId);
+    const oldMemory = existingMemories.find((m) => m.id === action.oldMemoryId);
 
     // 记录旧版本
     if (oldMemory) {
