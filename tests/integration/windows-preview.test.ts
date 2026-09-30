@@ -44,7 +44,7 @@ it("中文空格目录中通过 cmd 启动预览，取消后清除进程树并�
   );
   fs.writeFileSync(
     path.join(dir, "启动.cmd"),
-    '@echo off\r\n"' + process.execPath + '" "启动.mjs" %1\r\n',
+    '@echo off\r\nchcp 65001 >nul\r\n"' + process.execPath + '" "启动.mjs" %1\r\n',
   );
   const command =
     process.platform === "win32"

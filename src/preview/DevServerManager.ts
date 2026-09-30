@@ -106,6 +106,10 @@ export class DevServerManager {
 
     const tsLine = (stream: string, data: Buffer) =>
       `[${new Date().toISOString()}] [${stream}] ${data.toString().trimEnd()}\n`;
+    let backendOutput = '';
+    let frontendOutput = '';
+    const rememberOutput = (current: string, data: Buffer) =>
+      (current + data.toString()).slice(-20_000);
 
     const backendEnv: Record<string, string> = {
       ...(process.env as Record<string, string>),
@@ -115,6 +119,12 @@ export class DevServerManager {
     };
 
     let startupError: Error | undefined;
+    const reportEarlyExit = (name: string, code: number | null, output: string) => {
+      if (serverSet?.ready || serverSet?.startup.signal.aborted) return;
+      startupError ??= new Error(
+        `${name} 预览进程提前退出：退出码=${code ?? '信号终止'}\n${output}`,
+      );
+    };
     const backendCmd = this.options.backendCommand ?? { bin: 'npm', args: ['run', 'dev:backend'] };
     const backend = spawn(
       backendCmd.bin,
@@ -152,13 +162,16 @@ export class DevServerManager {
     });
     backend.nodeChildProcess.unref();
     backend.nodeChildProcess.stdout?.on('data', (data: Buffer) => {
+      backendOutput = rememberOutput(backendOutput, data);
       if (!backendLog.writableEnded) backendLog.write(tsLine('stdout', data));
     });
     backend.nodeChildProcess.stderr?.on('data', (data: Buffer) => {
+      backendOutput = rememberOutput(backendOutput, data);
       if (!backendLog.writableEnded) backendLog.write(tsLine('stderr', data));
     });
     backend.nodeChildProcess.on('exit', (code) => {
       logger.info('Backend process exited', { issueIid: wtCtx.issueIid, code });
+      reportEarlyExit('后端', code, backendOutput);
       this.stopServers(wtCtx.issueIid);
     });
 
@@ -210,13 +223,16 @@ export class DevServerManager {
     });
     frontend.nodeChildProcess.unref();
     frontend.nodeChildProcess.stdout?.on('data', (data: Buffer) => {
+      frontendOutput = rememberOutput(frontendOutput, data);
       if (!frontendLog.writableEnded) frontendLog.write(tsLine('stdout', data));
     });
     frontend.nodeChildProcess.stderr?.on('data', (data: Buffer) => {
+      frontendOutput = rememberOutput(frontendOutput, data);
       if (!frontendLog.writableEnded) frontendLog.write(tsLine('stderr', data));
     });
     frontend.nodeChildProcess.on('exit', (code) => {
       logger.info('Frontend process exited', { issueIid: wtCtx.issueIid, code });
+      reportEarlyExit('前端', code, frontendOutput);
       this.stopServers(wtCtx.issueIid);
     });
 

@@ -68,7 +68,10 @@ describe("进程入口的实际执行行为", () => {
   it.each(["取消", "超时"])("%s时清理 cmd 启动的后代服务并释放端口", async mode => {
     fs.writeFileSync(path.join(cwd, "服务.mjs"), "import http from 'node:http';const server=http.createServer((q,s)=>s.end('ok'));server.listen(0,'127.0.0.1',()=>console.log('READY:'+server.address().port+':'+process.pid));");
     fs.writeFileSync(path.join(cwd, "启动.mjs"), "import {spawn} from 'node:child_process';spawn(process.execPath,['服务.mjs'],{stdio:'inherit'});setInterval(()=>{},1000);");
-    fs.writeFileSync(path.join(cwd, "启动.cmd"), '@echo off\r\n"' + process.execPath + '" "启动.mjs"\r\n');
+    fs.writeFileSync(
+      path.join(cwd, "启动.cmd"),
+      '@echo off\r\nchcp 65001 >nul\r\n"' + process.execPath + '" "启动.mjs"\r\n',
+    );
     const controller = new AbortController();
     let port = 0, pid = 0, output = "";
     let notifyReady!: () => void;
