@@ -49,6 +49,13 @@ npm run doctor
 
 Codex 使用官方 SDK 与内置原生程序；CODEX_BINARY 留空即可，模型留空沿用用户配置。计划调用只读，完整计划由服务端持久化。真实调用检查为 npm run test:codex，独立于模拟回归，可能产生模型用量。
 
+`npm run test:codex` 的默认单次调用上限为 120 秒，可通过
+`$env:CODEX_SMOKE_TIMEOUT_MS='180000'` 临时延长。输出中的
+`Reconnecting...`、`Connection failed` 或 `Transport error` 表示 Codex 网络流未建立或中途断开，
+不是 GitHub Issue 或项目测试失败；应先检查登录、代理和网络。输出中的
+`Codex 执行超时` 表示调用在上限内没有完成，报告文件会保留最近事件用于区分模型仍在工作、命令执行卡住和网络异常。
+`cancellation.cancelled=true` 且 `exited=true` 只代表独立的取消清理检查通过，不会覆盖首个真实调用的失败。
+
 新增带 auto-finish 标签的 Issue 可被轮询发现；启动服务前已有的 Issue 首轮标为跳过，需在工作台手动启动。审核驳回会把上次计划和反馈带入新一轮规划，通过后才开始实现。
 
 ### 真实 sandbox 验证
