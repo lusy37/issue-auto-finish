@@ -45,7 +45,7 @@ npm run init
 npm run doctor
 ~~~
 
-按照 [`env.example`](env.example) 编辑 `.iaf-mini/github/.env`，配置用于处理 Issue 的仓库、Token、本地 Git 克隆目录、基础分支及测试和预览环境。**该业务仓库可以与本项目源码仓库不同**；不要将真实凭据提交到 Git。确保推送认证和 Codex 登录可用后运行 `npm start`，打开设置页检查连接。修改配置后重启服务。
+按照 [`env.example`](env.example) 编辑 `.iaf-mini/github/.env`，配置用于处理 Issue 的仓库、Token、本地 Git 克隆目录、基础分支及测试和预览环境。当前 `npm run init` 会生成一份包含这些主要选项的完整可编辑模板；**该业务仓库可以与本项目源码仓库不同**。不要将真实凭据提交到 Git。确保推送认证和 Codex 登录可用后运行 `npm start`，打开设置页检查连接。修改配置后重启服务。
 
 Codex 使用官方 SDK 与内置原生程序；CODEX_BINARY 留空即可，模型留空沿用用户配置。计划调用只读，完整计划由服务端持久化。真实调用检查为 npm run test:codex，独立于模拟回归，可能产生模型用量。
 
