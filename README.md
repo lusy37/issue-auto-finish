@@ -20,6 +20,16 @@ npm run demo
 
 打开 http://127.0.0.1:3000，在任务工作台手动启动演示 Issue，并在详情中审核计划。此演示使用模拟 GitHub 与 AI，真实执行本地 Git、持久化和浏览器验收；运行数据写入已忽略的 `.iaf-mini/demo-langgraph-v6`。端口冲突时，在启动前设置 `IAF_DEMO_PORT` 和 `IAF_DEMO_PLATFORM_PORT`。
 
+Playwright 的 TypeScript 包只提供测试运行器，Chromium 浏览器是单独下载的运行时，不应放入 `bin/`。默认的 `npm run e2e:install` 使用 Playwright 用户缓存；如果希望浏览器随本项目目录管理，可在 PowerShell 中执行：
+
+~~~powershell
+$env:PLAYWRIGHT_BROWSERS_PATH = "$PWD/.playwright-browsers"
+npx playwright install chromium
+npm run test:e2e
+~~~
+
+以后在同一个 PowerShell 会话中保留该环境变量即可；新的会话需要重新设置。`.playwright-browsers/` 已加入忽略列表，不会被提交到 Git。
+
 ## 多状态界面展示
 
 运行 `npm run demo:showcase`，打开 http://127.0.0.1:3312。独立的 `.iaf-mini/showcase-frontend-v6` 会生成 8 条本地演示任务，覆盖待审核、构建中、暂停、失败、完成、取消等状态及并行任务图；重复启动会保留已有样例。
@@ -40,6 +50,71 @@ npm run doctor
 Codex 使用官方 SDK 与内置原生程序；CODEX_BINARY 留空即可，模型留空沿用用户配置。计划调用只读，完整计划由服务端持久化。真实调用检查为 npm run test:codex，独立于模拟回归，可能产生模型用量。
 
 新增带 auto-finish 标签的 Issue 可被轮询发现；启动服务前已有的 Issue 首轮标为跳过，需在工作台手动启动。审核驳回会把上次计划和反馈带入新一轮规划，通过后才开始实现。
+
+### 真实 sandbox 验证
+
+真实验证时，Issue 应发送到业务沙箱仓库，而不是本项目源码仓库。本机示例使用
+`E:/Edge_Load/issue-auto-finish-sandbox` 和 `lusy37/issue-auto-finish-sandbox`。
+
+1. 在沙箱仓库安装依赖，并使用**沙箱仓库自己的 Playwright 版本**安装浏览器：
+
+   ~~~powershell
+   cd E:/Edge_Load/issue-auto-finish-sandbox
+   npm ci
+   $env:PLAYWRIGHT_BROWSERS_PATH = 'E:/Edge_Load/issue-auto-finish/.iaf-mini/playwright-browsers'
+   npx playwright install chromium
+   ~~~
+
+   这不是 TypeScript 包内的代码，也不应放到 `bin/`；它是浏览器运行时。
+   `.iaf-mini/` 是工作台的忽略目录，不会把浏览器文件混入业务仓库。启动工作台的
+   PowerShell 会话也必须保留同一个 `PLAYWRIGHT_BROWSERS_PATH`，并设置
+   `$env:PLAYWRIGHT_CHANNEL = 'chromium'`：沙箱的 Playwright 配置默认选择的是
+   已安装的系统 Chrome，并不会自动切换到下载的 Chromium。
+   如果已经安装系统 Chrome，可不下载，直接保持默认 `chrome`；若使用本机 Edge，
+   则设置 `$env:PLAYWRIGHT_CHANNEL = 'msedge'`，也无需下载 Chromium。
+
+2. 在本项目根目录运行 `npm run init`，编辑 `.iaf-mini/github/.env`：
+
+   ~~~dotenv
+   GITHUB_REPOSITORY=lusy37/issue-auto-finish-sandbox
+   PROJECT_WORK_DIR=E:/Edge_Load/issue-auto-finish-sandbox
+   BASE_BRANCH=main
+   AI_RUNNER_MODE=codex
+   CODEX_BINARY=
+   E2E_UI_ENABLED=true
+   REVIEW_ENABLED=true
+   PREVIEW_ENABLED=true
+   PREVIEW_BACKEND_COMMAND=npm run dev:backend
+   PREVIEW_FRONTEND_COMMAND=npm run dev:frontend -- --port {port}
+   PREVIEW_FRONTEND_DIR=.
+   UAT_CONFIG_FILE=playwright.config.ts
+   ~~~
+
+   同时填写 GitHub API 地址和 Token。Token 只保存在本机配置中，不要提交；业务仓库的
+   Git `origin` 也必须具备推送分支和创建 PR 的权限。
+
+3. 在同一个 PowerShell 会话执行 `npx codex login`，然后运行 `npm run doctor`。
+   `CODEX_BINARY` 保持为空即可使用官方 SDK 的内置程序。可先运行 `npm run test:codex`
+   做一次真实 SDK smoke test；该命令会产生真实模型调用和用量，不是模拟回归。
+
+4. 先构建并启动工作台：
+
+   ~~~powershell
+   cd E:/Edge_Load/issue-auto-finish
+   npm run build
+   npm run web:build
+   npm start
+   ~~~
+
+   打开 `http://127.0.0.1:3000`，等待日志出现首次发现完成后，再到
+   [sandbox Issues](https://github.com/lusy37/issue-auto-finish-sandbox/issues/new)
+   新建 Issue，并添加精确标签 `auto-finish`。首次扫描前已存在的 Issue 会被跳过，
+   所以不要先创建再启动服务。
+
+5. 新 Issue 被发现后，计划阶段会真实调用 Codex。`REVIEW_ENABLED=true` 时，在工作台的
+   “任务工作台”打开该 Issue，检查并批准计划；之后才会进入真实 build、verify、预览、
+   Playwright UAT 和 PR 交付。整个过程会修改 sandbox 仓库并产生真实 GitHub 评论、标签和 PR，
+   第一次请只使用测试仓库。
 
 ## 流程与知识设置
 
@@ -80,7 +155,12 @@ npm run test:codex
 
 浏览器检查默认使用已安装的 Chromium，也支持 `IAF_TEST_BROWSER_CHANNEL=chrome` 或 `msedge`。CI 配置位于 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。`npm run web:build` 如提示单个 JS Bundle 超过 500 KB，这是包体积警告，不代表构建失败；首屏性能优化应优先按页面拆分代码。
 
-本次整理的本机检查：类型检查、后端 Lint、前后端构建及相关的 61 项测试通过；完整保留测试集 **859 项通过、9 项失败**。失败涉及 Windows 进程回收、测试进程内存不足和两项工作流断言，尚未解决，不能视为完整回归通过。真实 Codex 调用与模拟回归分开验证。
+`mini-workflow` 集成测试也会真正启动浏览器：本机未安装 Playwright Chromium 时先运行
+`npm run e2e:install`，或设置 `IAF_TEST_BROWSER_CHANNEL=msedge`。
+CI 将 Windows `.cmd` 进程树与预览测试串行运行；失败时测试会打印退出码和进程日志，
+并上传预览日志供定位。完整 `npm test` 仍包含这两组测试。
+
+最近一次本机检查：类型检查、前后端构建、主测试集 **860 项**、Windows 进程测试 **8 项**和浏览器 E2E **1 项**均通过。主测试、真实浏览器验收和 Windows 进程树清理分别执行；真实 Codex 调用仍需通过 `npm run test:codex` 或真实 GitHub Issue 单独验证。
 
 ## 数据与 Git
 

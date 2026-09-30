@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, ref, watch } from 'vue';
 import { Check, ChevronRight, Clock3, Code2, GitMerge, LockKeyhole, Terminal } from '@lucide/vue';
 import { useIssueGraphs } from '@/composables/useIssueGraphs';
-import ExecutionGraph from './ExecutionGraph.vue';
 import type { IssueGraphs } from '../../../../shared/workflowGraphs.js';
 
+const ExecutionGraph = defineAsyncComponent(() => import('./ExecutionGraph.vue'));
 const props = defineProps<{ issueNumber: number; stateVersion?: number }>();
 const emit = defineEmits<{ 'task-selected': [task: IssueGraphs['tasks'][number] | undefined] }>();
 const { graph, error, loading, refresh } = useIssueGraphs(props);

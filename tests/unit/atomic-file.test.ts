@@ -48,7 +48,7 @@ async function fault(scenario: string) {
     console.log(JSON.stringify(result));
   `;
   const result = await runProcess(process.execPath, [
-    "--import", "tsx", "--input-type=module", "-e", source,
+    "--experimental-strip-types", "--input-type=module", "-e", source,
     path.join(dir, "state.json"), scenario, pathToFileURL(path.resolve("src/utils/atomicFile.ts")).href,
   ], { cwd: process.cwd(), timeoutMs: 15_000 });
   expect(result.code, result.stderr).toBe(0);

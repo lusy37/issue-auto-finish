@@ -206,6 +206,13 @@ it("真实 Native 工作台：五个入口、草稿生成、任务详情与 UAT 
     await browserExpect(page.locator('.prototype-workflow-panel .n-steps')).toBeVisible();
     await browserExpect(page.locator('.prototype-workflow-panel .n-step')).toHaveCount(6);
     await browserExpect.poll(async () => page.locator('.execution-surface .graph-viewport > .execution-graph').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    const graphNode = page
+      .getByRole('region', { name: '构建任务依赖图' })
+      .getByRole('button', { name: /实现需求/ });
+    await browserExpect(graphNode).toBeVisible();
+    await graphNode.click();
+    await browserExpect(graphNode).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: '适配流程图' }).click();
     await browserExpect(page.getByRole('button', { name: '实施计划', exact: true }).first()).toBeVisible();
     await browserExpect(page.getByRole('button', { name: '验收结果', exact: true })).toBeVisible();
     await page.locator('.prototype-detail-tabs button').filter({ hasText: '实施计划' }).click();

@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { chromium } from "@playwright/test";
 import { envSchema, transformEnvToConfig } from "../../src/config-schema.js";
 import { IssueTracker } from "../../src/tracker/IssueTracker.js";
 import {
@@ -47,6 +48,11 @@ afterEach(() => {
 
 describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
   it.each(['verify', 'uat'] as const)("驳回重做 → %s 失败修复 → Chromium 验收 → 交付恢复", async failurePhase => {
+    if (!process.env.IAF_TEST_BROWSER_CHANNEL && !fs.existsSync(chromium.executablePath())) {
+      throw new Error(
+        '缺少 Playwright Chromium，请先运行 npm run e2e:install，或设置 IAF_TEST_BROWSER_CHANNEL=msedge',
+      );
+    }
     const origin = path.join(dir, "origin.git"),
       repo = path.join(dir, "repo");
     fs.mkdirSync(repo);

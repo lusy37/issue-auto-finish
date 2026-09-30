@@ -16,6 +16,16 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run web:build
-      - run: npm test -- --maxWorkers=2
+      - run: >-
+          npm test -- --maxWorkers=2
+          --exclude tests/integration/process-lifecycle.test.ts
+          --exclude tests/integration/windows-preview.test.ts
       - run: npm run test:e2e
       - run: npm run test:windows
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-preview-logs
+          path: .iaf-mini/preview-tests/**/preview-logs/*.log
+          if-no-files-found: ignore
+          include-hidden-files: true

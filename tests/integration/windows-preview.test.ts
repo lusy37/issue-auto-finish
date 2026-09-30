@@ -67,6 +67,16 @@ it("中文空格目录中通过 cmd 启动预览，取消后清除进程树并�
     await until(() => isOpen(ports.backendPort), false);
     await until(() => isOpen(ports.frontendPort), false);
     expect(manager.getStatus(1).running).toBe(false);
+  } catch (error) {
+    await manager.waitForStopped(1);
+    const logs = (['backend', 'frontend'] as const).map((type) => {
+      const logPath = manager.getLogPath(1, type);
+      const content = logPath ? fs.readFileSync(logPath, 'utf8').slice(-4_000) : '无日志';
+      return `${type} 进程日志：${content}`;
+    });
+    throw new Error(`预览测试失败：${(error as Error).message}\n${logs.join('\n')}`, {
+      cause: error,
+    });
   } finally {
     manager.stopAll();
     allocator.release(1);

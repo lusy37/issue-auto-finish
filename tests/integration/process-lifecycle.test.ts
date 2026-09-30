@@ -84,9 +84,16 @@ describe("进程入口的实际执行行为", () => {
           if (match) { port = Number(match[1]); pid = Number(match[2]); notifyReady(); }
         },
       },
-    ).then(() => undefined, error => error as Error);
+    ).then(
+      result => new Error(
+        `服务提前退出：退出码=${result.code}\n` +
+        `stdout=${JSON.stringify(result.stdout)}\n` +
+        `stderr=${JSON.stringify(result.stderr)}`,
+      ),
+      error => error as Error,
+    );
     try {
-      await Promise.race([ready, pending.then(error => { throw error ?? new Error("服务提前退出"); })]);
+      await Promise.race([ready, pending.then(error => { throw error; })]);
       expect(await isOpen(port)).toBe(true);
       if (mode === "取消") controller.abort();
       expect((await pending)?.message).toContain(mode);
