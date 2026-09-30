@@ -187,6 +187,30 @@ describe('API Routes', () => {
     });
 
     it('returns success when issue is reset', async () => {
+      tracker.get.mockReturnValue(
+        createTestRecord({
+          run: {
+            ...createTestRecord().run!,
+            calls: {
+              stalePreview: {
+                identity: {
+                  issueNumber: 42,
+                  planRevision: 1,
+                  buildGeneration: 0,
+                  dispatchId: 'test',
+                  taskId: '$preview',
+                  attemptNo: 1,
+                  callId: 'stalePreview',
+                },
+                pid: 999999,
+                workDir: 'E:/missing-worktree',
+                status: 'running',
+                startedAt: new Date().toISOString(),
+              },
+            },
+          },
+        }),
+      );
       mockOrchestrator.retryIssue.mockReturnValue(true);
       const res = await req('POST', '/api/issues/42/retry');
       expect(res.status).toBe(200);

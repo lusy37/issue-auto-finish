@@ -50,10 +50,13 @@ it("中文空格目录中通过 cmd 启动预览，取消后清除进程树并�
     process.platform === "win32"
       ? { bin: path.join(dir, "启动.cmd"), args: ["{port}"] }
       : { bin: process.execPath, args: ["启动.mjs", "{port}"] };
+  const exited: string[] = [];
   const manager = new DevServerManager({
     startupTimeoutMs: 10000,
     backendCommand: command,
     frontendCommand: command,
+    onProcessStarted: (_issueIid, pid) => String(pid),
+    onProcessExited: (_issueIid, callId) => exited.push(callId),
   });
   try {
     await manager.startServers(
@@ -64,6 +67,8 @@ it("中文空格目录中通过 cmd 启动预览，取消后清除进程树并�
     await until(() => isOpen(ports.frontendPort), true);
     expect(manager.getStatus(1).running).toBe(true);
     manager.stopServers(1);
+    await manager.waitForStopped(1);
+    expect(exited).toHaveLength(2);
     await until(() => isOpen(ports.backendPort), false);
     await until(() => isOpen(ports.frontendPort), false);
     expect(manager.getStatus(1).running).toBe(false);

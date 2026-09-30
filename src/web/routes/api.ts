@@ -258,12 +258,6 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
   router.post('/api/issues/:number/retry', (req: Request, res: Response) => {
     const number = parseInt(req.params.number, 10);
-    if (
-      Object.values(tracker.get(number)?.run?.calls ?? {}).some((call) => call.status !== 'exited')
-    ) {
-      res.status(409).json({ error: '旧调用尚未确认退出，请先中止并核对进程' });
-      return;
-    }
     let ok: boolean;
     try {
       ok = orch.retryIssue(number);

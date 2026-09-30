@@ -137,6 +137,17 @@ export class DevServerManager {
     );
 
     let backendCall: string | undefined;
+    let backendExitReported = false;
+    const reportBackendExit = () => {
+      if (backendExitReported) return;
+      backendExitReported = true;
+      if (!backendCall) return;
+      try {
+        this.options.onProcessExited?.(wtCtx.issueIid, backendCall);
+      } catch (error) {
+        logger.error('预览退出凭证写入失败', { error: String(error) });
+      }
+    };
     try {
       if (backend.pid)
         backendCall = this.options.onProcessStarted?.(wtCtx.issueIid, backend.pid, wtCtx.workDir);
@@ -147,16 +158,9 @@ export class DevServerManager {
       frontendLog.end();
       throw error;
     }
-    void backend.then(() => {
-      if (backendCall) {
-        try {
-          this.options.onProcessExited?.(wtCtx.issueIid, backendCall);
-        } catch (error) {
-          logger.error('预览退出凭证写入失败', { error: String(error) });
-        }
-      }
-    });
+    void backend.then(reportBackendExit, reportBackendExit);
     backend.nodeChildProcess.on('error', (error) => {
+      reportBackendExit();
       startupError = error;
       this.stopServers(wtCtx.issueIid);
     });
@@ -170,6 +174,7 @@ export class DevServerManager {
       if (!backendLog.writableEnded) backendLog.write(tsLine('stderr', data));
     });
     backend.nodeChildProcess.on('exit', (code) => {
+      reportBackendExit();
       logger.info('Backend process exited', { issueIid: wtCtx.issueIid, code });
       reportEarlyExit('后端', code, backendOutput);
       this.stopServers(wtCtx.issueIid);
@@ -198,6 +203,17 @@ export class DevServerManager {
     );
 
     let frontendCall: string | undefined;
+    let frontendExitReported = false;
+    const reportFrontendExit = () => {
+      if (frontendExitReported) return;
+      frontendExitReported = true;
+      if (!frontendCall) return;
+      try {
+        this.options.onProcessExited?.(wtCtx.issueIid, frontendCall);
+      } catch (error) {
+        logger.error('预览退出凭证写入失败', { error: String(error) });
+      }
+    };
     try {
       if (frontend.pid)
         frontendCall = this.options.onProcessStarted?.(wtCtx.issueIid, frontend.pid, frontendDir);
@@ -208,16 +224,9 @@ export class DevServerManager {
       frontendLog.end();
       throw error;
     }
-    void frontend.then(() => {
-      if (frontendCall) {
-        try {
-          this.options.onProcessExited?.(wtCtx.issueIid, frontendCall);
-        } catch (error) {
-          logger.error('预览退出凭证写入失败', { error: String(error) });
-        }
-      }
-    });
+    void frontend.then(reportFrontendExit, reportFrontendExit);
     frontend.nodeChildProcess.on('error', (error) => {
+      reportFrontendExit();
       startupError = error;
       this.stopServers(wtCtx.issueIid);
     });
@@ -231,6 +240,7 @@ export class DevServerManager {
       if (!frontendLog.writableEnded) frontendLog.write(tsLine('stderr', data));
     });
     frontend.nodeChildProcess.on('exit', (code) => {
+      reportFrontendExit();
       logger.info('Frontend process exited', { issueIid: wtCtx.issueIid, code });
       reportEarlyExit('前端', code, frontendOutput);
       this.stopServers(wtCtx.issueIid);
