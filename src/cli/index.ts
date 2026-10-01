@@ -52,6 +52,7 @@ function createInitialConfig(projectWorkDir: string): string {
       '',
       '# 浏览器验收',
       'E2E_UI_ENABLED=true',
+      'PLAYWRIGHT_CHANNEL=msedge',
       'UAT_CONFIG_FILE=playwright.config.ts',
       'UAT_TIMEOUT_MS=300000',
       `E2E_BASE_URL=http://127.0.0.1:${PREVIEW_DEFAULTS.frontendPortBase}`,

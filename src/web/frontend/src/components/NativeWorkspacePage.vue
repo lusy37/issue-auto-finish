@@ -1,34 +1,29 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import {
-  NAlert,
-  NButton,
-  NCard,
-  NEmpty,
-  NFormItem,
-  NInput,
-  NModal,
-  NStatistic,
-  NSwitch,
-  NTable,
-  NTag,
-  useMessage,
-} from 'naive-ui';
+import { NAlert } from 'naive-ui/es/alert';
+import { NButton } from 'naive-ui/es/button';
+import { NCard } from 'naive-ui/es/card';
+import { NEmpty } from 'naive-ui/es/empty';
+import { NFormItem } from 'naive-ui/es/form';
+import { NInput } from 'naive-ui/es/input';
+import { useMessage } from 'naive-ui/es/message';
+import { NModal } from 'naive-ui/es/modal';
+import { NStatistic } from 'naive-ui/es/statistic';
+import { NSwitch } from 'naive-ui/es/switch';
+import { NTag } from 'naive-ui/es/tag';
 import {
   ArrowUpRight,
-  BookOpen,
   FileText,
-  GitBranch,
-  Moon,
   Plus,
   Search,
-  ShieldCheck,
-  Terminal,
   Trash2,
 } from '@lucide/vue';
+import { fetchSettings, saveSettings } from '@/api/client';
 import { json, type DemandDraft } from '@/api/mini';
 import type { ExecutableTask, SystemStatus } from '@/types';
 import { useAction } from '@/composables/useAction';
+import TaskDistributionChart from '@/components/TaskDistributionChart.vue';
+import KnowledgeWorkspace from '@/components/KnowledgeWorkspace.vue';
 
 const props = defineProps<{
   page: 'drafts' | 'knowledge' | 'analytics' | 'settings';
@@ -42,31 +37,6 @@ const drafts = ref<DemandDraft[]>([]);
 const draftQuery = ref('');
 const showCreate = ref(false);
 const input = ref('');
-const reading = ref<{ title: string; tag: string; content: string } | null>(null);
-const docs = [
-  {
-    title: '项目开发约定',
-    tag: '项目规则',
-    icon: BookOpen,
-    summary: '统一开发边界、阶段职责与计划审核规则。',
-    content:
-      '项目采用 Vue、TypeScript、Express 和本地 JSON。核心流程包含计划、审核、构建、验证、验收和交付。',
-  },
-  {
-    title: '任务依赖与合并规则',
-    tag: '执行经验',
-    icon: GitBranch,
-    summary: '前置任务合并后，再启动依赖它的下游任务。',
-    content: '同一个 Issue 的构建阶段可以拆分为多个任务，服务端 DAG 是依赖关系的唯一来源。',
-  },
-  {
-    title: '浏览器验收的有效证据',
-    tag: '验收规则',
-    icon: ShieldCheck,
-    summary: '以本轮退出码和报告判定结果，明确关联候选提交。',
-    content: '浏览器验收必须关联本轮运行编号、候选提交和有效报告。',
-  },
-];
 const pageMeta = computed(
   () =>
     ({
@@ -92,6 +62,153 @@ const analytics = computed(() => [
   { label: '待审核', value: props.tasks.filter((task) => task.stateCategory === 'blocked').length },
   { label: '需处理', value: props.tasks.filter((task) => task.stateCategory === 'failed').length },
 ]);
+const distribution = computed(() => {
+  const total = props.tasks.length;
+  const categories = [
+    { label: '执行中', key: 'active', color: '#347abe' },
+    { label: '待审核', key: 'blocked', color: '#c78b22' },
+    { label: '失败待处理', key: 'failed', color: '#bd5a5a' },
+    { label: '已完成', key: 'completed', color: '#168875' },
+  ];
+  return categories.map((category) => {
+    const count = props.tasks.filter((task) => task.stateCategory === category.key).length;
+    const percentageValue = total ? (count / total) * 100 : 0;
+    return {
+      ...category,
+      count,
+      percentage: Math.round(percentageValue),
+    };
+  });
+});
+type SettingField = {
+  key: string;
+  label: string;
+  type?: 'text' | 'number' | 'boolean';
+  placeholder?: string;
+  help?: string;
+  secret?: boolean;
+};
+type SettingSection = { title: string; fields: SettingField[] };
+
+const settingSections: SettingSection[] = [
+  {
+    title: '仓库与项目',
+    fields: [
+      { key: 'GITHUB_API_URL', label: 'GitHub API 地址', placeholder: 'https://api.github.com' },
+      { key: 'GITHUB_TOKEN', label: 'GitHub Token', placeholder: '留空保持现有 Token', secret: true },
+      { key: 'GITHUB_REPOSITORY', label: 'GitHub 仓库', placeholder: 'owner/repository' },
+      { key: 'PROJECT_WORK_DIR', label: '项目工作目录', placeholder: '绝对路径' },
+      { key: 'GIT_ROOT_DIR', label: 'Git 根目录', placeholder: '默认使用项目工作目录' },
+      { key: 'PROJECT_SUBDIR', label: '项目子目录', placeholder: '可选' },
+      { key: 'BASE_BRANCH', label: '基准分支', placeholder: 'main' },
+    ],
+  },
+  {
+    title: 'AI 与执行策略',
+    fields: [
+      { key: 'CODEX_BINARY', label: 'Codex 程序路径', placeholder: '留空使用自动发现' },
+      { key: 'AI_MODEL', label: 'AI 模型', placeholder: '留空使用默认模型' },
+      { key: 'AI_MAX_CONCURRENCY', label: 'AI 最大并发', type: 'number' },
+      { key: 'MAX_CONCURRENT_ISSUES', label: 'Issue 最大并发', type: 'number' },
+      { key: 'MAX_RETRIES', label: '最大重试次数', type: 'number' },
+      { key: 'AI_PHASE_TIMEOUT_MS', label: 'AI 阶段超时（毫秒）', type: 'number' },
+    ],
+  },
+  {
+    title: '验收与预览',
+    fields: [
+      {
+        key: 'E2E_UI_ENABLED',
+        label: '浏览器验收',
+        type: 'boolean',
+        help: '关闭后流水线不会执行 Playwright 验收阶段。',
+      },
+      {
+        key: 'PLAYWRIGHT_CHANNEL',
+        label: 'Playwright 浏览器',
+        placeholder: 'msedge、chromium 或 chrome',
+        help: '默认使用本机 Microsoft Edge；修改后需要重启工作台。',
+      },
+      { key: 'UAT_CONFIG_FILE', label: '验收配置文件', placeholder: 'playwright.config.ts' },
+      { key: 'UAT_TIMEOUT_MS', label: '验收超时（毫秒）', type: 'number' },
+      { key: 'E2E_BASE_URL', label: '验收基础地址', placeholder: 'http://127.0.0.1:5173' },
+      { key: 'PREVIEW_ENABLED', label: '预览服务', type: 'boolean' },
+      { key: 'PREVIEW_BACKEND_COMMAND', label: '预览后端命令' },
+      { key: 'PREVIEW_FRONTEND_COMMAND', label: '预览前端命令' },
+      { key: 'PREVIEW_FRONTEND_DIR', label: '预览前端目录' },
+      { key: 'PREVIEW_STARTUP_TIMEOUT_MS', label: '预览启动超时（毫秒）', type: 'number' },
+      { key: 'PREVIEW_READINESS_INTERVAL_MS', label: '预览就绪间隔（毫秒）', type: 'number' },
+      { key: 'PREVIEW_BACKEND_READY_URL', label: '后端就绪地址', placeholder: '可选' },
+      { key: 'PREVIEW_FRONTEND_READY_URL', label: '前端就绪地址', placeholder: '可选' },
+    ],
+  },
+  {
+    title: '工作流功能',
+    fields: [
+      { key: 'REVIEW_ENABLED', label: '审核门', type: 'boolean' },
+      { key: 'KNOWLEDGE_ENABLED', label: '知识库', type: 'boolean' },
+      { key: 'DISTILL_ENABLED', label: '经验蒸馏', type: 'boolean' },
+      { key: 'VERIFY_FIX_LOOP_ENABLED', label: '验证修复循环', type: 'boolean' },
+      { key: 'VERIFY_FIX_MAX_ITERATIONS', label: '验证修复最大轮数', type: 'number' },
+    ],
+  },
+];
+const settingsValues = ref<Record<string, string>>({});
+const initialSettingsValues = ref<Record<string, string>>({});
+const settingsLoaded = ref(false);
+const settingsLoading = ref(false);
+const settingsSaving = ref(false);
+const settingsRestartRequired = ref(false);
+const settingsError = ref('');
+const settingsDirty = computed(() =>
+  settingSections.some((section) =>
+    section.fields.some(
+      (field) => settingsValues.value[field.key] !== initialSettingsValues.value[field.key],
+    ),
+  ),
+);
+
+function updateSetting(key: string, value: string | number | boolean) {
+  settingsValues.value[key] = String(value);
+}
+
+async function loadSettings() {
+  settingsLoading.value = true;
+  settingsError.value = '';
+  try {
+    const response = await fetchSettings();
+    settingsValues.value = { ...response.values };
+    initialSettingsValues.value = { ...response.values };
+    settingsRestartRequired.value = false;
+    settingsLoaded.value = true;
+  } catch (error) {
+    settingsLoaded.value = false;
+    settingsError.value = (error as Error).message;
+  } finally {
+    settingsLoading.value = false;
+  }
+}
+
+async function saveCurrentSettings() {
+  if (!settingsDirty.value || settingsSaving.value) return;
+  settingsSaving.value = true;
+  settingsError.value = '';
+  try {
+    const response = await saveSettings(settingsValues.value);
+    initialSettingsValues.value = { ...settingsValues.value };
+    settingsRestartRequired.value = response.restartRequired;
+    message.success('配置已保存，重启工作台后生效。');
+  } catch (error) {
+    settingsError.value = (error as Error).message;
+  } finally {
+    settingsSaving.value = false;
+  }
+}
+
+function resetSettings() {
+  settingsValues.value = { ...initialSettingsValues.value };
+  settingsError.value = '';
+}
 
 async function loadDrafts() {
   drafts.value = (await json<{ drafts: DemandDraft[] }>('/api/drafts')).drafts;
@@ -113,6 +230,7 @@ watch(
   () => props.page,
   (value) => {
     if (value === 'drafts') run(loadDrafts);
+    if (value === 'settings') void loadSettings();
   },
   { immediate: true },
 );
@@ -220,40 +338,7 @@ watch(
       </NCard>
     </div>
   </template>
-  <div
-    v-else-if="page === 'knowledge'"
-    class="prototype-document-grid"
-  >
-    <NCard
-      v-for="doc in docs"
-      :key="doc.title"
-      class="prototype-document-card"
-    >
-      <component
-        :is="doc.icon"
-        :size="25"
-        class="prototype-document-icon"
-      />
-      <h2>{{ doc.title }}</h2>
-      <p>{{ doc.summary }}</p>
-      <NTag
-        size="small"
-        :bordered="false"
-      >
-        {{ doc.tag }}
-      </NTag>
-      <template #action>
-        <NButton
-          text
-          type="primary"
-          @click="reading = doc"
-        >
-          阅读内容
-          <ArrowUpRight :size="15" />
-        </NButton>
-      </template>
-    </NCard>
-  </div>
+  <KnowledgeWorkspace v-else-if="page === 'knowledge'" />
   <template v-else-if="page === 'analytics'">
     <div class="prototype-analytics-metrics">
       <NCard
@@ -266,85 +351,120 @@ watch(
         />
       </NCard>
     </div>
-    <NCard title="任务分布">
-      <NTable
-        :bordered="false"
-        :single-line="false"
-      >
-        <thead>
-          <tr>
-            <th>状态</th>
-            <th>数量</th>
-            <th>占比</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="item in [
-              { label: '执行中', key: 'active' },
-              { label: '待审核', key: 'blocked' },
-              { label: '失败待处理', key: 'failed' },
-              { label: '已完成', key: 'completed' },
-            ]"
+    <NCard
+      title="任务分布"
+      class="prototype-distribution-card"
+    >
+      <div class="prototype-distribution-layout">
+        <TaskDistributionChart
+          :items="distribution"
+          :total="props.tasks.length"
+        />
+        <div
+          class="prototype-distribution-legend"
+          aria-label="任务状态标注"
+        >
+          <div
+            v-for="item in distribution"
             :key="item.key"
+            class="prototype-distribution-label"
           >
-            <td>{{ item.label }}</td>
-            <td>{{ props.tasks.filter((task) => task.stateCategory === item.key).length }}</td>
-            <td>
-              {{
-                props.tasks.length
-                  ? Math.round(
-                      (props.tasks.filter((task) => task.stateCategory === item.key).length /
-                        props.tasks.length) *
-                        100,
-                    )
-                  : 0
-              }}%
-            </td>
-          </tr>
-        </tbody>
-      </NTable>
+            <i
+              aria-hidden="true"
+              :style="{ backgroundColor: item.color }"
+            ></i>
+            <span>{{ item.label }}</span>
+          </div>
+        </div>
+      </div>
     </NCard>
   </template>
   <NCard
     v-else
-    title="显示与阅读"
+    title="运行配置"
     class="prototype-settings-card"
   >
-    <div class="prototype-settings-row">
-      <div>
-        <h3>
-          <Moon :size="17" />
-          深色主题
-        </h3>
-        <p>统一切换工作台和详情页的显示主题。</p>
+    <template #header-extra>
+      <div class="prototype-settings-actions">
+        <NButton
+          secondary
+          :disabled="!settingsDirty || settingsSaving || settingsLoading"
+          @click="resetSettings"
+        >
+          重置
+        </NButton>
+        <NButton
+          type="primary"
+          :loading="settingsSaving"
+          :disabled="!settingsDirty || settingsLoading"
+          @click="saveCurrentSettings"
+        >
+          保存配置
+        </NButton>
       </div>
-      <NSwitch
-        disabled
-        aria-label="深色主题"
-      />
-    </div>
-    <div class="prototype-settings-row">
-      <div>
-        <h3>
-          <Terminal :size="17" />
-          实时数据
-        </h3>
-        <p>数据来自当前 LangGraph Native 服务端。</p>
-      </div>
-      <NTag
-        type="success"
-        :bordered="false"
-      >
-        已连接
-      </NTag>
-    </div>
+    </template>
     <NAlert
-      type="info"
+      v-if="settingsError"
+      type="error"
       :show-icon="false"
+      class="prototype-settings-alert"
     >
-      工作台配置由服务端管理，页面只读展示当前运行状态。
+      {{ settingsError }}
     </NAlert>
+    <NAlert
+      v-if="settingsRestartRequired"
+      type="warning"
+      :show-icon="false"
+      class="prototype-settings-alert"
+    >
+      配置已持久化，重启工作台后生效；当前进程仍使用启动时的配置。
+    </NAlert>
+    <NEmpty
+      v-if="settingsLoading"
+      description="正在读取运行配置"
+    />
+    <div
+      v-else-if="settingsLoaded"
+      class="prototype-settings-form"
+    >
+      <section
+        v-for="section in settingSections"
+        :key="section.title"
+        class="prototype-settings-section"
+      >
+        <h3>{{ section.title }}</h3>
+        <div class="prototype-settings-fields">
+          <div
+            v-for="field in section.fields"
+            :key="field.key"
+            class="prototype-settings-field"
+          >
+            <label :for="`setting-${field.key}`">{{ field.label }}</label>
+            <NSwitch
+              v-if="field.type === 'boolean'"
+              :id="`setting-${field.key}`"
+              :value="settingsValues[field.key] === 'true'"
+              :aria-label="field.label"
+              @update:value="(value) => updateSetting(field.key, value)"
+            />
+            <NInput
+              v-else
+              :id="`setting-${field.key}`"
+              :value="settingsValues[field.key] ?? ''"
+              :type="field.secret ? 'password' : 'text'"
+              :placeholder="field.placeholder"
+              :aria-label="field.label"
+              @update:value="(value) => updateSetting(field.key, value)"
+            />
+            <small v-if="field.help">{{ field.help }}</small>
+          </div>
+        </div>
+      </section>
+    </div>
+    <NEmpty
+      v-else
+      description="暂时无法读取运行配置"
+    />
   </NCard>
 
   <NModal
@@ -375,20 +495,5 @@ watch(
         生成草稿
       </NButton>
     </div>
-  </NModal>
-  <NModal
-    v-if="reading"
-    :show="Boolean(reading)"
-    preset="card"
-    :title="reading.title"
-    class="prototype-draft-modal"
-    @update:show="
-      (value) => {
-        if (!value) reading = null;
-      }
-    "
-  >
-    <NTag size="small">{{ reading.tag }}</NTag>
-    <p class="prototype-document-reading">{{ reading.content }}</p>
   </NModal>
 </template>

@@ -62,7 +62,6 @@ watch(selectedTask, (task) => emit('task-selected', task), { immediate: true });
     <section class="execution-surface">
       <header class="execution-head">
         <div>
-          <div class="execution-eyebrow">BUILD / TASK GRAPH</div>
           <h3>构建任务图</h3>
         </div>
         <div class="execution-head-right">

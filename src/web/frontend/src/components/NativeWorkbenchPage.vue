@@ -1,26 +1,19 @@
 <script setup lang="ts">
-import { computed, h, onMounted, onUnmounted, ref } from 'vue';
-import {
-  NButton,
-  NCard,
-  NConfigProvider,
-  NDivider,
-  NDrawer,
-  NDrawerContent,
-  NMenu,
-  NProgress,
-  NTag,
-  NTimeline,
-  NTimelineItem,
-  NBadge,
-  NEmpty,
-  NMessageProvider,
-  NDialogProvider,
-  type MenuOption,
-} from 'naive-ui';
+import { computed, defineAsyncComponent, h, onMounted, onUnmounted, ref } from 'vue';
+import { NButton } from 'naive-ui/es/button';
+import { NCard } from 'naive-ui/es/card';
+import { NConfigProvider } from 'naive-ui/es/config-provider';
+import { NDialogProvider } from 'naive-ui/es/dialog';
+import { NDivider } from 'naive-ui/es/divider';
+import { NDrawer, NDrawerContent } from 'naive-ui/es/drawer';
+import { NEmpty } from 'naive-ui/es/empty';
+import { NMenu, type MenuOption } from 'naive-ui/es/menu';
+import { NMessageProvider } from 'naive-ui/es/message';
+import { NProgress } from 'naive-ui/es/progress';
+import { NTag } from 'naive-ui/es/tag';
+import { NTimeline, NTimelineItem } from 'naive-ui/es/timeline';
 import {
   Activity,
-  Bell,
   BookOpen,
   ChartNoAxesCombined,
   CheckCheck,
@@ -30,13 +23,10 @@ import {
   GitBranch,
   LayoutDashboard,
   Menu,
-  Moon,
   Plus,
   RefreshCw,
-  Search,
   Settings2,
   ShieldCheck,
-  Sparkles,
 } from '@lucide/vue';
 import type { SystemStatus } from '@/types';
 import { getIssueIid } from '@/types';
@@ -44,9 +34,9 @@ import { useTasks } from '@/composables/useTasks';
 import { useSSE } from '@/composables/useSSE';
 import { useIssueDetail } from '@/composables/useIssueDetail';
 import * as api from '@/api/client';
-import NativeTaskTable from './NativeTaskTable.vue';
-import NativeWorkspacePage from './NativeWorkspacePage.vue';
-import NativeIssueDetailPage from './NativeIssueDetailPage.vue';
+const NativeTaskTable = defineAsyncComponent(() => import('./NativeTaskTable.vue'));
+const NativeWorkspacePage = defineAsyncComponent(() => import('./NativeWorkspacePage.vue'));
+const NativeIssueDetailPage = defineAsyncComponent(() => import('./NativeIssueDetailPage.vue'));
 
 const systemStatus = ref<SystemStatus | null>(null);
 const route = ref(location.hash || '#/workbench');
@@ -94,7 +84,7 @@ const workspacePage = computed(() =>
 const running = computed(() => tasks.value.filter((task) => task.stateCategory === 'active'));
 const reviews = computed(() => tasks.value.filter((task) => task.stateCategory === 'blocked'));
 const completed = computed(() => tasks.value.filter((task) => task.stateCategory === 'completed'));
-const failures = computed(() => tasks.value.filter((task) => task.stateCategory === 'failed'));
+const aiConcurrencyLimit = computed(() => systemStatus.value?.config.aiMaxConcurrency ?? 4);
 const metrics = computed(() => [
   {
     title: '全部任务',
@@ -201,14 +191,6 @@ onUnmounted(() => window.removeEventListener('hashchange', onHashChange));
                 <small>AI ISSUE WORKSPACE</small>
               </span>
             </a>
-            <div class="prototype-repo-card">
-              <GitBranch :size="18" />
-              <div>
-                <strong>issue-auto-finish</strong>
-                <small>LangGraph Native</small>
-              </div>
-              <span class="prototype-repo-dot"></span>
-            </div>
             <div class="prototype-nav-label">工作空间</div>
             <NMenu
               :value="navPage"
@@ -217,14 +199,6 @@ onUnmounted(() => window.removeEventListener('hashchange', onHashChange));
               @update:value="selectNav"
             />
             <div class="prototype-sidebar-bottom">
-              <div class="prototype-side-tip">
-                <Sparkles :size="18" />
-                <p>
-                  每一次交付，
-                  <br />
-                  都为下一次积累经验。
-                </p>
-              </div>
               <div class="prototype-local-workspace">
                 <span class="prototype-user-avatar">L</span>
                 <div>
@@ -270,36 +244,10 @@ onUnmounted(() => window.removeEventListener('hashchange', onHashChange));
                 </span>
               </div>
               <div class="prototype-topbar-actions">
-                <NButton
-                  quaternary
-                  class="prototype-quick-search"
-                >
-                  <template #icon><Search :size="17" /></template>
-                  快速查找
-                </NButton>
                 <span class="prototype-local-pill">
                   <span></span>
                   本地数据
                 </span>
-                <NButton
-                  quaternary
-                  circle
-                  aria-label="切换主题"
-                >
-                  <template #icon><Moon :size="18" /></template>
-                </NButton>
-                <NBadge
-                  :value="reviews.length + failures.length"
-                  :show="reviews.length + failures.length > 0"
-                >
-                  <NButton
-                    quaternary
-                    circle
-                    aria-label="查看待处理事项"
-                  >
-                    <template #icon><Bell :size="18" /></template>
-                  </NButton>
-                </NBadge>
               </div>
             </header>
             <main
@@ -407,19 +355,19 @@ onUnmounted(() => window.removeEventListener('hashchange', onHashChange));
                         AI 并发额度
                         <strong>
                           {{ running.length }}
-                          <span>/ 4</span>
+                           <span>/ {{ aiConcurrencyLimit }}</span>
                         </strong>
                       </div>
                       <NProgress
                         type="line"
-                        :percentage="Math.min(100, (running.length / 4) * 100)"
+                         :percentage="Math.min(100, (running.length / aiConcurrencyLimit) * 100)"
                         :show-indicator="false"
                         :height="6"
                         color="#168875"
                         rail-color="#e6edef"
                       />
                       <p class="prototype-capacity-hint">
-                        {{ Math.max(0, 4 - running.length) }} 个额度可用
+                         {{ Math.max(0, aiConcurrencyLimit - running.length) }} 个额度可用
                       </p>
                       <dl class="prototype-detail-data">
                         <div>

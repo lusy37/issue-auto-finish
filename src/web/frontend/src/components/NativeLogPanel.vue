@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { NButton, NEmpty, NSelect, NSwitch } from 'naive-ui';
+import { NButton } from 'naive-ui/es/button';
+import { NEmpty } from 'naive-ui/es/empty';
+import { NSelect } from 'naive-ui/es/select';
+import { NSwitch } from 'naive-ui/es/switch';
 import { Check, Terminal } from '@lucide/vue';
 import type { AgentLogEntry, IssueLifecycle } from '@/types';
 import { usePipeline } from '@/composables/usePipeline';

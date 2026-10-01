@@ -49,6 +49,7 @@ export async function executeUat(options: {
   onTemporaryFile?: (file: string, present: boolean) => void;
   workDir: string;
   configFile: string;
+  browserChannel?: string;
   baseUrl: string;
   timeoutMs: number;
   onOutput?: (text: string) => void;
@@ -89,12 +90,35 @@ export async function executeUat(options: {
     const reportPath = path.join(outputDir, 'results.json');
     wrapper = path.join(path.dirname(config), '.iaf-uat-' + runId + '.config.ts');
     const configImport = './' + path.basename(config);
+    const browserChannel = options.browserChannel || process.env.PLAYWRIGHT_CHANNEL;
     options.onTemporaryFile?.(wrapper, true);
     fs.writeFileSync(
       wrapper,
       `import original from ${JSON.stringify(configImport)};
+
 const config = original ?? {};
-export default { ...config, use: {...config.use, browserName: 'chromium', screenshot: 'on'}, projects: config.projects?.map((p: any) => ({...p, use: {...config.use, ...p.use, browserName: 'chromium', screenshot: 'on'}})) };
+const browserChannel = ${JSON.stringify(browserChannel ?? null)};
+const forcedUse = {
+  ...config.use,
+  browserName: 'chromium',
+  screenshot: 'on',
+  ...(browserChannel ? { channel: browserChannel } : {}),
+};
+
+export default {
+  ...config,
+  use: forcedUse,
+  projects: config.projects?.map((project: any) => ({
+    ...project,
+    use: {
+      ...config.use,
+      ...project.use,
+      browserName: 'chromium',
+      screenshot: 'on',
+      ...(browserChannel ? { channel: browserChannel } : {}),
+    },
+  })),
+};
 `,
     );
     const command = await runProcess(
@@ -121,6 +145,7 @@ export default { ...config, use: {...config.use, browserName: 'chromium', screen
           ...process.env,
           CI: '1',
           UAT_BASE_URL: options.baseUrl,
+          PLAYWRIGHT_CHANNEL: browserChannel,
           PLAYWRIGHT_JSON_OUTPUT_FILE: reportPath,
           PLAYWRIGHT_HTML_OUTPUT_DIR: path.join(outputDir, 'report'),
           PLAYWRIGHT_HTML_OPEN: 'never',

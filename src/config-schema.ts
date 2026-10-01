@@ -1,4 +1,9 @@
-import { AI_DEFAULTS, PROJECT_DEFAULTS, PREVIEW_DEFAULTS } from './shared/runtime/defaults.js';
+import {
+  AI_DEFAULTS,
+  E2E_DEFAULTS,
+  PROJECT_DEFAULTS,
+  PREVIEW_DEFAULTS,
+} from './shared/runtime/defaults.js';
 /**
  * Zod-based configuration schema and transformation layer.
  *
@@ -139,6 +144,7 @@ export const envSchema = z.object({
   E2E_BACKEND_PORT_BASE: envPort(String(PREVIEW_DEFAULTS.backendPortBase)),
   E2E_FRONTEND_PORT_BASE: envPort(String(PREVIEW_DEFAULTS.frontendPortBase)),
 
+  PLAYWRIGHT_CHANNEL: z.string().min(1).optional().default(E2E_DEFAULTS.browserChannel),
   UAT_CONFIG_FILE: z.string().default('playwright.config.ts'),
   UAT_TIMEOUT_MS: envMs('300000'),
   // --- Preview ---
@@ -281,6 +287,7 @@ export function transformEnvToConfig(env: ParsedEnv, dirname: string) {
     },
     e2e: {
       enabled: env.E2E_UI_ENABLED,
+      browserChannel: env.PLAYWRIGHT_CHANNEL,
       configFile: env.UAT_CONFIG_FILE,
       timeoutMs: env.UAT_TIMEOUT_MS,
       baseUrl: env.E2E_BASE_URL,

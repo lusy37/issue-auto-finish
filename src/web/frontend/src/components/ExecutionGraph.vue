@@ -226,14 +226,22 @@ function resetView() {
   gap: 4px;
 }
 .execution-graph-actions button {
-  min-width: 44px;
-  min-height: 44px;
-  padding: 4px 7px;
+  min-width: 32px;
+  min-height: 32px;
+  height: 32px;
+  padding: 3px 6px;
   color: #243b44;
   background: #fff;
   border: 1px solid #9bafb5;
   border-radius: 6px;
   cursor: pointer;
+  font-size: 12px;
+}
+.execution-graph-actions button:first-child,
+.execution-graph-actions button:nth-child(2) {
+  width: 32px;
+  padding: 0;
+  font-size: 16px;
 }
 .execution-graph-actions button:focus-visible {
   outline: 2px solid #168875;

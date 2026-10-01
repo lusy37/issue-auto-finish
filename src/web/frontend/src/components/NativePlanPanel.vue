@@ -1,15 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import {
-  NAlert,
-  NButton,
-  NCheckbox,
-  NCollapse,
-  NCollapseItem,
-  NInput,
-  NModal,
-  NTag,
-} from 'naive-ui';
+import { NAlert } from 'naive-ui/es/alert';
+import { NButton } from 'naive-ui/es/button';
+import { NCheckbox } from 'naive-ui/es/checkbox';
+import { NCollapse, NCollapseItem } from 'naive-ui/es/collapse';
+import { NInput } from 'naive-ui/es/input';
+import { NModal } from 'naive-ui/es/modal';
+import { NTag } from 'naive-ui/es/tag';
 import { Check, FileCheck2, GitBranch, LockKeyhole, MessageSquare, ArrowRight } from '@lucide/vue';
 import type { IssueRecord } from '@/types';
 import { useIssueGraphs } from '@/composables/useIssueGraphs';

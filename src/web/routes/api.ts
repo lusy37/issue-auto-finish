@@ -984,6 +984,8 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
         driveIntervalMs: cfg.poll.driveIntervalMs,
         maxRetries: cfg.poll.maxRetries,
         maxConcurrent: cfg.poll.maxConcurrent,
+        aiMaxConcurrency: cfg.ai.maxConcurrency,
+        aiPhaseTimeoutMs: cfg.ai.phaseTimeoutMs,
         aiMode: cfg.ai.mode,
         aiModel: cfg.ai.model,
         pipelineMode: orch.getPipelineDef().mode,

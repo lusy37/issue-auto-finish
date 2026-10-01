@@ -224,6 +224,7 @@ export function createTestConfig(overrides?: TestConfigOverrides): Config {
     e2e: {
       timeoutMs: 300000,
       configFile: 'playwright.config.ts',
+      browserChannel: 'msedge',
       enabled: false,
       baseUrl: 'https://localhost:8890',
       backendPortBase: 14000,

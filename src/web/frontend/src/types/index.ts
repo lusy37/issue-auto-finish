@@ -70,13 +70,18 @@ export interface SystemStatus {
     discoveryIntervalMs: number;
     driveIntervalMs: number;
     maxRetries: number;
+    aiMaxConcurrency: number;
+    aiPhaseTimeoutMs: number;
     aiMode: string;
+    aiModel: string;
+    maxConcurrent: number;
     pipelineMode: PipelineMode;
     baseBranch: string;
     repository: string;
     githubBaseUrl: string;
     issueNoteSyncEnabled: boolean;
     e2eEnabled: boolean;
+    previewEnabled: boolean;
     knowledgeEnabled: boolean;
     distillEnabled: boolean;
     reviewEnabled: boolean;

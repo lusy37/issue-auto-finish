@@ -57,6 +57,21 @@ export async function fetchSystemStatus(): Promise<SystemStatus> {
   return request<SystemStatus>('/api/system/status');
 }
 
+export interface SettingsResponse {
+  values: Record<string, string>;
+  restartRequired: boolean;
+}
+
+export async function fetchSettings(): Promise<SettingsResponse> {
+  return request<SettingsResponse>('/api/settings');
+}
+
+export async function saveSettings(
+  values: Record<string, string>,
+): Promise<{ success: boolean; restartRequired: boolean }> {
+  return json('/api/settings', 'PUT', { values });
+}
+
 export async function startSkippedIssue(number: number): Promise<void> {
   await post(`/api/issues/${number}/start`);
 }

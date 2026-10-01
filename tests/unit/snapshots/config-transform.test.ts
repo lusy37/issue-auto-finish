@@ -7,5 +7,6 @@ describe('裁剪版配置',()=>{
  it('拒绝已删除的执行器',()=>{expect(()=>envSchema.parse({...required,AI_RUNNER_MODE:'deleted-runner'})).toThrow();});
  it.each(['true', 'false'])('浏览器验收支持显式配置 %s', value => { expect(envSchema.parse({...required, E2E_UI_ENABLED: value}).E2E_UI_ENABLED).toBe(value === 'true'); });
  it.each(['', 'TRUE', '0', 'invalid'])('拒绝含糊的浏览器验收配置 %s', value => { expect(() => envSchema.parse({...required, E2E_UI_ENABLED: value})).toThrow(); });
+ it('默认使用 Microsoft Edge，并支持覆盖 Playwright channel',()=>{expect(envSchema.parse(required).PLAYWRIGHT_CHANNEL).toBe('msedge');expect(envSchema.parse({...required,PLAYWRIGHT_CHANNEL:'chromium'}).PLAYWRIGHT_CHANNEL).toBe('chromium');});
  it('默认单任务并发，并保留中文及空格命令路径',()=>{const config=transformEnvToConfig(envSchema.parse({...required,CODEX_BINARY:'C:/中文 工具/codex.exe'}),path.resolve('fixture'));expect(config.poll.maxConcurrent).toBe(1);expect(config.ai.binary).toBe('C:/中文 工具/codex.exe');expect(config.project.gitRootDir).toBe(required.PROJECT_WORK_DIR);});
 });

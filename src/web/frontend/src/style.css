@@ -419,34 +419,6 @@ select:focus-visible {
   background: #168875;
   color: #fff;
 }
-.prototype-repo-card {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 30px 6px 25px;
-  padding: 12px 10px;
-  border: 1px solid #d6e3e7;
-  border-radius: 8px;
-  color: #536e79;
-}
-.prototype-repo-card strong {
-  display: block;
-  max-width: 130px;
-  overflow: hidden;
-  color: #294650;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.prototype-repo-card small {
-  display: block;
-  margin-top: 4px;
-  color: #78949e;
-  font-size: 9px;
-}
-.prototype-repo-dot {
-  margin-left: auto;
-}
 .prototype-nav-label {
   margin: 0 12px 9px;
   color: #849ca4;
@@ -477,19 +449,6 @@ select:focus-visible {
 }
 .prototype-sidebar-bottom {
   margin-top: auto;
-}
-.prototype-side-tip {
-  display: flex;
-  gap: 10px;
-  padding: 14px 12px;
-  color: #168875;
-  border-top: 1px solid #e5edef;
-}
-.prototype-side-tip p {
-  margin: 0;
-  color: #66808a;
-  font-size: 10px;
-  line-height: 1.7;
 }
 .prototype-local-workspace {
   display: flex;
@@ -565,10 +524,6 @@ select:focus-visible {
   border: 0;
   border-radius: 5px;
   background: #e8f5f1;
-}
-.prototype-quick-search {
-  color: #54717b !important;
-  font-size: 11px;
 }
 .prototype-mobile-menu {
   display: none;
@@ -963,9 +918,79 @@ select:focus-visible {
 .prototype-document-reading {
   margin-top: 22px;
   color: #718891;
+  font-family: inherit;
   font-size: 13px;
   line-height: 2;
-  white-space: pre-line;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.knowledge-workspace {
+  display: grid;
+  gap: 20px;
+}
+.knowledge-toolbar,
+.knowledge-toolbar-actions,
+.knowledge-card-actions,
+.knowledge-profile-meta,
+.knowledge-section-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.knowledge-toolbar,
+.knowledge-card-actions,
+.knowledge-section-title {
+  justify-content: space-between;
+}
+.knowledge-toolbar .prototype-draft-search {
+  flex: 1;
+  margin-bottom: 0;
+}
+.knowledge-toolbar-actions {
+  flex-wrap: wrap;
+}
+.knowledge-profile-card,
+.knowledge-workspace .prototype-document-card {
+  border: 1px solid #dfe8eb;
+  border-radius: 10px;
+}
+.knowledge-profile-card p {
+  margin: 0 0 14px;
+  color: #607781;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+.knowledge-profile-meta {
+  flex-wrap: wrap;
+  color: #607781;
+  font-size: 13px;
+}
+.knowledge-profile-card .knowledge-profile-rules {
+  margin: 14px 0 0;
+}
+.knowledge-section-title h2 {
+  margin: 0;
+  color: #29444e;
+  font-size: 18px;
+}
+.knowledge-section-title h2 span,
+.knowledge-section-title > span {
+  color: #718891;
+  font-size: 12px;
+  font-weight: 400;
+}
+.knowledge-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.knowledge-card-actions {
+  flex-wrap: wrap;
+}
+.knowledge-card-actions .n-button:first-child {
+  margin-right: auto;
 }
 .prototype-analytics-metrics {
   display: grid;
@@ -973,29 +998,104 @@ select:focus-visible {
   gap: 18px;
   margin-bottom: 22px;
 }
-.prototype-settings-card {
-  max-width: 850px;
+.prototype-distribution-card {
+  width: 100%;
 }
-.prototype-settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.prototype-distribution-layout {
+  display: grid;
+  justify-items: center;
   gap: 20px;
-  padding: 21px 0;
-  border-bottom: 1px solid #e4ecee;
+  padding: 8px 0 4px;
 }
-.prototype-settings-row h3 {
+.prototype-pie-chart {
+  position: relative;
+  width: 210px;
+  height: 210px;
+}
+.prototype-pie-chart canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+.prototype-pie-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  place-items: center;
+  pointer-events: none;
+}
+.prototype-pie-center strong {
+  color: #263f47;
+  font-size: 30px;
+  line-height: 1;
+}
+.prototype-pie-center span {
+  margin-top: 7px;
+  color: #7b9098;
+  font-size: 11px;
+}
+.prototype-distribution-legend {
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  color: #617a83;
+  font-size: 12px;
+}
+.prototype-distribution-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.prototype-distribution-label i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.prototype-settings-card {
+  max-width: 1120px;
+}
+.prototype-settings-actions {
+  display: flex;
   gap: 8px;
-  margin: 0;
+}
+.prototype-settings-alert {
+  margin-bottom: 18px;
+}
+.prototype-settings-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px 32px;
+}
+.prototype-settings-section {
+  min-width: 0;
+}
+.prototype-settings-section h3 {
+  margin: 0 0 10px;
   color: #29444e;
   font-size: 13px;
 }
-.prototype-settings-row p {
-  margin: 7px 0 0;
-  color: #7b9098;
+.prototype-settings-fields {
+  display: grid;
+  gap: 12px;
+}
+.prototype-settings-field {
+  display: grid;
+  gap: 6px;
+}
+.prototype-settings-field > label {
+  color: #6f8790;
   font-size: 11px;
+}
+.prototype-settings-field > small {
+  color: #8aa0a7;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.prototype-settings-field > .n-switch {
+  justify-self: start;
 }
 .prototype-detail-page {
   min-width: 0;
@@ -1859,6 +1959,9 @@ select:focus-visible {
   .prototype-document-grid {
     grid-template-columns: 1fr 1fr;
   }
+  .prototype-settings-form {
+    grid-template-columns: 1fr;
+  }
 }
 @media (max-width: 900px) {
   .prototype-sidebar {
@@ -1889,7 +1992,6 @@ select:focus-visible {
   .prototype-topbar-actions {
     gap: 4px;
   }
-  .prototype-quick-search,
   .prototype-local-pill {
     display: none;
   }
@@ -1926,6 +2028,21 @@ select:focus-visible {
   .prototype-document-grid,
   .prototype-analytics-metrics {
     grid-template-columns: 1fr;
+  }
+  .knowledge-toolbar,
+  .knowledge-section-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .knowledge-toolbar .prototype-draft-search {
+    width: 100%;
+    max-width: none;
+  }
+  .prototype-settings-actions {
+    width: 100%;
+  }
+  .prototype-settings-actions .n-button {
+    flex: 1;
   }
   .prototype-table-search-row {
     flex-wrap: wrap;

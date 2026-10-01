@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { NAlert, NButton, NCard, NEmpty, NProgress, NStep, NSteps, NTag } from 'naive-ui';
+import { NAlert } from 'naive-ui/es/alert';
+import { NButton } from 'naive-ui/es/button';
+import { NCard } from 'naive-ui/es/card';
+import { NEmpty } from 'naive-ui/es/empty';
+import { NProgress } from 'naive-ui/es/progress';
+import { NStep, NSteps } from 'naive-ui/es/steps';
+import { NTag } from 'naive-ui/es/tag';
 import {
   ArrowLeft,
   Check,

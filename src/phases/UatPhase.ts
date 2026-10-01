@@ -42,6 +42,7 @@ export class UatPhase {
       issueIid: number,
       workDir,
       configFile: this.config.e2e.configFile,
+      browserChannel: this.config.e2e.browserChannel,
       baseUrl: ctx.ports ? `http://127.0.0.1:${ctx.ports.frontendPort}` : this.config.e2e.baseUrl,
       timeoutMs: this.config.e2e.timeoutMs,
       onOutput: (text) =>

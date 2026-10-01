@@ -21,6 +21,7 @@ exports[`裁剪版配置 > 只有公开执行器及当前模块 1`] = `
   "e2e": {
     "backendPortBase": 4000,
     "baseUrl": "http://127.0.0.1:9000",
+    "browserChannel": "msedge",
     "configFile": "playwright.config.ts",
     "enabled": true,
     "frontendPortBase": 9000,

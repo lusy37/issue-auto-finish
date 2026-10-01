@@ -1,16 +1,12 @@
 <script setup lang="ts">
 import { computed, h, ref, watch } from 'vue';
-import {
-  NButton,
-  NDataTable,
-  NEmpty,
-  NInput,
-  NSelect,
-  NTab,
-  NTabs,
-  NTag,
-  type DataTableColumns,
-} from 'naive-ui';
+import { NButton } from 'naive-ui/es/button';
+import { NDataTable, type DataTableColumns } from 'naive-ui/es/data-table';
+import { NEmpty } from 'naive-ui/es/empty';
+import { NInput } from 'naive-ui/es/input';
+import { NSelect } from 'naive-ui/es/select';
+import { NTab, NTabs } from 'naive-ui/es/tabs';
+import { NTag } from 'naive-ui/es/tag';
 import { ArrowUpRight, ListFilter, Search, X } from '@lucide/vue';
 import type { ExecutableTask, PhaseStatus } from '@/types';
 import { getTaskFilterOptions } from '@/composables/useTasks';

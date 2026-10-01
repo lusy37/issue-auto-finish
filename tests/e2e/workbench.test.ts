@@ -109,6 +109,18 @@ it("真实 Native 工作台：五个入口、草稿生成、任务详情与 UAT 
     versionStore = new VersionStore(
       path.join(process.env.DATA_DIR!, "distill"),
     );
+  knowledgeStore.create({
+    type: 'memory',
+    title: '真实执行经验',
+    content: JSON.stringify({ id: 'experience-1', content: '来自知识存储的验收经验' }),
+    tags: ['验收'],
+  });
+  knowledgeStore.create({
+    type: 'agent-rule',
+    title: '交付前检查',
+    content: JSON.stringify({ id: 'rule-1', content: '交付前运行构建与测试' }),
+    tags: ['构建'],
+  });
   const distillScheduler = new DistillScheduler({
     diaryStore,
     knowledgeStore,
@@ -167,6 +179,11 @@ it("真实 Native 工作台：五个入口、草稿生成、任务详情与 UAT 
     await browserExpect(page.locator('.prototype-preview-strip')).toHaveCount(0);
     await browserExpect(page.getByRole('heading', { name: '任务工作台' })).toBeVisible();
     await browserExpect(page.locator('.prototype-sidebar .n-menu-item-content')).toHaveCount(5);
+    await browserExpect(page.locator('.prototype-repo-card')).toHaveCount(0);
+    await browserExpect(page.getByRole('button', { name: '快速查找' })).toHaveCount(0);
+    await browserExpect(page.getByRole('button', { name: '切换主题' })).toHaveCount(0);
+    await browserExpect(page.getByRole('button', { name: '查看待处理事项' })).toHaveCount(0);
+    await browserExpect(page.locator('.prototype-side-tip')).toHaveCount(0);
     await browserExpect(page.getByText('工作台验收任务', { exact: true })).toBeVisible();
     await browserExpect(page.getByText('等待审核', { exact: true }).first()).toBeVisible();
 
@@ -182,25 +199,65 @@ it("真实 Native 工作台：五个入口、草稿生成、任务详情与 UAT 
 
     await selectMenu('知识与经验');
     await browserExpect(page.getByRole('heading', { name: '知识与经验' })).toBeVisible();
-    await browserExpect(page.getByRole('heading', { name: '项目开发约定' })).toBeVisible();
+    await browserExpect(page.getByRole('heading', { name: '项目资料', exact: true })).toBeVisible();
+    await browserExpect(page.getByRole('heading', { name: '真实执行经验' })).toBeVisible();
+    await browserExpect(page.getByRole('heading', { name: '项目开发约定' })).toHaveCount(0);
     await page.getByRole('button', { name: '阅读内容', exact: true }).first().click();
-    await browserExpect(page.getByText('项目采用 Vue、TypeScript、Express 和本地 JSON。', { exact: false })).toBeVisible();
+    await browserExpect(page.locator('.prototype-document-reading')).toHaveText('来自知识存储的验收经验');
     await page.keyboard.press('Escape');
+    await page.getByRole('switch', { name: '启用规则 交付前检查' }).click();
+    await browserExpect(page.getByRole('switch', { name: '停用规则 交付前检查' })).toBeChecked();
+    await page.getByRole('button', { name: '新增知识' }).first().click();
+    await page.getByPlaceholder('例如：提交前必须运行的检查').fill('项目约定 A');
+    await page.getByPlaceholder('记录可复用的规则或经验').fill('新任务先检查依赖');
+    await page.getByRole('button', { name: '保存知识' }).click();
+    await browserExpect(page.getByRole('heading', { name: '项目约定 A' })).toBeVisible();
+    await page.getByLabel('搜索知识').fill('项目约定 A');
+    await browserExpect(page.locator('.knowledge-workspace .prototype-document-card')).toHaveCount(1);
+    await page.locator('.knowledge-workspace .prototype-document-card').getByRole('button', { name: '编辑' }).click();
+    await page.getByPlaceholder('记录可复用的规则或经验').fill('新任务先检查依赖并运行测试');
+    await page.getByRole('button', { name: '保存知识' }).click();
+    await page.reload();
+    await browserExpect(page.getByRole('heading', { name: '项目约定 A' })).toBeVisible();
+    await browserExpect(page.getByRole('switch', { name: '停用规则 交付前检查' })).toBeChecked();
+    await page.getByLabel('搜索知识').fill('项目约定 A');
+    await page.getByRole('button', { name: '阅读内容', exact: true }).click();
+    await browserExpect(page.locator('.prototype-document-reading')).toHaveText('新任务先检查依赖并运行测试');
+    await page.getByRole('button', { name: '删除', exact: true }).click();
+    await page.getByRole('button', { name: '确认删除', exact: true }).click();
+    await browserExpect(page.getByRole('heading', { name: '项目约定 A' })).toHaveCount(0);
+    await browserExpect(page.getByText('没有匹配的知识，试试其他关键词')).toBeVisible();
+    await page.getByRole('button', { name: '清除搜索' }).click();
+    await browserExpect(page.getByRole('heading', { name: '真实执行经验' })).toBeVisible();
+    await page.getByRole('button', { name: '编辑资料' }).click();
+    await page.getByRole('textbox', { name: '项目简介' }).fill('实际运行的项目资料');
+    await page.getByRole('button', { name: '保存资料' }).click();
+    await browserExpect(page.locator('.knowledge-profile-card p').first()).toHaveText('实际运行的项目资料');
+    await page.reload();
+    await browserExpect(page.locator('.knowledge-profile-card p').first()).toHaveText('实际运行的项目资料');
+    await page.screenshot({ path: path.join(dir, '知识与经验-真实数据.png'), fullPage: true });
 
     await selectMenu('任务统计');
     await browserExpect(page.getByRole('heading', { name: '任务统计' })).toBeVisible();
-    await browserExpect(page.getByText('总任务', { exact: true })).toBeVisible();
+    await browserExpect(page.locator('.prototype-analytics-metrics').getByText('总任务', { exact: true })).toBeVisible();
     await browserExpect(page.getByText('待审核', { exact: true }).first()).toBeVisible();
+    await browserExpect(page.getByRole('img', { name: /任务分布/ })).toBeVisible();
 
     await selectMenu('设置');
     await browserExpect(page.getByRole('heading', { name: '工作台设置' })).toBeVisible();
-    await browserExpect(page.getByText('数据来自当前 LangGraph Native 服务端。', { exact: true })).toBeVisible();
+    await browserExpect(page.getByText('运行配置', { exact: true })).toBeVisible();
+    await browserExpect(page.getByRole('button', { name: '保存配置', exact: true })).toBeVisible();
+    await browserExpect(page.getByLabel('GitHub 仓库', { exact: true })).toBeVisible();
+    await browserExpect(page.getByLabel('审核门', { exact: true })).toBeVisible();
+    await browserExpect(page.getByText('数据来自当前 LangGraph Native 服务端。', { exact: true })).toHaveCount(0);
+    await browserExpect(page.getByText('已加载', { exact: true })).toHaveCount(0);
 
     await selectMenu('任务工作台');
     await page.getByText('工作台验收任务', { exact: true }).click();
     await browserExpect(page).toHaveURL(/#\/issue\/1$/);
     await browserExpect(page.getByRole('heading', { name: '工作台验收任务' })).toBeVisible();
     await browserExpect(page.getByRole('heading', { name: '构建任务图' })).toBeVisible();
+    await browserExpect(page.locator('.task-graph-panel .execution-eyebrow')).toHaveCount(0);
     await browserExpect(page.locator('.graph-legend')).toBeVisible();
     await browserExpect(page.getByRole('heading', { name: '任务清单' })).toBeVisible();
     await browserExpect(page.locator('.prototype-workflow-panel .n-steps')).toBeVisible();

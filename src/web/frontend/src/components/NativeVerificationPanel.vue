@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { NButton, NEmpty, NTag } from 'naive-ui';
+import { NButton } from 'naive-ui/es/button';
+import { NEmpty } from 'naive-ui/es/empty';
+import { NTag } from 'naive-ui/es/tag';
 import { Check, ExternalLink, RefreshCw, ShieldCheck, X } from '@lucide/vue';
 import * as api from '@/api/client';
 import type { UatResult as UatRun } from '../../../../shared/workbench.js';

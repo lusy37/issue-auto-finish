@@ -16,3 +16,6 @@ export const PREVIEW_DEFAULTS = {
   startupTimeoutMs: 60_000,
   readinessIntervalMs: 200,
 } as const;
+export const E2E_DEFAULTS = {
+  browserChannel: 'msedge',
+} as const;

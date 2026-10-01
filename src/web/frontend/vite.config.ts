@@ -33,6 +33,22 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.replaceAll('\\', '/');
+          if (normalizedId.includes('/node_modules/@vue-flow/')) return 'vue-flow';
+          if (
+            normalizedId.includes('/node_modules/chart.js/') ||
+            normalizedId.includes('/node_modules/chartjs-plugin-datalabels/') ||
+            normalizedId.includes('/node_modules/vue-chartjs/')
+          )
+            return 'charts';
+          if (normalizedId.includes('/node_modules/vue/')) return 'vue';
+          return undefined;
+        },
+      },
+    },
   },
   server: {
     port: 5173,

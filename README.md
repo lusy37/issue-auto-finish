@@ -8,11 +8,10 @@
 
 ## 快速演示
 
-需要 Node.js ≥22.12 和 Git；浏览器验收需要安装 Playwright Chromium，使用 Edge 时可设置 `IAF_TEST_BROWSER_CHANNEL=msedge`。依赖版本由 `package-lock.json` 锁定。以下命令在**仓库根目录**执行：
+需要 Node.js ≥22.12 和 Git；浏览器验收默认使用本机 Microsoft Edge，不需要额外下载 Chromium。也可以通过 `PLAYWRIGHT_CHANNEL` 改用 `chromium` 或 `chrome`。依赖版本由 `package-lock.json` 锁定。以下命令在**仓库根目录**执行：
 
 ~~~powershell
 npm ci
-npm run e2e:install
 npm run build
 npm run web:build
 npm run demo
@@ -20,10 +19,13 @@ npm run demo
 
 打开 http://127.0.0.1:3000，在任务工作台手动启动演示 Issue，并在详情中审核计划。此演示使用模拟 GitHub 与 AI，真实执行本地 Git、持久化和浏览器验收；运行数据写入已忽略的 `.iaf-mini/demo-langgraph-v6`。端口冲突时，在启动前设置 `IAF_DEMO_PORT` 和 `IAF_DEMO_PLATFORM_PORT`。
 
-Playwright 的 TypeScript 包只提供测试运行器，Chromium 浏览器是单独下载的运行时，不应放入 `bin/`。默认的 `npm run e2e:install` 使用 Playwright 用户缓存；如果希望浏览器随本项目目录管理，可在 PowerShell 中执行：
+Playwright 的 TypeScript 包只提供测试运行器，浏览器运行时不应放入 `bin/`。工作台默认通过
+`PLAYWRIGHT_CHANNEL=msedge` 使用已安装的 Microsoft Edge。如果本机没有 Edge，或需要固定使用
+Playwright Chromium，可在 PowerShell 中执行：
 
 ~~~powershell
 $env:PLAYWRIGHT_BROWSERS_PATH = "$PWD/.playwright-browsers"
+$env:PLAYWRIGHT_CHANNEL = 'chromium'
 npx playwright install chromium
 npm run test:e2e
 ~~~
@@ -73,12 +75,10 @@ Codex 使用官方 SDK 与内置原生程序；CODEX_BINARY 留空即可，模�
    ~~~
 
    这不是 TypeScript 包内的代码，也不应放到 `bin/`；它是浏览器运行时。
-   `.iaf-mini/` 是工作台的忽略目录，不会把浏览器文件混入业务仓库。启动工作台的
-   PowerShell 会话也必须保留同一个 `PLAYWRIGHT_BROWSERS_PATH`，并设置
-   `$env:PLAYWRIGHT_CHANNEL = 'chromium'`：沙箱的 Playwright 配置默认选择的是
-   已安装的系统 Chrome，并不会自动切换到下载的 Chromium。
-   如果已经安装系统 Chrome，可不下载，直接保持默认 `chrome`；若使用本机 Edge，
-   则设置 `$env:PLAYWRIGHT_CHANNEL = 'msedge'`，也无需下载 Chromium。
+   `.iaf-mini/` 是工作台的忽略目录，不会把浏览器文件混入业务仓库。工作台默认使用
+   已安装的 Microsoft Edge，因此使用 Edge 时不需要执行上面的浏览器下载命令。
+   如果改用 Chromium，需在启动工作台的同一个 PowerShell 会话中保留
+   `PLAYWRIGHT_BROWSERS_PATH`，并设置 `$env:PLAYWRIGHT_CHANNEL = 'chromium'`。
 
 2. 在本项目根目录运行 `npm run init`，编辑 `.iaf-mini/github/.env`：
 
@@ -89,6 +89,7 @@ Codex 使用官方 SDK 与内置原生程序；CODEX_BINARY 留空即可，模�
    AI_RUNNER_MODE=codex
    CODEX_BINARY=
    E2E_UI_ENABLED=true
+   PLAYWRIGHT_CHANNEL=msedge
    REVIEW_ENABLED=true
    PREVIEW_ENABLED=true
    PREVIEW_BACKEND_COMMAND=npm run dev:backend
@@ -141,6 +142,8 @@ Web 工作台固定开启，无关闭开关。设置页提供以下选项，保�
 
 知识引用与蒸馏互相独立。旧 `WEB_ENABLED=true` 会提示清理；`false` 会明确报错，请删除该配置。演示模式重启会保留上述流程设置，平台、仓库和 AI 仍固定使用本地演示配置。
 
+“知识与经验”页面读取当前项目资料与真实知识条目；可搜索、阅读、增删改自定义知识，启停未退役的 Agent 规则。项目资料编辑会保留未展示的知识字段；经验记忆与规则由执行和蒸馏流程维护，页面只读。没有条目时展示空状态，不再展示示例卡片。
+
 设置 `KNOWLEDGE_PATH` 时，启动、项目资料页面及 AI 使用同一文件；只编辑表单字段不会清空其他资料。显式文件缺失或损坏会报错，默认位置首次缺失则允许创建。知识、补充资料和配置保存使用原子文件替换；正文与索引仍是两个文件，不承诺跨文件一起回滚。实现与验证记录见 [修复计划](docs/config-knowledge-storage-repair-plan.md)。
 
 设置页可开关浏览器验收，或配置 `E2E_UI_ENABLED=false`。保存后重启，新任务和完整重做采用新设置；暂停继续、普通重试及已有审核中的任务保留本轮原要求。预览服务独立配置，详见 [E2E 开关说明](docs/e2e-toggle.md)。
@@ -160,10 +163,15 @@ npm run test:windows
 npm run test:codex
 ~~~
 
-浏览器检查默认使用已安装的 Chromium，也支持 `IAF_TEST_BROWSER_CHANNEL=chrome` 或 `msedge`。CI 配置位于 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。`npm run web:build` 如提示单个 JS Bundle 超过 500 KB，这是包体积警告，不代表构建失败；首屏性能优化应优先按页面拆分代码。
+浏览器检查默认使用已安装的 Microsoft Edge；真实 UAT 可通过 `PLAYWRIGHT_CHANNEL=chromium`
+或 `PLAYWRIGHT_CHANNEL=chrome` 切换。根项目的独立 E2E 测试仍使用
+`IAF_TEST_BROWSER_CHANNEL`，避免在 Linux CI 中强制要求安装 Edge。CI 配置位于
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml)。`npm run web:build` 如提示单个 JS Bundle
+超过 500 KB，这是包体积警告，不代表构建失败；首屏性能优化应优先按页面拆分代码。
 
 `mini-workflow` 集成测试也会真正启动浏览器：本机未安装 Playwright Chromium 时先运行
-`npm run e2e:install`，或设置 `IAF_TEST_BROWSER_CHANNEL=msedge`。
+`npm run e2e:install`，或设置 `IAF_TEST_BROWSER_CHANNEL=msedge`。这条环境变量只影响根项目
+测试，不会覆盖真实 sandbox UAT 的 `PLAYWRIGHT_CHANNEL`。
 CI 将 Windows `.cmd` 进程树与预览测试串行运行；失败时测试会打印退出码和进程日志，
 并上传预览日志供定位。完整 `npm test` 仍包含这两组测试。
 
