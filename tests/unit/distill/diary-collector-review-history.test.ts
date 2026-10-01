@@ -21,7 +21,9 @@ function makeMockTracker(phaseProgress?: Record<string, PhaseProgress>): IssueTr
       branchName: 'feat/issue-42',
       pipelineMode: 'plan-mode',
       demandSpec: { title: 'Test Issue' },
-      phaseProgress,
+      phaseProgress: phaseProgress ?? {
+        review: { status: 'completed', completedAt: '2025-01-01T00:20:00.000Z' },
+      },
       createdAt: '2025-01-01T00:00:00.000Z',
       updatedAt: '2025-01-01T00:30:00.000Z',
     }),

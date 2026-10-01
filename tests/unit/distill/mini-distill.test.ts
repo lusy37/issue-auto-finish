@@ -40,6 +40,7 @@ it("非法蒸馏不消费日记；手动重试、规则启用、版本及执行�
       finishedAt: now,
     },
     humanInterventions: [],
+    artifactSummary: "测试摘要",
     distilled: false,
     createdAt: now,
   });
@@ -181,6 +182,67 @@ it("非法蒸馏不消费日记；手动重试、规则启用、版本及执行�
         .getStatus()
         .runs.map((r) => r.status),
     ).toEqual(["completed", "failed"]);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it("AI 调用失败时保留 runner 的错误详情", async () => {
+  const root = path.resolve(".iaf-mini/distill-tests");
+  fs.mkdirSync(root, { recursive: true });
+  const dir = fs.mkdtempSync(path.join(root, "失败详情 "));
+  vi.stubEnv("DATA_DIR", dir);
+  const diaryStore = new DiaryStore(path.join(dir, "distill"));
+  const knowledgeStore = new KnowledgeStore(path.join(dir, "knowledge"));
+  const versionStore = new VersionStore(path.join(dir, "distill"));
+  const now = new Date().toISOString();
+  diaryStore.create({
+    id: "failed-diary",
+    issueIid: 1,
+    issueTitle: "失败详情测试",
+    branchName: "feat/issue-1",
+    pipelineMode: "plan-mode",
+    outcome: "failed",
+    timing: { totalDurationMs: 100, phaseTimings: [], startedAt: now, finishedAt: now },
+    humanInterventions: [],
+    failure: { failedAtPhase: "build", error: "构建失败", attempts: 1 },
+    distilled: false,
+    createdAt: now,
+  });
+  const runner: AIRunner = {
+    killAll() {},
+    killByWorkDir() {
+      return 0;
+    },
+    async run() {
+      return {
+        success: false,
+        output: "",
+        errorMessage: "SDK worker 未返回完整结果",
+        exitCode: null,
+      };
+    },
+  };
+  const distiller = new MemoryDistiller({
+    aiRunner: runner,
+    diaryStore,
+    knowledgeStore,
+    versionStore,
+    workDir: dir,
+    aiPolicy: {
+      timeoutMs: 1000,
+      idleTimeoutMs: 1000,
+      timeoutGraceMs: 1000,
+      timeoutExtensionMs: 1000,
+      timeoutMaxExtensions: 0,
+      model: "test-model",
+    },
+    minDiariesForDistill: 1,
+  });
+  try {
+    await expect(distiller.distill({ force: true })).rejects.toThrow(
+      "Memory distillation AI call failed: SDK worker 未返回完整结果",
+    );
   } finally {
     vi.unstubAllEnvs();
   }

@@ -121,6 +121,24 @@ it("真实 Native 工作台：五个入口、草稿生成、任务详情与 UAT 
     content: JSON.stringify({ id: 'rule-1', content: '交付前运行构建与测试' }),
     tags: ['构建'],
   });
+  diaryStore.create({
+    id: 'diary-1',
+    issueIid: 1,
+    issueTitle: '工作台验收任务',
+    branchName: 'feat/issue-1',
+    pipelineMode: 'plan-mode',
+    outcome: 'completed',
+    timing: {
+      totalDurationMs: 1200,
+      phaseTimings: [],
+      startedAt: new Date(Date.now() - 1200).toISOString(),
+      finishedAt: new Date().toISOString(),
+    },
+    humanInterventions: [],
+    artifactSummary: '自动采集的经验记录',
+    distilled: false,
+    createdAt: new Date().toISOString(),
+  });
   const distillScheduler = new DistillScheduler({
     diaryStore,
     knowledgeStore,
@@ -199,14 +217,24 @@ it("真实 Native 工作台：五个入口、草稿生成、任务详情与 UAT 
 
     await selectMenu('知识与经验');
     await browserExpect(page.getByRole('heading', { name: '知识与经验' })).toBeVisible();
+    await browserExpect(page.getByRole('button', { name: '立即执行蒸馏', exact: true })).toBeVisible();
+    await browserExpect(page.getByRole('tab', { name: /项目资料/ })).toHaveAttribute('aria-selected', 'true');
     await browserExpect(page.getByRole('heading', { name: '项目资料', exact: true })).toBeVisible();
+    await page.getByRole('tab', { name: /经验日志/ }).click();
+    await browserExpect(page.getByRole('heading', { name: /经验日志/ })).toBeVisible();
+    await browserExpect(page.getByText('自动采集的经验记录', { exact: true })).toBeVisible();
+    await page.getByRole('tab', { name: /Memory 记忆/ }).click();
+    await browserExpect(page.getByRole('heading', { name: /Memory 记忆/ })).toBeVisible();
     await browserExpect(page.getByRole('heading', { name: '真实执行经验' })).toBeVisible();
     await browserExpect(page.getByRole('heading', { name: '项目开发约定' })).toHaveCount(0);
     await page.getByRole('button', { name: '阅读内容', exact: true }).first().click();
     await browserExpect(page.locator('.prototype-document-reading')).toHaveText('来自知识存储的验收经验');
     await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: /Agent Rule 规则/ }).click();
+    await browserExpect(page.getByRole('heading', { name: /Agent Rule 规则/ })).toBeVisible();
     await page.getByRole('switch', { name: '启用规则 交付前检查' }).click();
     await browserExpect(page.getByRole('switch', { name: '停用规则 交付前检查' })).toBeChecked();
+    await page.getByRole('tab', { name: /项目资料/ }).click();
     await page.getByRole('button', { name: '新增知识' }).first().click();
     await page.getByPlaceholder('例如：提交前必须运行的检查').fill('项目约定 A');
     await page.getByPlaceholder('记录可复用的规则或经验').fill('新任务先检查依赖');
@@ -219,16 +247,18 @@ it("真实 Native 工作台：五个入口、草稿生成、任务详情与 UAT 
     await page.getByRole('button', { name: '保存知识' }).click();
     await page.reload();
     await browserExpect(page.getByRole('heading', { name: '项目约定 A' })).toBeVisible();
+    await page.getByRole('tab', { name: /Agent Rule 规则/ }).click();
     await browserExpect(page.getByRole('switch', { name: '停用规则 交付前检查' })).toBeChecked();
+    await page.getByRole('tab', { name: /项目资料/ }).click();
     await page.getByLabel('搜索知识').fill('项目约定 A');
     await page.getByRole('button', { name: '阅读内容', exact: true }).click();
     await browserExpect(page.locator('.prototype-document-reading')).toHaveText('新任务先检查依赖并运行测试');
     await page.getByRole('button', { name: '删除', exact: true }).click();
     await page.getByRole('button', { name: '确认删除', exact: true }).click();
     await browserExpect(page.getByRole('heading', { name: '项目约定 A' })).toHaveCount(0);
-    await browserExpect(page.getByText('没有匹配的知识，试试其他关键词')).toBeVisible();
-    await page.getByRole('button', { name: '清除搜索' }).click();
-    await browserExpect(page.getByRole('heading', { name: '真实执行经验' })).toBeVisible();
+    await browserExpect(page.getByText('没有匹配的知识或经验记录', { exact: true }).first()).toBeVisible();
+    await page.getByRole('button', { name: '清除搜索' }).first().click();
+    await browserExpect(page.getByRole('heading', { name: '项目资料', exact: true })).toBeVisible();
     await page.getByRole('button', { name: '编辑资料' }).click();
     await page.getByRole('textbox', { name: '项目简介' }).fill('实际运行的项目资料');
     await page.getByRole('button', { name: '保存资料' }).click();

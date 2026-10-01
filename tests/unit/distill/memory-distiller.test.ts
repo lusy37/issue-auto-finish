@@ -24,6 +24,7 @@ function makeDiary(id: string, outcome: 'completed' | 'failed' = 'completed'): D
       finishedAt: '2025-01-01T00:01:00.000Z',
     },
     humanInterventions: [],
+    artifactSummary: '测试摘要',
     distilled: false,
     createdAt: '2025-01-01T00:01:00.000Z',
   };

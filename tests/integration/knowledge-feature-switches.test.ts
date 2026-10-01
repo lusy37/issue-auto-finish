@@ -102,7 +102,7 @@ it.each([
   diaryStore.create({
     id: 'd1', issueIid: 1, issueTitle: '测试', branchName: 'feat/issue-1', pipelineMode: 'plan-mode', outcome: 'completed',
     timing: { totalDurationMs: 100, phaseTimings: [], startedAt: now, finishedAt: now },
-    humanInterventions: [], distilled: false, createdAt: now,
+    humanInterventions: [], artifactSummary: '测试摘要', distilled: false, createdAt: now,
   });
   const distillerDeps = { aiRunner: runner, diaryStore, knowledgeStore, versionStore, workDir: dir, aiPolicy: { timeoutMs: 1000, idleTimeoutMs: 4567, timeoutGraceMs: 123, timeoutExtensionMs: 789, timeoutMaxExtensions: 2, model: 'test-model' } };
   const scheduler = new DistillScheduler({

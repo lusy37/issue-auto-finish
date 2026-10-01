@@ -87,8 +87,15 @@ export class MemoryDistiller {
     });
 
     if (!result.success) {
-      logger.error('AI distillation failed', { output: result.output.slice(0, 500) });
-      throw new Error(`Memory distillation AI call failed: ${result.output.slice(0, 200)}`);
+      const detail = (result.errorMessage || result.output || '').trim();
+      logger.error('AI distillation failed', {
+        error: detail || 'AI runner 未返回错误详情',
+        exitCode: result.exitCode,
+        timeoutType: result.timeoutType,
+      });
+      throw new Error(
+        `Memory distillation AI call failed: ${detail || 'AI runner 未返回错误详情'}`,
+      );
     }
 
     // 解析 AI 输出

@@ -63,6 +63,16 @@ export interface DiaryEntry {
   createdAt: string;
 }
 
+/** 判断日记是否包含可用于展示或蒸馏的有效经验信息。 */
+export function hasMeaningfulDiaryContent(entry: DiaryEntry): boolean {
+  return Boolean(
+    entry.artifactSummary?.trim() ||
+      entry.failure?.error.trim() ||
+      entry.prUrl?.trim() ||
+      entry.humanInterventions.some((item) => item.detail.trim()),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Layer 2: Memory (记忆) — 蒸馏后的共性模式
 // ---------------------------------------------------------------------------

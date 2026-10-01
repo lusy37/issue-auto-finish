@@ -4,7 +4,7 @@
  * 继承 BaseTracker<DiaryEntry>，JSON 文件持久化到传入数据目录下的 diaries.json。
  */
 import { BaseTracker } from '../tracker/BaseTracker.js';
-import type { DiaryEntry } from './types.js';
+import { hasMeaningfulDiaryContent, type DiaryEntry } from './types.js';
 
 export class DiaryStore extends BaseTracker<DiaryEntry> {
   constructor(dataDir: string) {
@@ -27,9 +27,14 @@ export class DiaryStore extends BaseTracker<DiaryEntry> {
     return this.getAllRecords();
   }
 
+  /** 获取包含有效经验信息的日记，历史空记录不会出现在业务页面。 */
+  getDisplayable(): DiaryEntry[] {
+    return this.getAllRecords().filter(hasMeaningfulDiaryContent);
+  }
+
   /** 获取未蒸馏的日记列表 */
   getUndistilled(): DiaryEntry[] {
-    return this.getAllRecords().filter((d) => !d.distilled);
+    return this.getDisplayable().filter((d) => !d.distilled);
   }
 
   /** 按 Issue IID 获取日记 */
@@ -58,6 +63,11 @@ export class DiaryStore extends BaseTracker<DiaryEntry> {
   /** 获取日记总数 */
   count(): number {
     return this.getAllRecords().length;
+  }
+
+  /** 获取有效日记数量。 */
+  displayableCount(): number {
+    return this.getDisplayable().length;
   }
 
   /** 获取未蒸馏日记数 */

@@ -50,6 +50,24 @@ describe('DiaryCollector', () => {
     expect(diaryStore.create).toHaveBeenCalledTimes(1);
   });
 
+  it('skips a completed issue without meaningful diary content', async () => {
+    (tracker.get as ReturnType<typeof vi.fn>).mockReturnValue({
+      lifecycle: { kind: 'completed' },
+      run: newIssueRun(),
+      phaseHistory: [],
+      branchName: 'feat/issue-43',
+      pipelineMode: 'classic',
+      demandSpec: { title: 'Empty Issue' },
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:10:00.000Z',
+    });
+
+    const diary = await collector.collectDiary(43, 'completed');
+
+    expect(diary).toBeNull();
+    expect(diaryStore.create).not.toHaveBeenCalled();
+  });
+
   it('collects diary for failed issue', async () => {
     (tracker.get as ReturnType<typeof vi.fn>).mockReturnValue({
       lifecycle: { kind: 'failed', phase: 'build', retry: 'manual', error: { message: 'Build failed', retryable: 'hard-no-auto' } },

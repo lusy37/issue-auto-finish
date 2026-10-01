@@ -13,7 +13,12 @@ import type { IssueTracker } from '../tracker/IssueTracker.js';
 import type { PlanPersistence, ReviewRound } from '../persistence/PlanPersistence.js';
 import { retryAttempts, type IssueRecord, type PhaseProgress } from '../tracker/IssueRecord.js';
 import type { DiaryStore } from './DiaryStore.js';
-import type { DiaryEntry, DiaryPhaseTiming, DiaryHumanIntervention } from './types.js';
+import {
+  hasMeaningfulDiaryContent,
+  type DiaryEntry,
+  type DiaryPhaseTiming,
+  type DiaryHumanIntervention,
+} from './types.js';
 
 /** review feedback 摘要进 diary 时的最大长度，避免单条 prompt 体积爆炸 */
 const REVIEW_FEEDBACK_SUMMARY_MAX = 200;
@@ -150,6 +155,11 @@ export class DiaryCollector {
         distilled: false,
         createdAt: new Date().toISOString(),
       };
+
+      if (!hasMeaningfulDiaryContent(diary)) {
+        logger.info('Skipped empty diary', { issueIid, outcome });
+        return null;
+      }
 
       this.diaryStore.create(diary);
       eventBus.emitTyped('distill:diary:created', { issueIid, diaryId: diary.id, outcome });

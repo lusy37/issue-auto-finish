@@ -84,7 +84,7 @@ export class DistillScheduler {
       enabled: this.deps.enabled !== false,
       running: this.running,
       runs: this.runs,
-      diaryCount: this.deps.diaryStore.count(),
+      diaryCount: this.deps.diaryStore.displayableCount(),
       undistilledDiaryCount: this.deps.diaryStore.undistilledCount(),
       memoryCount: this.deps.knowledgeStore.list('memory').length,
       ruleCount: this.deps.knowledgeStore.list('agent-rule').length,

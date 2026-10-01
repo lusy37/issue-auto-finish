@@ -18,8 +18,8 @@ export function createDistillRouter(deps: {
   );
   router.get('/api/distill/diaries', (_req, res) =>
     res.json({
-      diaries: deps.diaryStore.getAll(),
-      total: deps.diaryStore.count(),
+      diaries: deps.diaryStore.getDisplayable(),
+      total: deps.diaryStore.displayableCount(),
     }),
   );
   router.post('/api/distill/run', async (_req, res, next) => {

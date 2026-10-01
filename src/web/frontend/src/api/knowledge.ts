@@ -23,6 +23,35 @@ export interface ProjectProfile {
   rules: string;
 }
 
+export interface DistillStatus {
+  enabled: boolean;
+  running: boolean;
+  diaryCount: number;
+  undistilledDiaryCount: number;
+  memoryCount: number;
+  ruleCount: number;
+  runs: Array<{
+    id: string;
+    startedAt: string;
+    finishedAt?: string;
+    status: 'running' | 'completed' | 'failed';
+    error?: string;
+  }>;
+}
+
+export interface DiaryEntry {
+  id: string;
+  issueIid: number;
+  issueTitle: string;
+  outcome: 'completed' | 'failed';
+  prUrl?: string;
+  artifactSummary?: string;
+  humanInterventions: Array<{ type: string; detail: string; timestamp: string }>;
+  distilled: boolean;
+  createdAt: string;
+  failure?: { failedAtPhase: string; error: string; attempts: number };
+}
+
 export async function fetchKnowledge(): Promise<KnowledgeEntry[]> {
   const result = await json<{ entries: KnowledgeEntry[] }>('/api/knowledge');
   return result.entries;
@@ -55,4 +84,18 @@ export function deleteKnowledge(id: string): Promise<{ success: boolean }> {
 
 export function setRuleEnabled(id: string, enabled: boolean): Promise<KnowledgeEntry> {
   return json(`/api/knowledge/${encodeURIComponent(id)}/enabled`, 'PUT', { enabled });
+}
+
+export async function fetchDistillStatus(): Promise<DistillStatus> {
+  const result = await json<{ status: DistillStatus }>('/api/distill/status');
+  return result.status;
+}
+
+export async function fetchDiaries(): Promise<DiaryEntry[]> {
+  const result = await json<{ diaries: DiaryEntry[] }>('/api/distill/diaries');
+  return result.diaries;
+}
+
+export function runDistill(): Promise<{ memory: unknown; rule: unknown }> {
+  return json('/api/distill/run', 'POST');
 }
