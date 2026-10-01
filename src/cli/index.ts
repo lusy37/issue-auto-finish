@@ -25,6 +25,7 @@ function createInitialConfig(projectWorkDir: string): string {
       'AI_RUNNER_MODE=codex',
       'CODEX_BINARY=',
       'AI_MODEL=',
+      'CODEX_WINDOWS_SANDBOX=elevated',
       `AI_PHASE_TIMEOUT_MS=${AI_DEFAULTS.phaseTimeoutMs}`,
       'AI_IDLE_TIMEOUT_MS=1200000',
       'PHASE_TIMEOUT_GRACE_MS=60000',

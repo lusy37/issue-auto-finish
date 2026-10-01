@@ -1,13 +1,52 @@
 import { AI_DEFAULTS } from '../shared/runtime/defaults.js';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import { parseCodexSessionId } from './SessionId.js';
+import { resolveWindowsSandboxMode, type WindowsSandboxMode } from './CodexRunner.js';
 import path from 'node:path';
 import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnProcess } from '../utils/process.js';
+import { ensureDir, resolveDataDir } from '../paths.js';
 import type { AIRunner, RunOptions, RunResult, StreamEvent } from './AIRunner.js';
 import { ConcurrencyLimiter } from './ConcurrencyLimiter.js';
 
 let globalLimiter = new ConcurrencyLimiter(AI_DEFAULTS.maxConcurrency);
+const moduleRequire = createRequire(import.meta.url);
+
+function canWriteDirectory(directory: string): boolean {
+  const probe = path.join(directory, `.iaf-codex-home-${process.pid}-${Date.now()}`);
+  try {
+    fs.writeFileSync(probe, '');
+    fs.unlinkSync(probe);
+    return true;
+  } catch {
+    try {
+      fs.unlinkSync(probe);
+    } catch {
+      // 探针文件不存在或当前身份无权删除，均表示目录不可写。
+    }
+    return false;
+  }
+}
+
+function prepareFallbackCodexHome(nativeHome: string): string {
+  const fallbackHome = ensureDir(path.join(resolveDataDir(), 'codex-home'));
+  const sourceConfig = path.join(nativeHome, 'config.toml');
+  const fallbackConfig = path.join(fallbackHome, 'config.toml');
+  try {
+    if (
+      fs.existsSync(sourceConfig) &&
+      (!fs.existsSync(fallbackConfig) ||
+        fs.statSync(sourceConfig).mtimeMs > fs.statSync(fallbackConfig).mtimeMs)
+    )
+      fs.copyFileSync(sourceConfig, fallbackConfig);
+  } catch {
+    // 没有可复制的本机配置时仍保留隔离目录，调用方可通过环境变量认证。
+  }
+  return fallbackHome;
+}
+
 export function configureAIConcurrency(limit: number): void {
   if (globalLimiter.limit === limit) return;
   if (globalLimiter.running || globalLimiter.waiting) throw new Error('修改 AI 并发需重启服务');
@@ -22,6 +61,7 @@ export class ManagedCodexRunner implements AIRunner {
   constructor(
     private binary = '',
     private model?: string,
+    private windowsSandbox: WindowsSandboxMode = resolveWindowsSandboxMode(),
   ) {}
   canResumeSession(sessionId: string): boolean {
     return parseCodexSessionId(sessionId) !== undefined;
@@ -44,9 +84,28 @@ export class ManagedCodexRunner implements AIRunner {
     const source = import.meta.url.endsWith('.ts');
     return {
       source,
-      file: fileURLToPath(new URL(source ? './sdk-worker.js' : './sdk-worker.js', import.meta.url)),
+      file: fileURLToPath(new URL(source ? './sdk-worker.ts' : './sdk-worker.js', import.meta.url)),
     };
   }
+
+  protected workerArguments(worker: string, source: boolean): string[] {
+    if (!source) return [worker];
+    const tsxLoader = pathToFileURL(moduleRequire.resolve('tsx')).href;
+    return ['--import', tsxLoader, worker];
+  }
+
+  protected codexEnvironment(): NodeJS.ProcessEnv {
+    const environment = { ...process.env };
+    const home = environment.USERPROFILE || environment.HOME;
+    if (!environment.HOME && home) environment.HOME = home;
+    if (!environment.CODEX_HOME && home) {
+      const nativeHome = path.join(home, '.codex');
+      if (!canWriteDirectory(nativeHome))
+        environment.CODEX_HOME = prepareFallbackCodexHome(nativeHome);
+    }
+    return environment;
+  }
+
   async run(options: RunOptions): Promise<RunResult> {
     if (isShuttingDown()) throw new Error('服务正在停止，不能启动新的 SDK 调用');
     const controller = new AbortController();
@@ -72,8 +131,13 @@ export class ManagedCodexRunner implements AIRunner {
       const { source, file: worker } = this.workerEntrypoint();
       const child = spawnProcess(
         process.execPath,
-        [...(source ? ['--import', 'tsx'] : []), worker],
-        { cwd: options.workDir, cancelSignal: controller.signal, ipc: true },
+        this.workerArguments(worker, source),
+        {
+          cwd: options.workDir,
+          cancelSignal: controller.signal,
+          env: this.codexEnvironment(),
+          ipc: true,
+        },
       );
       let result: RunResult | undefined;
       let diagnostic = '';
@@ -107,6 +171,7 @@ export class ManagedCodexRunner implements AIRunner {
         child.nodeChildProcess.send({
           binary: this.binary,
           model: this.model,
+          windowsSandbox: this.windowsSandbox,
           options: serializable,
         });
       } catch (error) {
@@ -121,7 +186,7 @@ export class ManagedCodexRunner implements AIRunner {
           output: result?.output ?? '',
           errorMessage: timedOut
             ? 'SDK worker 超时，已终止并等待进程退出'
-            : '调用已取消并等待进程退出',
+            : result?.errorMessage || diagnostic || '调用已取消并等待进程退出',
           timeoutType: timedOut ? 'wall-clock' : undefined,
           exitCode: exited.exitCode ?? null,
         };

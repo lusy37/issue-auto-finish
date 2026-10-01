@@ -1,4 +1,4 @@
-import { CodexRunner } from './CodexRunner.js';
+import { CodexRunner, type WindowsSandboxMode } from './CodexRunner.js';
 import type { RunOptions } from './AIRunner.js';
 
 /** IPC 仅传工作台事件；Codex 协议始终由官方 SDK 处理。 */
@@ -7,11 +7,18 @@ let started = false;
 process.on('disconnect', () => {
   runner?.killAll();
 });
-process.on('message', async (message: { options: RunOptions; binary: string; model?: string }) => {
-  if (started) return;
-  started = true;
-  runner = new CodexRunner(message.binary, message.model);
-  const send = (value: unknown) => {
+process.on(
+  'message',
+  async (message: {
+    options: RunOptions;
+    binary: string;
+    model?: string;
+    windowsSandbox?: WindowsSandboxMode;
+  }) => {
+    if (started) return;
+    started = true;
+    runner = new CodexRunner(message.binary, message.model, message.windowsSandbox);
+    const send = (value: unknown) => {
     if (process.connected) process.send?.(value);
   };
   try {

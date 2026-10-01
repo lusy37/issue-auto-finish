@@ -5,15 +5,34 @@ import type { AIRunner, RunOptions, RunResult } from './AIRunner.js';
 import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
 import { findExecutable } from '../utils/process.js';
 
+export type WindowsSandboxMode = 'elevated' | 'unelevated';
+export const DEFAULT_WINDOWS_SANDBOX_MODE: WindowsSandboxMode = 'elevated';
+
+export function resolveWindowsSandboxMode(
+  value = process.env.CODEX_WINDOWS_SANDBOX,
+): WindowsSandboxMode {
+  const mode = value?.trim().toLowerCase();
+  if (!mode) return DEFAULT_WINDOWS_SANDBOX_MODE;
+  if (mode === 'elevated' || mode === 'unelevated') return mode;
+  throw new Error('CODEX_WINDOWS_SANDBOX 只支持 elevated 或 unelevated');
+}
+
 /** 留空时由 SDK 定位随依赖安装的原生程序；Windows 不接受脚本启动器。 */
-export function createCodexClient(binary = ''): Codex {
-  if (!binary) return new Codex();
+export function createCodexClient(
+  binary = '',
+  windowsSandbox = resolveWindowsSandboxMode(),
+): Codex {
+  const options =
+    process.platform === 'win32'
+      ? { config: { windows: { sandbox: windowsSandbox } } }
+      : {};
+  if (!binary) return new Codex(options);
   const executable = findExecutable(binary);
   if (!executable) throw new Error(`找不到 Codex 程序：${binary}`);
   if (process.platform === 'win32' && !executable.toLowerCase().endsWith('.exe')) {
     throw new Error('CODEX_BINARY 需要指向原生 codex.exe；留空可使用 SDK 内置程序');
   }
-  return new Codex({ codexPathOverride: executable });
+  return new Codex({ ...options, codexPathOverride: executable });
 }
 
 function workDirKey(dir: string): string {
@@ -28,6 +47,7 @@ export class CodexRunner implements AIRunner {
   constructor(
     private readonly binary = '',
     private readonly model?: string,
+    private readonly windowsSandbox = resolveWindowsSandboxMode(),
   ) {}
 
   /** 会话标识是不透明值；仅接受本执行器命名空间内的非空标识。 */
@@ -94,7 +114,7 @@ export class CodexRunner implements AIRunner {
       if (sessionId && !this.canResumeSession(sessionId)) {
         throw new Error('无法恢复其他执行器的会话，请使用完整任务重新开始');
       }
-      const client = createCodexClient(this.binary);
+      const client = createCodexClient(this.binary, this.windowsSandbox);
       const threadOptions: ThreadOptions = {
         workingDirectory: path.resolve(options.workDir),
         sandboxMode: options.mode === 'plan' ? 'read-only' : 'workspace-write',
@@ -136,11 +156,11 @@ export class CodexRunner implements AIRunner {
             emit('result', { result: output, usage: event.usage });
             break;
           case 'turn.failed':
-            errorMessage = event.error.message;
+            errorMessage = event.error.message || 'Codex 返回了失败事件，但没有提供错误详情';
             emit('error', errorMessage);
             break;
           case 'error':
-            errorMessage = event.message;
+            errorMessage = event.message || 'Codex 返回了错误事件，但没有提供错误详情';
             emit('error', errorMessage);
             break;
         }

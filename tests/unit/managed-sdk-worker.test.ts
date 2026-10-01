@@ -1,8 +1,10 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ManagedCodexRunner, configureAIConcurrency } from '../../src/ai-runner/ManagedCodexRunner.js';
+import { resolveDataDir } from '../../src/paths.js';
 
 let directory: string;
 let file: string;
@@ -22,7 +24,73 @@ afterEach(() => { configureAIConcurrency(4); fs.rmSync(directory, { recursive: t
 class TestWorker extends ManagedCodexRunner {
   protected workerEntrypoint() { return { file, source: false }; }
 }
+class SourceWorker extends ManagedCodexRunner {
+  protected workerEntrypoint() { return { file: path.join(directory, 'worker.ts'), source: true }; }
+  inspectArguments() {
+    const entrypoint = this.workerEntrypoint();
+    return { entrypoint, args: this.workerArguments(entrypoint.file, entrypoint.source) };
+  }
+}
+class EnvironmentWorker extends ManagedCodexRunner {
+  inspectEnvironment() { return this.codexEnvironment(); }
+}
 describe('受管理 worker 生命周期（模拟 IPC）', () => {
+  it('未设置 CODEX_HOME 时优先使用可写的本机目录', () => {
+    const previous = {
+      CODEX_HOME: process.env.CODEX_HOME,
+      HOME: process.env.HOME,
+      USERPROFILE: process.env.USERPROFILE,
+    };
+    process.env.USERPROFILE = directory;
+    process.env.HOME = directory;
+    fs.mkdirSync(path.join(directory, '.codex'));
+    delete process.env.CODEX_HOME;
+    try {
+      expect(new EnvironmentWorker().inspectEnvironment().CODEX_HOME).toBeUndefined();
+    } finally {
+      if (previous.CODEX_HOME === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = previous.CODEX_HOME;
+      if (previous.HOME === undefined) delete process.env.HOME;
+      else process.env.HOME = previous.HOME;
+      if (previous.USERPROFILE === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previous.USERPROFILE;
+    }
+  });
+
+  it('原生 Codex 目录不可写时回退到数据目录', () => {
+    const previous = {
+      CODEX_HOME: process.env.CODEX_HOME,
+      HOME: process.env.HOME,
+      USERPROFILE: process.env.USERPROFILE,
+    };
+    process.env.USERPROFILE = directory;
+    process.env.HOME = directory;
+    delete process.env.CODEX_HOME;
+    try {
+      const value = new EnvironmentWorker().inspectEnvironment().CODEX_HOME;
+      expect(value).toBe(path.join(resolveDataDir(), 'codex-home'));
+      expect(fs.existsSync(value!)).toBe(true);
+    } finally {
+      if (previous.CODEX_HOME === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = previous.CODEX_HOME;
+      if (previous.HOME === undefined) delete process.env.HOME;
+      else process.env.HOME = previous.HOME;
+      if (previous.USERPROFILE === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previous.USERPROFILE;
+    }
+  });
+
+  it('显式 CODEX_HOME 时保持调用方配置', () => {
+    const previous = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = path.join(directory, 'codex-home');
+    try {
+      expect(new EnvironmentWorker().inspectEnvironment().CODEX_HOME).toBe(process.env.CODEX_HOME);
+    } finally {
+      if (previous === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = previous;
+    }
+  });
+
   it('收到结果后仍等待 worker 退出，之后才释放全局额度', async () => {
     const runner = new TestWorker();
     const first = runner.run({ workDir: directory, prompt: 'first', timeoutMs: 1000 });
@@ -49,5 +117,14 @@ describe('受管理 worker 生命周期（模拟 IPC）', () => {
     const third = await runner.run({ workDir: directory, prompt: 'third', timeoutMs: 1000 });
     expect(third.success).toBe(true);
     expect(fs.readFileSync(path.join(directory, 'started'), 'utf8')).not.toContain('must-not-start');
+  });
+  it('源码模式使用项目根目录的 tsx loader 和 TS worker', () => {
+    const { entrypoint, args } = new SourceWorker().inspectArguments();
+    expect(entrypoint.file).toBe(path.join(directory, 'worker.ts'));
+    expect(args).toEqual([
+      '--import',
+      pathToFileURL(path.join(process.cwd(), 'node_modules/tsx/dist/loader.mjs')).href,
+      path.join(directory, 'worker.ts'),
+    ]);
   });
 });

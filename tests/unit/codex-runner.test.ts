@@ -5,9 +5,12 @@ import { CodexRunner } from '../../src/ai-runner/CodexRunner.js';
 import { createAIRunner, isRegisteredRunner } from '../../src/ai-runner/AIRunnerRegistry.js';
 import type { StreamEvent } from '../../src/ai-runner/AIRunner.js';
 
-const sdk = vi.hoisted(() => ({ startThread: vi.fn(), resumeThread: vi.fn(), runStreamed: vi.fn() }));
+const sdk = vi.hoisted(() => ({ startThread: vi.fn(), resumeThread: vi.fn(), runStreamed: vi.fn(), codexOptions: undefined as unknown }));
 vi.mock('@openai/codex-sdk', () => ({
   Codex: class {
+    constructor(options: unknown) {
+      sdk.codexOptions = options;
+    }
     startThread = sdk.startThread;
     resumeThread = sdk.resumeThread;
   },
@@ -38,6 +41,7 @@ function waitForAbort(values: ThreadEvent[] = [started]) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  sdk.codexOptions = undefined;
   sdk.startThread.mockReturnValue({ runStreamed: sdk.runStreamed });
   sdk.resumeThread.mockReturnValue({ runStreamed: sdk.runStreamed });
   events([started, message, completed]);
@@ -50,6 +54,13 @@ describe('Codex SDK 适配器', () => {
     expect(isRegisteredRunner('claude')).toBe(false);
   });
 
+  it('默认使用 Windows 提权沙箱，并支持显式降级', async () => {
+    await new CodexRunner().run(options);
+    expect(sdk.codexOptions).toMatchObject({ config: { windows: { sandbox: 'elevated' } } });
+
+    await new CodexRunner('', undefined, 'unelevated').run(options);
+    expect(sdk.codexOptions).toMatchObject({ config: { windows: { sandbox: 'unelevated' } } });
+  });
   it.each([['plan', 'read-only'], ['agent', 'workspace-write']])('阶段 %s 使用 %s 沙箱', async (mode, sandboxMode) => {
     const logs: StreamEvent[] = [];
     const result = await new CodexRunner('', '默认模型').run({ ...options, mode, model: '本次模型', onStreamEvent: e => logs.push(e) });
