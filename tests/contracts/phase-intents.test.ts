@@ -15,9 +15,9 @@ createTestConfig,
 } from '../helpers/mock-factories.js';
 import {
 ScriptedAIRunner,
-successScript,
-writeArtifact
+successScript
 } from '../helpers/scripted-ai-runner.js';
+import { verifyAgentOutput } from '../helpers/verify-result.js';
 
 vi.mock('../../src/knowledge/index.js', () => ({
   getProjectKnowledge: vi.fn().mockReturnValue(null),
@@ -88,21 +88,8 @@ describe('Phase Intent Contracts (INT-1~8)', () => {
   // INT-4：verify 失败 → RequestRetryFromIntent('build')
   // ──────────────────────────────────────────────────────────
   it('INT-4: verify 报告失败 → RequestRetryFromIntent("build")', async () => {
-    const failingReport = [
-      '# 验证报告',
-      '',
-      '**Lint 结果**: 通过',
-      '**Build 结果**: 通过',
-      '**Test 结果**: 失败',
-      '',
-      '## 测试',
-      '- 3 个单元测试失败',
-      '',
-      '## 总结',
-      '验证失败，存在未通过的检查项。',
-    ].join('\n');
     const runner = new ScriptedAIRunner([
-      successScript(undefined, writeArtifact(ISSUE_IID, '02-verify-report.md', failingReport)),
+      successScript({ output: verifyAgentOutput({ test: 'failed', reportMarkdown: '# 验证报告\n\nTest 执行失败，存在未通过的检查项，需要回到 build 修复后重新验证。' }) }),
     ]);
     const phase = new VerifyPhase(
       runner,

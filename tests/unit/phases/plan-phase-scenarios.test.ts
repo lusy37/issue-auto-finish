@@ -121,7 +121,7 @@ describe('PlanPhase Scenarios (ScriptedAIRunner)', () => {
     expect(intent.error.retryable).toBe('hard-no-auto');
   });
 
-  it('should mark hard-no-auto for permanent errors', async () => {
+  it('无法识别结构化失败类型时按 hard 处理', async () => {
     const runner = new ScriptedAIRunner([
       failureScript('model not found: claude-99'),
     ]);
@@ -131,7 +131,7 @@ describe('PlanPhase Scenarios (ScriptedAIRunner)', () => {
 
     expect(intent.kind).toBe('failed');
     if (intent.kind !== 'failed') throw new Error('Expected failed intent');
-    expect(intent.error.retryable).toBe('hard-no-auto');
+    expect(intent.error.retryable).toBe('hard');
   });
 
   it('should classify timeout as soft (active) or hard', async () => {

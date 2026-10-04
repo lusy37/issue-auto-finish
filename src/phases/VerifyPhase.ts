@@ -1,8 +1,14 @@
 import { BasePhase, PhaseContext } from './BasePhase.js';
 import { planModeVerifyPrompt, demandToPromptContext } from '../prompts/templates.js';
-import { VerifyReportParser } from '../verify/index.js';
+import {
+  VERIFY_AGENT_OUTPUT_SCHEMA,
+  evaluateVerifyResult,
+  parseVerifyAgentOutput,
+} from '../verify/VerifyResultCodec.js';
+import { ARTIFACTS } from '../shared/runtime/artifacts.js';
 import type { PhaseCallbacks } from './PhaseCallbacks.js';
 import type { PhaseResult } from '../orchestration/PhaseResult.js';
+import type { JsonSchema } from '../ai-runner/index.js';
 
 /**
  * 验证阶段 — 执行验证后根据报告判定通过/失败。
@@ -14,42 +20,31 @@ import type { PhaseResult } from '../orchestration/PhaseResult.js';
  */
 export class VerifyPhase extends BasePhase {
   readonly phaseName = 'verify' as const;
-  private readonly reportParser = new VerifyReportParser();
 
   async run(ctx: PhaseContext, callbacks?: PhaseCallbacks): Promise<PhaseResult> {
     const intent = await super.run(ctx, callbacks);
     if (intent.kind !== 'completed') return intent;
 
-    const report = this.readVerifyReport();
-    const parsed = this.reportParser.parse(report ?? '');
-    if (!parsed.valid) {
-      return {
-        kind: 'failed',
-        sessionId: intent.sessionId,
-        error: {
-          message: '验证报告缺少本次 Lint、Build 或 Test 的明确结果，请人工检查执行环境',
-          retryable: 'hard-no-auto',
-        },
-      };
-    }
+    const parsed = parseVerifyAgentOutput(intent.output);
+    const evaluation = evaluateVerifyResult(parsed);
 
     this.logger.info('Verify report parsed', {
-      passed: parsed.passed,
-      lintPassed: parsed.lintPassed,
-      buildPassed: parsed.buildPassed,
-      testPassed: parsed.testPassed,
-      failureCount: parsed.failureReasons.length,
+      passed: evaluation.passed,
+      lintPassed: parsed.checks.lint.status === 'passed',
+      buildPassed: parsed.checks.build.status === 'passed',
+      testPassed: parsed.checks.test.status === 'passed',
+      failureCount: evaluation.failureReasons.length,
     });
 
-    if (parsed.passed) return intent;
+    if (evaluation.passed) return intent;
 
     if (!this.config.verifyFixLoop.enabled) {
       return {
         kind: 'failed',
         sessionId: intent.sessionId,
         error: {
-          message: `验证失败，自动修复已关闭：${parsed.failureReasons.join('；')}`,
-          rawOutput: parsed.rawReport,
+          message: `验证失败，自动修复已关闭：${evaluation.failureReasons.join('；')}`,
+          rawOutput: parsed.reportMarkdown,
           retryable: 'hard-no-auto',
         },
       };
@@ -60,8 +55,8 @@ export class VerifyPhase extends BasePhase {
       targetPhaseId: 'build',
       reason: 'verify-failed',
       context: {
-        verifyFailures: parsed.failureReasons,
-        rawReport: parsed.rawReport,
+        verifyFailures: evaluation.failureReasons,
+        rawReport: parsed.reportMarkdown,
       },
       sessionId: intent.sessionId,
     };
@@ -79,9 +74,12 @@ export class VerifyPhase extends BasePhase {
     return planModeVerifyPrompt(promptCtx);
   }
 
-  private readVerifyReport(): string | null {
-    const files = this.getResultFiles();
-    if (files.length === 0) return null;
-    return this.plan.readFile(files[0].filename);
+  protected getOutputSchema(): JsonSchema {
+    return VERIFY_AGENT_OUTPUT_SCHEMA;
+  }
+
+  protected prepareAgentOutput(output: string): void {
+    const parsed = parseVerifyAgentOutput(output);
+    this.plan.writeFile(ARTIFACTS.verifyReport.filename, parsed.reportMarkdown);
   }
 }

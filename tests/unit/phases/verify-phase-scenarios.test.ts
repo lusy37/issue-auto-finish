@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { VerifyPhase } from '../../../src/phases/VerifyPhase.js';
 import { PlanPersistence } from '../../../src/persistence/PlanPersistence.js';
-import { ScriptedAIRunner, successScript, failureScript, writeArtifact } from '../../helpers/scripted-ai-runner.js';
+import { ScriptedAIRunner, successScript, failureScript } from '../../helpers/scripted-ai-runner.js';
+import { verifyAgentOutput } from '../../helpers/verify-result.js';
 import {
   createMockGitOperations,
   createTestConfig,
@@ -34,37 +35,10 @@ function buildPhaseCtx(): PhaseContext {
   };
 }
 
-const PASSING_REPORT = `# 验证报告
-
-**Lint 结果**: 通过
-**Build 结果**: 通过
-**Test 结果**: 通过
-
-## Lint 检查
-- [x] ESLint 通过
-
-## 构建
-- [x] TypeScript 编译通过
-
-## 测试
-- [x] 单元测试通过
-
-## 总结
-所有检查项均已通过。
-`;
-
-const FAILING_REPORT = `# 验证报告
-
-**Lint 结果**: 通过
-**Build 结果**: 通过
-**Test 结果**: 失败
-
-## 测试
-- 2 个单元测试失败
-
-## 总结
-验证失败，存在未通过的检查项。
-`;
+const PASSING_REPORT = '# 验证报告\n\nLint、Build、Test 均已执行并通过，本次代码检查和关联测试满足进入下一阶段的条件。';
+const FAILING_REPORT = '# 验证报告\n\nLint 与 Build 已完成，但 Test 执行失败，存在未通过的检查项，需要回到 build 修复后重新验证。';
+const PASSING_OUTPUT = verifyAgentOutput({ reportMarkdown: PASSING_REPORT });
+const FAILING_OUTPUT = verifyAgentOutput({ test: 'failed', reportMarkdown: FAILING_REPORT });
 
 describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
   let dataDir: string;
@@ -91,7 +65,7 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
 
   it('should return completed when verify report passes', async () => {
     const runner = new ScriptedAIRunner([
-      successScript(undefined, writeArtifact(ISSUE_IID, '02-verify-report.md', PASSING_REPORT)),
+      successScript({ output: PASSING_OUTPUT }),
     ]);
 
     const phase = createPhase(runner);
@@ -102,7 +76,7 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
 
   it('should return requestRetryFrom("build") when verify report fails', async () => {
     const runner = new ScriptedAIRunner([
-      successScript(undefined, writeArtifact(ISSUE_IID, '02-verify-report.md', FAILING_REPORT)),
+      successScript({ output: FAILING_OUTPUT }),
     ]);
 
     const phase = createPhase(runner);
@@ -119,7 +93,7 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
 
   it('should attach failure context for build retry', async () => {
     const runner = new ScriptedAIRunner([
-      successScript(undefined, writeArtifact(ISSUE_IID, '02-verify-report.md', FAILING_REPORT)),
+      successScript({ output: FAILING_OUTPUT }),
     ]);
 
     const phase = createPhase(runner);
@@ -132,7 +106,7 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
 
   it('关闭自动修复后，验证失败保留报告并禁止自动重试', async () => {
     const runner = new ScriptedAIRunner([
-      successScript(undefined, writeArtifact(ISSUE_IID, '02-verify-report.md', FAILING_REPORT)),
+      successScript({ output: FAILING_OUTPUT }),
     ]);
     const phase = createPhase(runner, { verifyFixLoop: { enabled: false, maxIterations: 3 } });
     const intent = await phase.run(buildPhaseCtx());
@@ -154,7 +128,7 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
 
   it('should use plan-mode verify prompt', async () => {
     const runner = new ScriptedAIRunner([
-      successScript(undefined, writeArtifact(ISSUE_IID, '02-verify-report.md', PASSING_REPORT)),
+      successScript({ output: PASSING_OUTPUT }),
     ]);
 
     const phase = createPhase(runner);
@@ -172,7 +146,7 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
     const reportWithoutTodo = `# 验证报告\n\n## Lint\n- [x] 通过\n\n## 构建\n- [x] 通过\n\n## 测试\n- [x] 通过\n\n## 总结\n通过`;
 
     const runner = new ScriptedAIRunner([
-      successScript(undefined, writeArtifact(ISSUE_IID, '02-verify-report.md', reportWithoutTodo)),
+      successScript({ output: reportWithoutTodo }),
     ]);
 
     const phase = createPhase(runner, {
@@ -183,6 +157,6 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
     expect(intent.kind).toBe('failed');
     if (intent.kind !== 'failed') throw new Error('应拒绝不完整报告');
     expect(intent.error.retryable).toBe('hard-no-auto');
-    expect(intent.error.message).toContain('缺少');
+    expect(intent.error.message).toContain('JSON');
   });
 });

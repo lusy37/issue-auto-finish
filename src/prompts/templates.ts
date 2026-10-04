@@ -98,7 +98,7 @@ export function demandToPromptContext(demand: DemandSpec): {
 
 export function planModeVerifyPrompt(ctx: PromptContext): string {
   const kv = getKnowledgeForPrompt(ctx.knowledgeEnabled);
-  return `验证 Issue #${ctx.issueIid}：${ctx.issueTitle}\n${ctx.issueDescription}\n依次执行 ${kv.lintCommand}、${kv.buildCommand}、${kv.testCommand}，按实际命令结果判断。Verify 只执行代码质量和单元测试，不运行 Playwright 或其他浏览器验收命令；浏览器验收由后续 UAT 阶段负责。\n不要修改源码、配置、测试或计划，不要提交或推送，不要写报告文件；报告由服务端保存。临时文件用完后清理。最终回复完整 Markdown 报告，包含 **Lint 结果**: 通过/失败、**Build 结果**: 通过/失败、**Test 结果**: 通过/失败，并列出失败命令及诊断。没有实际执行或无法确定时必须报告失败。任务完成由服务端核对，不依赖计划中的勾选标记。\n项目检查说明：${kv.knownIssuesSection}`;
+  return `验证 Issue #${ctx.issueIid}：${ctx.issueTitle}\n${ctx.issueDescription}\n依次执行 ${kv.lintCommand}、${kv.buildCommand}、${kv.testCommand}，按实际命令结果判断。Verify 只执行代码质量和单元测试，不运行 Playwright 或其他浏览器验收命令；浏览器验收由后续 UAT 阶段负责。\n不要修改源码、配置、测试或计划，不要提交或推送，不要写文件。临时文件用完后清理。最终只返回一个严格 JSON 对象，不要返回 Markdown 代码块或 JSON 之外的文字。JSON 必须符合以下结构：{"schemaVersion":"iaf-mini/verify/v1","phase":"verify","checks":{"lint":{"status":"passed|failed","command":"实际命令","exitCode":0,"summary":"结果摘要","diagnostics":["失败诊断"]},"build":{"status":"passed|failed","command":"实际命令","exitCode":0,"summary":"结果摘要","diagnostics":["失败诊断"]},"test":{"status":"passed|failed","command":"实际命令","exitCode":0,"summary":"结果摘要","diagnostics":["失败诊断"]}},"summary":"总体摘要","reportMarkdown":"面向用户的完整 Markdown 验证报告"}。diagnostics 没有内容时返回空数组；exitCode 无法取得时返回 null；没有实际执行或无法确定时对应检查必须为 failed，不得猜测通过。任务完成由服务端校验结构化字段，不依赖 Markdown 或计划勾选标记。\n项目检查说明：${kv.knownIssuesSection}`;
 }
 
 export function planPrompt(ctx: PromptContext): string {

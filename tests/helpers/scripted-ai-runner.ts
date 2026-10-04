@@ -105,7 +105,8 @@ export class ScriptedAIRunner implements AIRunner {
     planText ??= script.sideEffect?.artifact?.filename === ARTIFACTS.plan.filename ? script.sideEffect.artifact.content : undefined;
     const report = script.artifacts?.[ARTIFACTS.verifyReport.filename] ?? (script.sideEffect?.artifact?.filename === ARTIFACTS.verifyReport.filename ? script.sideEffect.artifact.content : undefined);
     if (options.phaseName === 'verify' && report) return { ...script.result, output: report };
-    if (options.mode === 'plan' && script.result.success && (planText || script.result.output.length >= 50)) {
+    // verify 虽然使用只读调用策略，但其返回值是严格的验收 JSON，不能套用计划输出包装。
+    if (options.phaseName !== 'verify' && options.mode === 'plan' && script.result.success && (planText || script.result.output.length >= 50)) {
       return { ...script.result, output: structuredPlanOutput(planText ?? script.result.output) };
     }
     return script.result;

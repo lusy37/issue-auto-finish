@@ -1,10 +1,10 @@
 import { buildCallOptions, configuredCallPolicy } from '../ai-runner/CallPolicy.js';
 import { parseJsonOutput } from '../prompts/parseJsonOutput.js';
 import { resolvePromptRules } from '../knowledge/PromptRules.js';
-import { ARTIFACTS, getPhaseArtifacts } from '../shared/runtime/artifacts.js';
+import { getPhaseArtifacts } from '../shared/runtime/artifacts.js';
 import { renderPlan } from '../dag/contracts.js';
 import { decodePlanContent } from '../dag/codecs/TaskPlanCodec.js';
-import type { AIRunner, RunResult, StreamEvent } from '../ai-runner/index.js';
+import type { AIRunner, JsonSchema, RunResult, StreamEvent } from '../ai-runner/index.js';
 
 import { GitOperations } from '../git/GitOperations.js';
 import { PlanPersistence } from '../persistence/PlanPersistence.js';
@@ -115,11 +115,10 @@ export abstract class BasePhase {
         phase: this.phaseName,
         sessionId: resumeInfo.sessionId,
       });
-      result = await this.runWithResumeFallback(
+      result = await this.runAI(
         displayId,
-        resumeInfo.sessionId!,
         this.getResumePrompt(ctx) + (rules ? `\n\n${t('basePhase.rulesSection', { rules })}` : ''),
-        prompt,
+        { sessionId: resumeInfo.sessionId!, continueSession: true },
         callbacks?.onStreamEvent,
       );
     } else {
@@ -148,9 +147,9 @@ export abstract class BasePhase {
         };
       }
     }
-    if (this.phaseName === 'verify')
-      this.plan.writeFile(ARTIFACTS.verifyReport.filename, result.output);
     try {
+      // 阶段可以在这里把结构化 Agent 结果转换为展示产物；状态判断仍由阶段自身完成。
+      this.prepareAgentOutput(result.output);
       await this.validatePhaseOutput(ctx, displayId, expectedResultFiles);
     } catch (err) {
       const message = (err as Error).message;
@@ -170,6 +169,22 @@ export abstract class BasePhase {
   }
 
   protected abstract buildPrompt(ctx: PhaseContext): string;
+
+  /**
+   * 返回给 Codex SDK 的最终响应 JSON Schema。
+   * 普通阶段可以保持 undefined；需要驱动状态转移的阶段应覆盖它。
+   */
+  protected getOutputSchema(): JsonSchema | undefined {
+    return undefined;
+  }
+
+  /**
+   * 将 Agent 的结构化响应物化为展示产物。
+   * 该钩子在产物完整性校验前执行，解析失败会阻止阶段继续推进。
+   */
+  protected prepareAgentOutput(_output: string): void {
+    // 默认阶段没有服务端展示产物。
+  }
 
   protected getResumePrompt(_ctx: PhaseContext): string {
     return t('basePhase.resumePrompt');
@@ -202,18 +217,15 @@ export abstract class BasePhase {
         configuredCallPolicy(this.config.ai),
         this.phaseName === 'plan' ? 'plan' : 'verify',
       ),
+      outputSchema: this.getOutputSchema(),
       phaseName: this.phaseName,
       sessionId: options?.sessionId,
       continueSession: options?.continueSession,
       onStreamEvent: (event) => {
         this.captureStreamSummary(event);
-        if (!capturedSessionId && event.type !== 'raw') {
-          const content = event.content as Record<string, unknown>;
-          const id = event.sessionId ?? content?.session_id;
-          if (typeof id === 'string' && id) {
-            capturedSessionId = id;
-            this.persistSessionId(issueIid, capturedSessionId);
-          }
+        if (!capturedSessionId && event.sessionId) {
+          capturedSessionId = event.sessionId;
+          this.persistSessionId(issueIid, capturedSessionId);
         }
         onStreamEvent?.(event);
       },
@@ -224,47 +236,7 @@ export abstract class BasePhase {
     return result;
   }
 
-  protected async runWithResumeFallback(
-    displayId: number,
-    sessionId: string,
-    resumePrompt: string,
-    fullPrompt: string,
-    onStreamEvent?: (event: StreamEvent) => void,
-  ): Promise<RunResult> {
-    const result = await this.runAI(
-      displayId,
-      resumePrompt,
-      {
-        sessionId,
-        continueSession: true,
-      },
-      onStreamEvent,
-    );
-
-    if (!result.success && this.isResumeFailure(result)) {
-      this.logger.warn(t('basePhase.resumeFallback'), {
-        issueIid: displayId,
-        phase: this.phaseName,
-        exitCode: result.exitCode,
-      });
-      onStreamEvent?.({
-        type: 'system',
-        content: t('basePhase.resumeFallback'),
-        timestamp: new Date().toISOString(),
-      });
-      return this.runAI(displayId, fullPrompt, undefined, onStreamEvent);
-    }
-
-    return result;
-  }
-
-  /**
-   * 把 RunResult 翻译成结构化 PhaseError。
-   *
-   * - wasActiveAtTimeout=true → soft（消耗有限预算，下次可续跑）
-   * - 永久失败模式（model 不存在 / auth / quota） → hard-no-auto（必须用户介入）
-   * - 其他 → hard（消耗 budget，达上限后转 manual）
-   */
+  /** 把 Runner 已提供的结构化超时状态翻译成阶段错误。 */
   protected classifyFailure(result: RunResult): PhaseError {
     const message = (result.errorMessage || result.output).slice(0, 500);
     const rawOutput = result.output;
@@ -273,41 +245,7 @@ export abstract class BasePhase {
       return { message, retryable: 'soft', rawOutput };
     }
 
-    const msg = (result.errorMessage ?? result.output ?? '').toLowerCase();
-    const permanentPatterns = [
-      /model\b.*\b(?:not found|not supported|unavailable|service info not found)/,
-      /invalid.?api.?key/,
-      /authentication.*(?:failed|denied|error)/,
-      /permission.?denied/,
-      /billing/,
-      /quota.*exceeded/,
-    ];
-    if (permanentPatterns.some((p) => p.test(msg))) {
-      return { message, retryable: 'hard-no-auto', rawOutput };
-    }
-
     return { message, retryable: 'hard', rawOutput };
-  }
-
-  /**
-   * Heuristic: a resume failure is typically an immediate process exit
-   * (exit code != 0, empty output) caused by an invalid/expired session ID.
-   */
-  private isResumeFailure(result: RunResult): boolean {
-    if (result.success) return false;
-    const msg = (result.errorMessage ?? '').toLowerCase();
-
-    if (msg.includes('session') || msg.includes('resume') || msg.includes('session_id')) {
-      return true;
-    }
-
-    if (result.output.length === 0 && result.exitCode !== null && result.exitCode !== 0) {
-      const isConfigError =
-        msg.includes('model') || msg.includes('api key') || msg.includes('authentication');
-      return !isConfigError;
-    }
-
-    return false;
   }
 
   protected persistSessionId(issueIid: number, sessionId: string | undefined): void {

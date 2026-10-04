@@ -30,7 +30,7 @@ function createTestDemand(overrides?: Partial<DemandSpec>): DemandSpec {
 }
 
 function createTracker(dataDir: string): IssueTracker {
-  const tracker = new IssueTracker(dataDir, new Map([['plan-mode', PLAN_MODE_PIPELINE]]));
+  const tracker = new IssueTracker(dataDir, PLAN_MODE_PIPELINE);
   tracker.create({
     lifecycle: { kind: 'pending' },
     pipelineMode: 'plan-mode',
@@ -97,7 +97,7 @@ describe('Session Resume — 聚合状态', () => {
     expect(aiRunner.run.mock.calls[0][0].continueSession).toBe(true);
   });
 
-  it('恢复会话失效时回退到新会话', async () => {
+  it('恢复会话失效时按结构化失败结束，不猜测并创建新会话', async () => {
     setPhaseProgress(tracker, 'plan', { status: 'failed', sessionId: 'expired-session' });
     const resumeFailure: RunResult = {
       success: false,
@@ -105,22 +105,14 @@ describe('Session Resume — 聚合状态', () => {
       errorMessage: 'Session not found',
       exitCode: 1,
     };
-    aiRunner.run
-      .mockResolvedValueOnce(resumeFailure)
-      .mockResolvedValueOnce({
-        success: true,
-        output: structuredPlanOutput('完整实施计划：包含步骤、边界与验收标准。'.repeat(8)),
-        sessionId: 'fresh-session',
-        exitCode: 0,
-      });
+    aiRunner.run.mockResolvedValueOnce(resumeFailure);
     const phase = new PlanPhase(aiRunner, createMockGitOperations() as never, plan, createTestConfig(), tracker);
 
     const result = await phase.run(ctx);
 
-    expect(result.kind).toBe('completed');
-    expect(aiRunner.run).toHaveBeenCalledTimes(2);
+    expect(result.kind).toBe('failed');
+    expect(aiRunner.run).toHaveBeenCalledTimes(1);
     expect(aiRunner.run.mock.calls[0][0]).toMatchObject({ sessionId: 'expired-session', continueSession: true });
-    expect(aiRunner.run.mock.calls[1][0].sessionId).toBeUndefined();
   });
 
   it('执行结果与流事件捕获的 session 均写回聚合状态', async () => {
@@ -128,9 +120,11 @@ describe('Session Resume — 聚合状态', () => {
     aiRunner.run.mockImplementation(async options => {
       options.onStreamEvent?.({
         type: 'init',
-        content: { type: 'init', session_id: 'stream-session' },
+        content: '会话已启动',
+        sessionId: 'stream-session',
         timestamp: new Date().toISOString(),
       });
+      expect(tracker.getPhaseProgress(42, 'plan')?.sessionId).toBe('stream-session');
       return {
         success: true,
         output: structuredPlanOutput('完整实施计划：包含步骤、边界与验收标准。'.repeat(8)),
