@@ -3,7 +3,7 @@ import {
   extractTodolist,
   renderTodolistMarkdown,
   todolistProgressText,
-} from '../../src/persistence/TodolistExtractor.js';
+} from '../helpers/todolist-extractor.js';
 
 describe('TodolistExtractor', () => {
   describe('extractTodolist', () => {

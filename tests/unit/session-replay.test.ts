@@ -154,7 +154,7 @@ describe('SessionReplayer', () => {
       const reportPath = resolveIssueArtifactPath(42, '02-verify-report.md');
       const content = fs.readFileSync(reportPath, 'utf-8');
 
-      const { extractTodolist } = await import('../../src/persistence/TodolistExtractor.js');
+      const { extractTodolist } = await import('../helpers/todolist-extractor.js');
       const summary = extractTodolist(content);
       expect(summary.total).toBe(2);
       expect(summary.pending).toBe(2);

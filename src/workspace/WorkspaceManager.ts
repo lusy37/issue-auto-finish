@@ -93,9 +93,9 @@ export class WorkspaceManager {
     return {
       name: primary.name,
       repository: primary.repository,
-      role: primary.role ?? '',
+      role: primary.role,
       gitRootDir: primaryDir,
-      workDir: path.join(primaryDir, primary.projectSubDir ?? ''),
+      workDir: path.join(primaryDir, primary.projectSubDir),
       baseBranch: primary.baseBranch ?? globalBaseBranch,
       branchPrefix: primary.branchPrefix ?? defaultPrefix,
       isPrimary: true,

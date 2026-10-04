@@ -141,8 +141,8 @@ export class WorktreeReaper {
   /** 判定某条记录是否到达回收条件：终态 + 未清理 + 已超过保留期。 */
   private shouldReap(record: IssueRecord, now: number): boolean {
     if (
-      record.run?.recoveryRequired ||
-      Object.values(record.run?.calls ?? {}).some((call) => call.status !== 'exited')
+      record.run.recoveryRequired ||
+      Object.values(record.run.calls ?? {}).some((call) => call.status !== 'exited')
     )
       return false;
     if (record.lifecycle.kind !== 'completed') return false;

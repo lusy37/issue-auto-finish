@@ -8,40 +8,20 @@ export type EventType =
   | 'issue:resetForRetry'
   | 'issue:restarted'
   | 'issue:retryFromPhase'
-  | 'poll:tick'
-  | 'heartbeat'
   | 'agent:output'
   | 'pipeline:progress'
-  | 'conflict:started'
-  | 'conflict:resolved'
-  | 'conflict:failed'
-  // Distill events
+  // 经验蒸馏
   | 'distill:diary:created'
   | 'distill:started'
-  | 'distill:memory:updated'
-  | 'distill:rule:generated'
   | 'distill:completed'
-  | 'distill:failed'
-  // UAT async events
-  | 'uat:completed'
-  | 'uat:failed'
-  // Phase abort/continue/redo events
+  // 阶段暂停与继续
   | 'issue:paused'
   | 'issue:continued'
-  | 'issue:redone'
-  // Preview reaper events
+  // 预览回收
   | 'preview:reaped'
-  // Agent interactive dialog events
-  // Orchestration / Reducer events (PR3+)
-  | 'pipeline:completed'
-  | 'pipeline:failed'
-  | 'phase:failed'
-  | 'phase:retryFrom'
-  | 'phase:retryFromExhausted'
-  | 'gate:requested'
+  // 审核状态
   | 'gate:approved'
-  | 'gate:rejected'
-  | 'gate:supplemented';
+  | 'gate:rejected';
 
 export interface EventPayload {
   type: EventType;
@@ -49,12 +29,7 @@ export interface EventPayload {
   timestamp: string;
 }
 
-/**
- * Typed event bus based on EventEmitter.
- *
- * Exported as a class so consumers can receive an instance via dependency
- * injection instead of relying on the global singleton.
- */
+/** 支持依赖注入的事件总线；通配监听器用于向工作台转发事件。 */
 export class EventBus extends EventEmitter {
   emit(event: string | symbol, ...args: unknown[]): boolean {
     super.emit('*', event, ...args);

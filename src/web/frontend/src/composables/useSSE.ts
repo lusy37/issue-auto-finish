@@ -5,12 +5,8 @@ export type SSEHandler = (eventName: string, data: unknown) => void;
 const SSE_EVENTS = [
   'issue:updated', 'issue:created', 'issue:failed',
   'issue:deleted', 'issue:resetForRetry', 'issue:restarted',
-  'issue:retryFromPhase', 'issue:paused', 'issue:continued', 'issue:redone',
-
-  'gate:requested', 'gate:approved', 'gate:rejected', 'gate:supplemented',
-  'agent:output', 'pipeline:progress', 'pipeline:completed', 'pipeline:failed',
-  'phase:failed', 'phase:retryFrom', 'phase:retryFromExhausted',
-  'uat:completed', 'uat:failed',
+  'issue:retryFromPhase', 'issue:paused', 'issue:continued',
+  'gate:approved', 'gate:rejected', 'agent:output', 'pipeline:progress',
 ] as const;
 
 const connected = ref(false);
@@ -18,24 +14,6 @@ const handlers = new Set<SSEHandler>();
 let eventSource: EventSource | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = 0;
-const recentEventKeys = new Set<string>();
-const MAX_RECENT_EVENTS = 500;
-
-function eventKey(eventName: string, data: unknown): string {
-  try { return `${eventName}:${JSON.stringify(data)}`; }
-  catch { return `${eventName}:${String(data)}`; }
-}
-
-function isDuplicate(eventName: string, data: unknown): boolean {
-  const key = eventKey(eventName, data);
-  if (recentEventKeys.has(key)) return true;
-  recentEventKeys.add(key);
-  if (recentEventKeys.size > MAX_RECENT_EVENTS) {
-    const oldest = recentEventKeys.values().next().value;
-    if (oldest) recentEventKeys.delete(oldest);
-  }
-  return false;
-}
 
 function dispatch(eventName: string, data: unknown) {
   for (const h of handlers) {
@@ -62,7 +40,7 @@ function connect() {
     eventSource.addEventListener(name, (e: MessageEvent) => {
       try {
         const payload = JSON.parse(e.data);
-        if (!isDuplicate(name, payload)) dispatch(name, payload);
+        dispatch(name, payload);
       } catch { /* ignore */ }
     });
   }
@@ -94,7 +72,6 @@ function teardownIfIdle() {
     eventSource = null;
   }
   reconnectAttempt = 0;
-  recentEventKeys.clear();
   connected.value = false;
 }
 
