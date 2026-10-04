@@ -4,7 +4,6 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ManagedCodexRunner, configureAIConcurrency } from '../../src/ai-runner/ManagedCodexRunner.js';
-import { resolveDataDir } from '../../src/paths.js';
 
 let directory: string;
 let file: string;
@@ -35,7 +34,7 @@ class EnvironmentWorker extends ManagedCodexRunner {
   inspectEnvironment() { return this.codexEnvironment(); }
 }
 describe('受管理 worker 生命周期（模拟 IPC）', () => {
-  it('未设置 CODEX_HOME 时优先使用可写的本机目录', () => {
+  it('未设置 CODEX_HOME 时不注入独立配置目录', () => {
     const previous = {
       CODEX_HOME: process.env.CODEX_HOME,
       HOME: process.env.HOME,
@@ -47,29 +46,6 @@ describe('受管理 worker 生命周期（模拟 IPC）', () => {
     delete process.env.CODEX_HOME;
     try {
       expect(new EnvironmentWorker().inspectEnvironment().CODEX_HOME).toBeUndefined();
-    } finally {
-      if (previous.CODEX_HOME === undefined) delete process.env.CODEX_HOME;
-      else process.env.CODEX_HOME = previous.CODEX_HOME;
-      if (previous.HOME === undefined) delete process.env.HOME;
-      else process.env.HOME = previous.HOME;
-      if (previous.USERPROFILE === undefined) delete process.env.USERPROFILE;
-      else process.env.USERPROFILE = previous.USERPROFILE;
-    }
-  });
-
-  it('原生 Codex 目录不可写时回退到数据目录', () => {
-    const previous = {
-      CODEX_HOME: process.env.CODEX_HOME,
-      HOME: process.env.HOME,
-      USERPROFILE: process.env.USERPROFILE,
-    };
-    process.env.USERPROFILE = directory;
-    process.env.HOME = directory;
-    delete process.env.CODEX_HOME;
-    try {
-      const value = new EnvironmentWorker().inspectEnvironment().CODEX_HOME;
-      expect(value).toBe(path.join(resolveDataDir(), 'codex-home'));
-      expect(fs.existsSync(value!)).toBe(true);
     } finally {
       if (previous.CODEX_HOME === undefined) delete process.env.CODEX_HOME;
       else process.env.CODEX_HOME = previous.CODEX_HOME;

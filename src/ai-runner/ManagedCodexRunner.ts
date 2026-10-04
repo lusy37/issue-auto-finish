@@ -1,5 +1,4 @@
 import { AI_DEFAULTS } from '../shared/runtime/defaults.js';
-import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { parseCodexSessionId } from './SessionId.js';
 import { resolveWindowsSandboxMode, type WindowsSandboxMode } from './CodexRunner.js';
@@ -7,45 +6,11 @@ import path from 'node:path';
 import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnProcess } from '../utils/process.js';
-import { ensureDir, resolveDataDir } from '../paths.js';
 import type { AIRunner, RunOptions, RunResult, StreamEvent } from './AIRunner.js';
 import { ConcurrencyLimiter } from './ConcurrencyLimiter.js';
 
 let globalLimiter = new ConcurrencyLimiter(AI_DEFAULTS.maxConcurrency);
 const moduleRequire = createRequire(import.meta.url);
-
-function canWriteDirectory(directory: string): boolean {
-  const probe = path.join(directory, `.iaf-codex-home-${process.pid}-${Date.now()}`);
-  try {
-    fs.writeFileSync(probe, '');
-    fs.unlinkSync(probe);
-    return true;
-  } catch {
-    try {
-      fs.unlinkSync(probe);
-    } catch {
-      // 探针文件不存在或当前身份无权删除，均表示目录不可写。
-    }
-    return false;
-  }
-}
-
-function prepareFallbackCodexHome(nativeHome: string): string {
-  const fallbackHome = ensureDir(path.join(resolveDataDir(), 'codex-home'));
-  const sourceConfig = path.join(nativeHome, 'config.toml');
-  const fallbackConfig = path.join(fallbackHome, 'config.toml');
-  try {
-    if (
-      fs.existsSync(sourceConfig) &&
-      (!fs.existsSync(fallbackConfig) ||
-        fs.statSync(sourceConfig).mtimeMs > fs.statSync(fallbackConfig).mtimeMs)
-    )
-      fs.copyFileSync(sourceConfig, fallbackConfig);
-  } catch {
-    // 没有可复制的本机配置时仍保留隔离目录，调用方可通过环境变量认证。
-  }
-  return fallbackHome;
-}
 
 export function configureAIConcurrency(limit: number): void {
   if (globalLimiter.limit === limit) return;
@@ -96,13 +61,7 @@ export class ManagedCodexRunner implements AIRunner {
 
   protected codexEnvironment(): NodeJS.ProcessEnv {
     const environment = { ...process.env };
-    const home = environment.USERPROFILE || environment.HOME;
-    if (!environment.HOME && home) environment.HOME = home;
-    if (!environment.CODEX_HOME && home) {
-      const nativeHome = path.join(home, '.codex');
-      if (!canWriteDirectory(nativeHome))
-        environment.CODEX_HOME = prepareFallbackCodexHome(nativeHome);
-    }
+    if (!environment.HOME && environment.USERPROFILE) environment.HOME = environment.USERPROFILE;
     return environment;
   }
 
@@ -120,10 +79,10 @@ export class ManagedCodexRunner implements AIRunner {
       release = await globalLimiter.acquire(controller.signal);
       controller.signal.throwIfAborted();
       // SDK 内部允许有限续时；外层监护保证 worker 卡死时也有确定的终止边界。
-      const maximum =
-        options.timeoutMs +
-        Math.max(0, options.timeoutMaxExtensions ?? 0) * (options.timeoutExtensionMs ?? 600000) +
-        10000;
+      const maximum = options.timeoutMs
+        + Math.max(0, options.timeoutMaxExtensions ?? 0)
+          * (options.timeoutExtensionMs ?? 600000)
+        + 10000;
       watchdog = setTimeout(() => {
         timedOut = true;
         controller.abort();

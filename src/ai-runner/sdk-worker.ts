@@ -19,26 +19,26 @@ process.on(
     started = true;
     runner = new CodexRunner(message.binary, message.model, message.windowsSandbox);
     const send = (value: unknown) => {
-    if (process.connected) process.send?.(value);
-  };
-  try {
-    const result = await runner.run({
-      ...message.options,
-      onStreamEvent: (event) => send({ type: 'event', event }),
-    });
-    send({ type: 'result', result });
-  } catch (error) {
-    send({
-      type: 'result',
-      result: {
-        success: false,
-        output: '',
-        exitCode: null,
-        errorMessage: (error as Error).message,
-      },
-    });
-  } finally {
-    // disconnect 等待 IPC 队列发送完毕；服务端仍等待该进程及后代退出。
-    if (process.connected) process.disconnect?.();
-  }
+      if (process.connected) process.send?.(value);
+    };
+    try {
+      const result = await runner.run({
+        ...message.options,
+        onStreamEvent: (event) => send({ type: 'event', event }),
+      });
+      send({ type: 'result', result });
+    } catch (error) {
+      send({
+        type: 'result',
+        result: {
+          success: false,
+          output: '',
+          exitCode: null,
+          errorMessage: (error as Error).message,
+        },
+      });
+    } finally {
+      // disconnect 等待 IPC 队列发送完毕；服务端仍等待该进程及后代退出。
+      if (process.connected) process.disconnect?.();
+    }
 });
