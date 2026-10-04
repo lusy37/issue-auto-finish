@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { writeJsonAtomicSync } from '../utils/atomicFile.js';
 import { logger as rootLogger } from '../logger.js';
 import type { ProjectKnowledge } from './ProjectKnowledge.js';
-import { KNOWLEDGE_DEFAULTS } from './KnowledgeDefaults.js';
 import { resolveDataDir } from '../paths.js';
 
 const logger = rootLogger.child('KnowledgeLoader');
@@ -37,8 +36,7 @@ const knowledgeSchema = z
         e2eDir: z.string().optional(),
         e2eTool: z.string().optional(),
         description: z.string().optional(),
-      })
-      .passthrough(),
+      }),
     toolchain: z
       .object({
         packageManager: z.string(),
@@ -49,24 +47,21 @@ const knowledgeSchema = z
         testCommand: z.string().optional(),
         testFilesCommand: z.string().optional(),
         dependencyCheckPath: z.string().optional(),
-      })
-      .passthrough(),
+      }),
     codeStyle: z
       .object({
         indentStyle: z.enum(['spaces', 'tabs']),
         indentSize: z.number(),
         lineWidth: z.number(),
         additionalRules: strings.optional(),
-      })
-      .passthrough(),
+      }),
     businessContext: z
       .object({
         purpose: z.string(),
         targetUsers: z.string(),
         domain: z.string(),
         coreFeatures: strings,
-      })
-      .passthrough(),
+      }),
     architecture: z
       .object({
         overview: z.string(),
@@ -75,79 +70,39 @@ const knowledgeSchema = z
         externalDependencies: strings,
         keyModules: z.array(
           z
-            .object({ name: z.string(), path: z.string(), responsibility: z.string() })
-            .passthrough(),
+            .object({ name: z.string(), path: z.string(), responsibility: z.string() }),
         ),
-      })
-      .passthrough(),
-    domainConcepts: z.array(z.object({ term: z.string(), definition: z.string() }).passthrough()),
+      }),
+  domainConcepts: z.array(z.object({ term: z.string(), definition: z.string() })),
     agentKnowledge: z
       .object({
         summary: z.string(),
         conventions: strings,
         claudeMdSummary: z.string().optional(),
         rules: z.array(
-          z.object({ filename: z.string(), purpose: z.string(), keyPoints: strings }).passthrough(),
+          z.object({ filename: z.string(), purpose: z.string(), keyPoints: strings }),
         ),
-      })
-      .passthrough(),
+      }),
     ruleTriggers: z.array(
-      z
-        .object({ filename: z.string(), keywords: strings, description: z.string().optional() })
-        .passthrough(),
+      z.object({ filename: z.string(), keywords: strings, description: z.string().optional() }),
     ),
     knownIssues: z.array(
-      z
-        .object({ description: z.string(), pattern: z.string().optional(), advice: z.string() })
-        .passthrough(),
+      z.object({ description: z.string(), pattern: z.string().optional(), advice: z.string() }),
     ),
-  })
-  .passthrough();
-
-function deepMerge(
-  defaults: Record<string, unknown>,
-  overrides: Record<string, unknown>,
-): Record<string, unknown> {
-  const result = { ...defaults };
-  for (const key of Object.keys(overrides)) {
-    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
-    const val = overrides[key];
-    if (val !== undefined) {
-      if (
-        val !== null &&
-        typeof val === 'object' &&
-        !Array.isArray(val) &&
-        typeof result[key] === 'object' &&
-        !Array.isArray(result[key])
-      ) {
-        result[key] = deepMerge(
-          result[key] as Record<string, unknown>,
-          val as Record<string, unknown>,
-        );
-      } else {
-        result[key] = val;
-      }
-    }
-  }
-  return result;
-}
+    custom: z.record(z.string(), z.unknown()).optional(),
+  });
 
 /**
- * 加载同一来源的项目知识，仅为缺失字段补齐默认值。
+ * 加载同一来源的完整项目知识；文件存在但结构不完整时直接失败。
  */
 export function loadKnowledge(explicitPath?: string): ProjectKnowledge | null {
   const source = resolveSource(explicitPath);
   const filePath = source.file;
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
-    const parsed = JSON.parse(raw) as Partial<ProjectKnowledge>;
+    const parsed = knowledgeSchema.parse(JSON.parse(raw)) as ProjectKnowledge;
     if (parsed.version !== 1) throw new Error('不支持的项目知识格式，只支持当前 version=1');
-    const merged = knowledgeSchema.parse(
-      deepMerge(
-        KNOWLEDGE_DEFAULTS as unknown as Record<string, unknown>,
-        parsed as unknown as Record<string, unknown>,
-      ),
-    ) as ProjectKnowledge;
+    const merged = parsed;
     activeSource = source;
     _cachedKnowledge = merged;
     logger.info('Knowledge loaded', {

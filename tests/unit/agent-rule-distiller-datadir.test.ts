@@ -20,6 +20,7 @@ describe('AgentRuleDistiller DATA_DIR integration', () => {
     const { AgentRuleDistiller } = await import('../../src/distill/AgentRuleDistiller.js');
 
     const mockKnowledgeStore = {
+      getAllEntries: vi.fn().mockReturnValue([]),
       list: vi.fn().mockReturnValue([]),
       get: vi.fn(),
       create: vi.fn(),
@@ -52,6 +53,7 @@ describe('AgentRuleDistiller DATA_DIR integration', () => {
     const { AgentRuleDistiller } = await import('../../src/distill/AgentRuleDistiller.js');
 
     const mockKnowledgeStore = {
+      getAllEntries: vi.fn().mockReturnValue([]),
       list: vi.fn().mockReturnValue([]),
       get: vi.fn(),
       create: vi.fn(),

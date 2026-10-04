@@ -27,7 +27,7 @@ describe('KnowledgeLoader DATA_DIR priority', () => {
 
     const knowledgeData = {
       ...structuredClone(KNOWLEDGE_DEFAULTS),
-      businessContext: { purpose: 'data-dir-test' },
+      businessContext: { ...structuredClone(KNOWLEDGE_DEFAULTS.businessContext), purpose: 'data-dir-test' },
       generatedAt: new Date().toISOString(),
       repoPath: '/test',
     };
@@ -53,7 +53,7 @@ describe('KnowledgeLoader DATA_DIR priority', () => {
     // Write to DATA_DIR
     const dataDirKnowledge = {
       ...structuredClone(KNOWLEDGE_DEFAULTS),
-      businessContext: { purpose: 'from-data-dir' },
+      businessContext: { ...structuredClone(KNOWLEDGE_DEFAULTS.businessContext), purpose: 'from-data-dir' },
       generatedAt: new Date().toISOString(),
       repoPath: '/test',
     };

@@ -32,7 +32,18 @@ describe('KnowledgeLoader', () => {
 
   function writeKnowledge(data: Partial<ProjectKnowledge>): string {
     const filePath = path.join(tmpDir, 'knowledge.json');
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+    const base = structuredClone(KNOWLEDGE_DEFAULTS);
+    const value = {
+      ...base,
+      ...data,
+      structure: { ...base.structure, ...data.structure },
+      toolchain: { ...base.toolchain, ...data.toolchain },
+      codeStyle: { ...base.codeStyle, ...data.codeStyle },
+      businessContext: { ...base.businessContext, ...data.businessContext },
+      architecture: { ...base.architecture, ...data.architecture },
+      agentKnowledge: { ...base.agentKnowledge, ...data.agentKnowledge },
+    };
+    fs.writeFileSync(filePath, JSON.stringify(value, null, 2), 'utf-8');
     return filePath;
   }
 
@@ -51,19 +62,14 @@ describe('KnowledgeLoader', () => {
       expect(result!.toolchain.installCommand).toBe('pip install -r requirements.txt');
     });
 
-    it('merges with defaults for missing fields', () => {
-      const filePath = writeKnowledge({
+    it('文件不完整时拒绝加载，不在加载器内深合并', () => {
+      const filePath = path.join(tmpDir, 'knowledge.json');
+      fs.writeFileSync(filePath, JSON.stringify({
         version: 1,
         structure: { primaryLanguage: 'Go', frameworks: [], isMonorepo: false, hasFrontendBackendSplit: false },
-      });
+      }), 'utf-8');
 
-      const result = loadKnowledge(filePath);
-      expect(result).not.toBeNull();
-      // Should use value from file
-      expect(result!.structure.primaryLanguage).toBe('Go');
-      // Should fall back to defaults for missing fields
-      expect(result!.codeStyle.indentSize).toBe(KNOWLEDGE_DEFAULTS.codeStyle.indentSize);
-      expect(result!.toolchain.installCommand).toBe(KNOWLEDGE_DEFAULTS.toolchain.installCommand);
+      expect(() => loadKnowledge(filePath)).toThrow('无法读取项目知识');
     });
 
     it('显式知识路径不存在时给出明确错误', () => {
@@ -115,6 +121,7 @@ describe('KnowledgeLoader', () => {
 
       // Modify file
       fs.writeFileSync(filePath, JSON.stringify({
+        ...structuredClone(KNOWLEDGE_DEFAULTS),
         version: 1,
         structure: { primaryLanguage: 'Kotlin', frameworks: ['Ktor'], isMonorepo: false, hasFrontendBackendSplit: false },
       }), 'utf-8');

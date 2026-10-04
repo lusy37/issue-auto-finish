@@ -35,6 +35,7 @@ function createMatureMemory(knowledgeStore: KnowledgeStore, id: string): void {
   };
 
   knowledgeStore.create({
+    id,
     type: 'memory',
     title: memory.title,
     content: JSON.stringify(memory),
@@ -154,6 +155,7 @@ describe('AgentRuleDistiller', () => {
       updatedAt: '2025-01-01T00:00:00.000Z',
     };
     knowledgeStore.create({
+      id: memory.id,
       type: 'memory',
       title: memory.title,
       content: JSON.stringify(memory),

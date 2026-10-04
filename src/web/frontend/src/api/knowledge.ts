@@ -10,7 +10,17 @@ export interface KnowledgeEntry {
   tags: string[];
   createdAt: string;
   updatedAt: string;
+  memory?: { confidence: number; evidence: string[] };
+  deprecated?: boolean;
 }
+
+export const knowledgeLabels: Record<KnowledgeEntryType, string> = {
+  'project-meta': '项目分析',
+  custom: '自定义知识',
+  diary: '执行日记',
+  memory: '经验记忆',
+  'agent-rule': 'Agent 规则',
+};
 
 export interface ProjectProfile {
   description: string;
@@ -82,8 +92,11 @@ export function deleteKnowledge(id: string): Promise<{ success: boolean }> {
   return json(`/api/knowledge/${encodeURIComponent(id)}`, 'DELETE');
 }
 
-export function setRuleEnabled(id: string, enabled: boolean): Promise<KnowledgeEntry> {
-  return json(`/api/knowledge/${encodeURIComponent(id)}/enabled`, 'PUT', { enabled });
+export async function setRuleEnabled(id: string, enabled: boolean): Promise<KnowledgeEntry> {
+  const entry = await json<KnowledgeEntry>(
+    `/api/knowledge/${encodeURIComponent(id)}/enabled`, 'PUT', { enabled },
+  );
+  return entry;
 }
 
 export async function fetchDistillStatus(): Promise<DistillStatus> {

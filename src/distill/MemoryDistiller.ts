@@ -135,18 +135,9 @@ export class MemoryDistiller {
 
   /** 从 KnowledgeStore 加载现有 memory 条目 */
   private loadExistingMemories(): MemoryEntry[] {
-    const entries = this.knowledgeStore.list('memory');
-    return entries
-      .map((meta) => {
-        const full = this.knowledgeStore.get(meta.id);
-        if (!full) return null;
-        try {
-          return JSON.parse(full.content) as MemoryEntry;
-        } catch {
-          return null;
-        }
-      })
-      .filter((m): m is MemoryEntry => m !== null);
+    return this.knowledgeStore.getAllEntries()
+      .filter((entry) => entry.type === 'memory')
+      .map((entry) => JSON.parse(entry.content) as MemoryEntry);
   }
 
   /** 解析 AI 输出的 actions */
@@ -198,6 +189,7 @@ export class MemoryDistiller {
     };
 
     this.knowledgeStore.create({
+      id: memoryEntry.id,
       type: 'memory',
       title: action.title,
       content: JSON.stringify(memoryEntry),
@@ -239,23 +231,7 @@ export class MemoryDistiller {
     existing.version++;
     existing.updatedAt = new Date().toISOString();
 
-    // 通过 KnowledgeStore 更新（查找对应的 knowledge entry）
-    const knEntries = this.knowledgeStore.list('memory');
-    for (const meta of knEntries) {
-      const full = this.knowledgeStore.get(meta.id);
-      if (!full) continue;
-      try {
-        const parsed = JSON.parse(full.content) as MemoryEntry;
-        if (parsed.id === action.memoryId) {
-          this.knowledgeStore.update(meta.id, {
-            content: JSON.stringify(existing),
-          });
-          break;
-        }
-      } catch {
-        /* skip */
-      }
-    }
+    this.knowledgeStore.update(existing.id, { content: JSON.stringify(existing) });
 
     this.versionStore.append({
       entryId: existing.id,
@@ -304,6 +280,7 @@ export class MemoryDistiller {
     };
 
     this.knowledgeStore.create({
+      id: newMemory.id,
       type: 'memory',
       title: action.title,
       content: JSON.stringify(newMemory),

@@ -55,15 +55,23 @@ export class AgentRuleDistiller {
    * @returns 处理的 memory 数和创建/更新的 rule 数。
    */
   async distill(): Promise<{ processedMemories: number; actions: number }> {
-    // 筛选成熟的 memory
-    const matureMemories = this.getMatureMemories();
+    const entries = this.knowledgeStore.getAllEntries();
+    const memories = entries
+      .filter((entry) => entry.type === 'memory')
+      .map((entry) => JSON.parse(entry.content) as MemoryEntry);
+    const superseded = new Set(memories.flatMap((memory) => memory.supersedes ?? []));
+    const matureMemories = memories.filter((memory) => (
+      memory.confidence >= this.confidenceThreshold
+      && !memory.promotedToRule
+      && !superseded.has(memory.id)
+    ));
     if (matureMemories.length === 0) {
       logger.info('No mature memories ready for rule distillation');
       return { processedMemories: 0, actions: 0 };
     }
-
-    // 获取现有 rules
-    const existingRules = this.loadExistingRules();
+    const existingRules = entries
+      .filter((entry) => entry.type === 'agent-rule')
+      .map((entry) => JSON.parse(entry.content) as AgentRuleEntry);
 
     logger.info('Starting rule distillation', {
       matureMemories: matureMemories.length,
@@ -122,57 +130,6 @@ export class AgentRuleDistiller {
     return { processedMemories: matureMemories.length, actions: actionCount };
   }
 
-  /** 筛选成熟的 memory：confidence >= threshold, 未被 superseded, 未提升为 rule */
-  private getMatureMemories(): MemoryEntry[] {
-    const entries = this.knowledgeStore.list('memory');
-    const memories: MemoryEntry[] = [];
-
-    for (const meta of entries) {
-      const full = this.knowledgeStore.get(meta.id);
-      if (!full) continue;
-      try {
-        const memory = JSON.parse(full.content) as MemoryEntry;
-        if (memory.confidence >= this.confidenceThreshold && !memory.promotedToRule) {
-          // 检查是否被其他 memory superseded
-          const isSuperseded = entries.some((e) => {
-            if (e.id === meta.id) return false;
-            const f = this.knowledgeStore.get(e.id);
-            if (!f) return false;
-            try {
-              const m = JSON.parse(f.content) as MemoryEntry;
-              return m.supersedes === memory.id;
-            } catch {
-              return false;
-            }
-          });
-          if (!isSuperseded) {
-            memories.push(memory);
-          }
-        }
-      } catch {
-        /* skip */
-      }
-    }
-
-    return memories;
-  }
-
-  /** 加载现有 agent-rule 条目 */
-  private loadExistingRules(): AgentRuleEntry[] {
-    const entries = this.knowledgeStore.list('agent-rule');
-    return entries
-      .map((meta) => {
-        const full = this.knowledgeStore.get(meta.id);
-        if (!full) return null;
-        try {
-          return JSON.parse(full.content) as AgentRuleEntry;
-        } catch {
-          return null;
-        }
-      })
-      .filter((r): r is AgentRuleEntry => r !== null);
-  }
-
   /** 解析 AI 输出 */
   private parseActions(output: string): RuleDistillAction[] {
     try {
@@ -225,6 +182,7 @@ export class AgentRuleDistiller {
 
     // 存储到 KnowledgeStore
     this.knowledgeStore.create({
+      id: ruleEntry.id,
       type: 'agent-rule',
       title: action.title,
       content: JSON.stringify(ruleEntry),
@@ -265,23 +223,7 @@ export class AgentRuleDistiller {
     existing.version++;
     existing.updatedAt = new Date().toISOString();
 
-    // 更新 KnowledgeStore
-    const knEntries = this.knowledgeStore.list('agent-rule');
-    for (const meta of knEntries) {
-      const full = this.knowledgeStore.get(meta.id);
-      if (!full) continue;
-      try {
-        const parsed = JSON.parse(full.content) as AgentRuleEntry;
-        if (parsed.id === action.ruleId) {
-          this.knowledgeStore.update(meta.id, {
-            content: JSON.stringify(existing),
-          });
-          break;
-        }
-      } catch {
-        /* skip */
-      }
-    }
+    this.knowledgeStore.update(existing.id, { content: JSON.stringify(existing) });
 
     // 同步 Markdown 文件
     this.writeMarkdownRule(existing);
@@ -312,23 +254,7 @@ export class AgentRuleDistiller {
     existing.deprecated = true;
     existing.updatedAt = new Date().toISOString();
 
-    // 更新 KnowledgeStore
-    const knEntries = this.knowledgeStore.list('agent-rule');
-    for (const meta of knEntries) {
-      const full = this.knowledgeStore.get(meta.id);
-      if (!full) continue;
-      try {
-        const parsed = JSON.parse(full.content) as AgentRuleEntry;
-        if (parsed.id === action.ruleId) {
-          this.knowledgeStore.update(meta.id, {
-            content: JSON.stringify(existing),
-          });
-          break;
-        }
-      } catch {
-        /* skip */
-      }
-    }
+    this.knowledgeStore.update(existing.id, { content: JSON.stringify(existing) });
 
     // 删除 Markdown 文件
     this.removeMarkdownRule(existing.id);
@@ -385,21 +311,14 @@ export class AgentRuleDistiller {
 
   /** 标记来源 memory 为已提升为规则 */
   private markMemoriesPromoted(memoryIds: string[]): void {
-    const knEntries = this.knowledgeStore.list('memory');
-    for (const meta of knEntries) {
-      const full = this.knowledgeStore.get(meta.id);
-      if (!full) continue;
-      try {
-        const memory = JSON.parse(full.content) as MemoryEntry;
-        if (memoryIds.includes(memory.id) && !memory.promotedToRule) {
-          memory.promotedToRule = true;
-          memory.updatedAt = new Date().toISOString();
-          this.knowledgeStore.update(meta.id, {
-            content: JSON.stringify(memory),
-          });
-        }
-      } catch {
-        /* skip */
+    for (const id of memoryIds) {
+      const entry = this.knowledgeStore.get(id);
+      if (!entry) continue;
+      const memory = JSON.parse(entry.content) as MemoryEntry;
+      if (!memory.promotedToRule) {
+        memory.promotedToRule = true;
+        memory.updatedAt = new Date().toISOString();
+        this.knowledgeStore.update(id, { content: JSON.stringify(memory) });
       }
     }
   }

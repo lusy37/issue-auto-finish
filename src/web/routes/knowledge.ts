@@ -10,6 +10,30 @@ const contentSchema = z.object({
   content: z.string().min(1).max(100000),
   tags: z.array(z.string()).optional(),
 });
+
+const memoryContentSchema = z.object({
+  content: z.string(),
+  confidence: z.number(),
+  evidence: z.array(z.string()),
+}).strict();
+const ruleContentSchema = z.object({
+  content: z.string(),
+  deprecated: z.boolean(),
+}).strict();
+
+function toApiEntry(entry: ReturnType<KnowledgeStore['get']>) {
+  if (!entry || (entry.type !== 'memory' && entry.type !== 'agent-rule')) return entry;
+  if (entry.type === 'memory') {
+    const parsed = memoryContentSchema.parse(JSON.parse(entry.content));
+    return {
+      ...entry,
+      content: parsed.content,
+      memory: { confidence: parsed.confidence, evidence: parsed.evidence },
+    };
+  }
+  const parsed = ruleContentSchema.parse(JSON.parse(entry.content));
+  return { ...entry, content: parsed.content, deprecated: parsed.deprecated };
+}
 export function createKnowledgeRouter(store: KnowledgeStore) {
   const router = Router();
   router.get('/api/project-profile', (_req, res) => res.json(readProjectProfile()));
@@ -21,11 +45,14 @@ export function createKnowledgeRouter(store: KnowledgeStore) {
     }
   });
   router.get('/api/knowledge', (_req, res) =>
-    res.json({ entries: store.getAllEntries(), stats: store.getStats() }),
+    res.json({
+      entries: store.getAllEntries().map((entry) => toApiEntry(entry)),
+      stats: store.getStats(),
+    }),
   );
   router.post('/api/knowledge', (req, res, next) => {
     try {
-      res.json(store.create({ ...contentSchema.parse(req.body), type: 'custom' }));
+      res.json(toApiEntry(store.create({ ...contentSchema.parse(req.body), type: 'custom' })));
     } catch (e) {
       next(e);
     }
@@ -37,7 +64,7 @@ export function createKnowledgeRouter(store: KnowledgeStore) {
         res.sendStatus(404);
         return;
       }
-      res.json(item);
+      res.json(toApiEntry(item));
     } catch (e) {
       next(e);
     }
@@ -51,7 +78,7 @@ export function createKnowledgeRouter(store: KnowledgeStore) {
       }
       const tags = item.tags.filter((t) => t !== 'enabled');
       if (req.body.enabled === true) tags.push('enabled');
-      res.json(store.update(item.id, { tags }));
+      res.json(toApiEntry(store.update(item.id, { tags })));
     } catch (e) {
       next(e);
     }

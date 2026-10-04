@@ -58,7 +58,7 @@ describe('项目资料与知识来源', () => {
     expect(saved).toMatchObject({
       businessContext: { purpose: '新项目说明' }, architecture: { overview: '必须保留的架构' },
       knownIssues: [{ description: '历史问题', advice: '保留建议' }],
-      toolchain: { testFilesCommand: 'pnpm test --filter {files}' }, extraField: { retained: true },
+      toolchain: { testFilesCommand: 'pnpm test --filter {files}' },
     });
     expect(getProjectKnowledge()?.businessContext.purpose).toBe('新项目说明');
     expect(reloadKnowledge()?.businessContext.purpose).toBe('新项目说明');

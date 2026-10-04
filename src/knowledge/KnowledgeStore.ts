@@ -63,6 +63,7 @@ export class KnowledgeStore {
   }
 
   create(input: {
+    id?: string;
     type: KnowledgeEntryType;
     title: string;
     content: string;
@@ -72,8 +73,12 @@ export class KnowledgeStore {
     this.ensureDirs();
     const idx = structuredClone(this.loadIndex());
 
+    const id = input.id ?? randomUUID();
+    if (!/^[a-zA-Z0-9_-]+$/.test(id) || idx.entries.some((entry) => entry.id === id)) {
+      throw new Error(`知识条目 ID 无效或已存在：${id}`);
+    }
     const entry: KnowledgeEntry = {
-      id: randomUUID(),
+      id,
       type: input.type,
       title: input.title,
       content: input.content,
