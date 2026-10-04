@@ -286,7 +286,7 @@ flowchart LR
 
 1. [src/orchestrator/DagPhaseRunner.ts](../src/orchestrator/DagPhaseRunner.ts)：构建使用任务 DAG 或集成修复，并校验候选提交。
 2. [src/phases/VerifyPhase.ts](../src/phases/VerifyPhase.ts)：报告格式检查和 `requestRetryFrom('build')`。
-3. [src/verify/VerifyReportParser.ts](../src/verify/VerifyReportParser.ts)：Lint、Build、Test 的完整结果和总结判定。
+3. [src/verify/VerifyResultCodec.ts](../src/verify/VerifyResultCodec.ts)：验证 Agent JSON 契约、Lint/Build/Test 结构化结果和服务端总结判定。
 4. [src/dag/TaskGraphExecutor.ts](../src/dag/TaskGraphExecutor.ts)：任务完成依据成功与合并凭证，不依据计划 checkbox。
 5. [src/phases/UatPhase.ts](../src/phases/UatPhase.ts)：真实 Playwright 运行、有效 run ID 和报告。
 6. [src/e2e/PlaywrightRunner.ts](../src/e2e/PlaywrightRunner.ts)：浏览器进程、退出码、报告和取消。
@@ -299,7 +299,7 @@ flowchart LR
 - 为什么 `candidateCommit` 必须与 `verify.commit` 一致，并且仅在本轮包含 UAT 时才要求它与 `uat.commit` 一致？
 - 服务重启后，预览端口为什么需要重新核对或清理？
 
-**验证：** [tests/unit/verify-report-parser.test.ts](../tests/unit/verify-report-parser.test.ts)、[tests/unit/phases/verify-phase-scenarios.test.ts](../tests/unit/phases/verify-phase-scenarios.test.ts)、[tests/unit/uat-repair.test.ts](../tests/unit/uat-repair.test.ts)、[tests/integration/configured-phase-loop.test.ts](../tests/integration/configured-phase-loop.test.ts)、[tests/integration/windows-preview.test.ts](../tests/integration/windows-preview.test.ts)。
+**验证：** [tests/unit/phases/verify-phase-scenarios.test.ts](../tests/unit/phases/verify-phase-scenarios.test.ts)、[tests/unit/uat-repair.test.ts](../tests/unit/uat-repair.test.ts)、[tests/integration/configured-phase-loop.test.ts](../tests/integration/configured-phase-loop.test.ts)、[tests/integration/windows-preview.test.ts](../tests/integration/windows-preview.test.ts)。
 
 ### 模块 9：交付与外部幂等性
 
@@ -433,7 +433,7 @@ record
 
 ### 练习 4：验证失败回边
 
-使用失败的 verify 报告，追踪 `VerifyReportParser.parse()` 返回的失败原因如何进入 `requestRetryFrom`，再进入 `IssueWorkflow.runPhase()` 的 `repairRounds` 和下一轮 build prompt。
+使用失败的 verify JSON，追踪 `VerifyResultCodec.evaluateVerifyResult()` 返回的失败原因如何进入 `requestRetryFrom`，再进入 `IssueWorkflow.runPhase()` 的 `repairRounds` 和下一轮 build prompt。
 
 ### 练习 5：人为制造外部结果未知
 
@@ -473,7 +473,7 @@ npm run test:codex
 
 ### 测试阅读顺序
 
-1. 先读单元测试中的最小契约：`verify-report-parser`、`phase-factory`、`ai-runner-registry`。
+1. 先读单元测试中的最小契约：`verify-phase-scenarios`、`phase-factory`、`ai-runner-registry`。
 2. 再读 `dag-state`，理解事务、身份、额度和计划完整性。
 3. 再读 `langgraph-native`，理解跨重启的流程事实。
 4. 再读 `dag-crash-recovery`、`dag-delivery` 和 `configured-phase-loop`，理解崩溃恢复、外部结果未知和 verify/UAT 修复回边不是简单抛异常。

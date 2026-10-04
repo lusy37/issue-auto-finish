@@ -7,7 +7,7 @@
 | 标识 | 文件名 | 用途与事实来源 |
 | --- | --- | --- |
 | plan | `01-plan.md` | 实施计划的只读展示；真实运行读取不可变 `plans/<revision>.json` 并渲染 |
-| verifyReport | `02-verify-report.md` | 本次 Verify 输出，由服务端保存 |
+| verifyReport | `02-verify-report.md` | 本次 Verify JSON 中的 `reportMarkdown` 展示副本，由服务端在契约校验通过后保存 |
 | uatReport | `03-uat-report.md` | 浏览器验收报告，由服务端根据本次 Playwright 结果生成 |
 | reviewFeedback | `review-feedback.md` | 审核反馈展示，从聚合记录的 reviewHistory 渲染 |
 | reviewHistory | `review-history.json` | 审核历史展示，读取同一聚合记录，保留完整计划快照 |
@@ -18,7 +18,7 @@
 
 [PlanPersistence](../src/persistence/PlanPersistence.ts) 的 `planDir` 表示产物目录，`baseDir` 表示项目执行工作目录。`artifactPath(filename)` 只接受单个文件名。真实运行构造 PlanPersistence 时传入 tracker 和同一 dataDir。
 
-计划和审核历史的权威内容分别在不可变计划文件和 Issue 聚合记录中。即使工作树不存在，API 仍可生成展示内容；不读取审核历史或反馈的文件副本作为后备。阶段发布直接接收产物元数据，无需构造阶段执行器。UAT 仍依据本次退出码和有效报告，Markdown 文件不是通过凭证。
+计划和审核历史的权威内容分别在不可变计划文件和 Issue 聚合记录中。Verify 的权威判定来自本次 Agent 返回的 `iaf-mini/verify/v1` JSON，服务端只依据 Lint、Build、Test 三项结构化结果推进状态；Markdown 文件只用于前端展示。即使工作树不存在，API 仍可生成展示内容；不读取审核历史或反馈的文件副本作为后备。阶段发布直接接收产物元数据，无需构造阶段执行器。UAT 仍依据本次退出码和有效报告，Markdown 文件不是通过凭证。
 
 页面元数据不可用时，使用共享产物定义生成只读列表，并按本轮阶段定义决定是否展示 UAT 报告。国际化文案由各语言字典提供。
 
@@ -28,4 +28,4 @@
 
 依照用户要求，不增加历史数据兼容、特殊处理或自动迁移。本次未修改运行格式号。其他待实施事项见 [修复计划](langgraph-native-repair-plan.md)。
 
-验收结果：`npm run typecheck`、后端构建及前端构建通过；完整保留测试集 104 个文件、871 项全部通过。完整回归在正常 Windows 权限下运行，并设置 `IAF_TEST_BROWSER_CHANNEL=chrome` 使用本机 Chrome；覆盖真实 Git、浏览器及进程树清理，AI 和 GitHub 使用模拟实现，未调用真实 Codex 或写入远程平台。
+验收结果：`npm run typecheck`、`npm run lint`、后端构建及前端构建通过；Verify 契约和阶段回归全部通过。完整 `npm test` 共执行 111 个测试文件，107 个文件通过；剩余 4 个文件的 6 个失败来自当前环境缺少 Playwright Chromium、Windows 进程树清理超时及目标项目运行时差异，未涉及 Verify 契约。AI 和 GitHub 使用模拟实现，未调用真实 Codex 或写入远程平台。

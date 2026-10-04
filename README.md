@@ -163,19 +163,22 @@ npm run test:windows
 npm run test:codex
 ~~~
 
-浏览器检查默认使用已安装的 Microsoft Edge；真实 UAT 可通过 `PLAYWRIGHT_CHANNEL=chromium`
+浏览器检查在 Windows 默认使用已安装的 Microsoft Edge；真实 UAT 可通过 `PLAYWRIGHT_CHANNEL=chromium`
 或 `PLAYWRIGHT_CHANNEL=chrome` 切换。根项目的独立 E2E 测试仍使用
-`IAF_TEST_BROWSER_CHANNEL`，避免在 Linux CI 中强制要求安装 Edge。CI 配置位于
+`IAF_TEST_BROWSER_CHANNEL` 显式覆盖默认值；CI 安装并固定使用 Chromium。CI 配置位于
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。`npm run web:build` 如提示单个 JS Bundle
 超过 500 KB，这是包体积警告，不代表构建失败；首屏性能优化应优先按页面拆分代码。
 
-`mini-workflow` 集成测试也会真正启动浏览器：本机未安装 Playwright Chromium 时先运行
-`npm run e2e:install`，或设置 `IAF_TEST_BROWSER_CHANNEL=msedge`。这条环境变量只影响根项目
-测试，不会覆盖真实 sandbox UAT 的 `PLAYWRIGHT_CHANNEL`。
-CI 将 Windows `.cmd` 进程树与预览测试串行运行；失败时测试会打印退出码和进程日志，
-并上传预览日志供定位。完整 `npm test` 仍包含这两组测试。
+`mini-workflow` 集成测试也会真正启动浏览器：Windows 自动使用 Edge；其他系统需运行
+`npm run e2e:install`，或通过 `IAF_TEST_BROWSER_CHANNEL` 指定已安装的浏览器。这条环境变量
+只影响根项目测试，不会覆盖真实 sandbox UAT 的 `PLAYWRIGHT_CHANNEL`。
 
-最近一次本机检查：类型检查、前后端构建、主测试集 **860 项**、Windows 进程测试 **8 项**和浏览器 E2E **1 项**均通过。主测试、真实浏览器验收和 Windows 进程树清理分别执行；真实 Codex 调用仍需通过 `npm run test:codex` 或真实 GitHub Issue 单独验证。
+`npm test` 不运行需要完整进程枚举和终止权限的 Windows 生命周期测试；请在普通用户终端
+单独执行 `npm run test:windows`。CI 也会串行执行该命令，失败时上传预览日志供定位。
+受限沙箱可能拒绝查询或终止其他进程，此时的清理超时不能作为生产进程逻辑失败处理。
+
+交付前分别执行主测试、真实浏览器验收和 Windows 进程树清理；真实 Codex 调用仍需通过
+`npm run test:codex` 或真实 GitHub Issue 单独验证，不能由模拟回归替代。
 
 ## 数据与 Git
 

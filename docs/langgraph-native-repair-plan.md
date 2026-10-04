@@ -26,7 +26,7 @@
 | --- | --- | --- | --- |
 | A1 · P1 | [BasePhase](../src/phases/BasePhase.ts) 传递完整超时参数；[DagPhaseRunner](../src/orchestrator/DagPhaseRunner.ts) 和 [TaskGraphExecutor](../src/dag/TaskGraphExecutor.ts) 的任务、冲突修复、集成修复、UAT 准备调用只传总超时。空闲超时和延长策略在这些路径中没有同等生效。 | 抽取类型化 AI 调用选项构造函数，显式区分用途、读写模式和超时策略；统一传给受管理 runner。草稿生成、连接检查等可以保留用途明确的独立总超时。 | 模拟捕获每种真实入口的选项，验证完整传参；覆盖取消、空闲超时、总超时与有限延期，worker 和全局额度机制继续生效。 |
 | A2 · P1 | [MemoryDistiller](../src/distill/MemoryDistiller.ts)、[AgentRuleDistiller](../src/distill/AgentRuleDistiller.ts) 没有设置 `mode`；[CodexRunner](../src/ai-runner/CodexRunner.ts) 对非 `plan` 模式选择 `workspace-write`。这是可写权限暴露，尚无证据表明已误改仓库。 | 两条蒸馏调用显式使用只读策略，先映射到现有 `mode: 'plan'`。AI 返回建议动作，由服务端验证后保存经验、规则。与 A1 共用调用策略，但可先做最小修复。 | 两类蒸馏的 runner 参数均为只读；失败、取消、无有效动作不会产生模型直接写仓库的路径；现有服务端保存功能通过回归。 |
-| A3 · P1 | [VerifyReportParser](../src/verify/VerifyReportParser.ts) 仍将 `Todolist: 0/1` 计入失败；[config-schema](../src/config-schema.ts) 中待办检查开关没有对应业务消费。原生流程已使用不可变计划和任务合并凭证。 | 删除以计划勾选完成度判定验证成功的旧规则，同步整理 Verify 结果类型、日志、有效提示词和无效配置。任务是否完成由 DAG 凭证约束；检查命令结果仍由 Verify 契约判定。 | Lint/Build/Test 明确通过且只存在未勾选描述时，不再仅因勾选状态失败；任一检查失败、结果缺失或报告无效仍不能通过。不可变计划未被要求改写；UAT 仍依据本次退出码和有效报告。 |
+| A3 · P1 | 旧 Verify Markdown 解析器会把格式差异误判为缺少结果，并将展示文本与状态判定耦合。原生流程已使用不可变计划和任务合并凭证。 | 删除 Markdown 解析器，要求 Agent 返回 `iaf-mini/verify/v1` JSON；服务端只根据 Lint/Build/Test 结构化字段判定，`reportMarkdown` 仅用于前端展示。 | Lint/Build/Test 明确通过且只存在展示文本差异时可以通过；任一检查失败、结果缺失或 JSON 无效仍不能通过。不可变计划未被要求改写；UAT 仍依据本次退出码和有效报告。 |
 | B1 · P2 | [usePipeline](../src/web/frontend/src/composables/usePipeline.ts) 在元数据加载失败后保留 `loadPromise`，后续调用无法重新请求；降级逻辑把 `01-plan.md` 标为可编辑。服务端仍拒绝写计划，问题表现为错误入口。 | 成功缓存数据，失败释放请求状态；并发加载合并为同一请求。未取得编辑权限元数据时默认只读。阶段显示优先使用当前 Issue 固化的 `workflow.definition.phaseIds`，缺失时使用明确降级状态。 | 首次失败后再次加载会请求并可恢复；并发加载不重复请求；元数据不可用时计划无编辑入口；关闭 UAT 的 Issue 不被默认列表补出一个待执行 UAT。 |
 | B2 · P2 | [DeliverIssueStep](../src/orchestrator/steps/DeliverIssueStep.ts) 使用 `startsWith('auto-finish')` 过滤标签，会误删 `auto-finish-tools` 等无关标签；其他状态更新位置的匹配口径不统一。 | 定义工作台标签名称及归属判断：仅处理精确根标签 `auto-finish` 和约定的 `auto-finish:` 命名空间。初始化、失败和交付共用该规则。 | 用模拟平台验证原有状态标签被正确替换；`auto-finish-tools`、`bug` 等标签保留；整个回归过程不写真实 GitHub。 |
 
@@ -143,7 +143,7 @@ E3 增加的 tests 类型检查同时加入验证。模拟端到端验收与真�
 | 条目 | 已实施行为 | 主要验证归属 |
 | --- | --- | --- |
 | A1、A2 | CallPolicy 统一完整超时、延期、模型和读写选项；两条蒸馏只读 | build-phase-scenarios、dag-execution、distill 测试 |
-| A3 | Verify 不再依赖 checkbox；Lint/Build/Test 任一缺失或失败均不通过 | verify-report-parser、verify-phase-scenarios |
+| A3 | Verify 使用 `iaf-mini/verify/v1` JSON；Lint/Build/Test 任一缺失或失败均不通过，Markdown 仅作展示 | VerifyResultCodec、verify-phase-scenarios |
 | B1、B2 | 元数据失败后可重新加载且并发合并；固化阶段优先；精确标签归属 | frontend-graph-state、frontend-artifacts、repair-contracts、dag-delivery |
 | C1、C2、C5 | 分领域格式、任务/冲突额度、递归上界与标识解析统一 | Codec、current-state-contract、repair-contracts、dag-execution |
 | C3 | 提示词纯函数与共用 JSON 提取；驳回恢复会话也携带完整旧计划 | repair-contracts、plan-phase、prompt-templates、distill |
