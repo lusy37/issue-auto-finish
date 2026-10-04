@@ -5,6 +5,8 @@ on:
 jobs:
   windows:
     runs-on: windows-latest
+    env:
+      IAF_TEST_BROWSER_CHANNEL: chromium
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,10 +18,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run web:build
-      - run: >-
-          npm test -- --maxWorkers=2
-          --exclude tests/integration/process-lifecycle.test.ts
-          --exclude tests/integration/windows-preview.test.ts
+      - run: npm test
       - run: npm run test:e2e
       - run: npm run test:windows
       - if: failure()
