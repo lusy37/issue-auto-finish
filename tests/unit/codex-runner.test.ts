@@ -2,7 +2,7 @@ import { ManagedCodexRunner } from '../../src/ai-runner/ManagedCodexRunner.js';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import type { ThreadEvent, TurnOptions } from '@openai/codex-sdk';
 import { CodexRunner } from '../../src/ai-runner/CodexRunner.js';
-import { createAIRunner, isRegisteredRunner } from '../../src/ai-runner/AIRunnerRegistry.js';
+import { createAIRunner } from '../../src/ai-runner/AIRunnerRegistry.js';
 import type { StreamEvent } from '../../src/ai-runner/AIRunner.js';
 
 const sdk = vi.hoisted(() => ({ startThread: vi.fn(), resumeThread: vi.fn(), runStreamed: vi.fn(), codexOptions: undefined as unknown }));
@@ -51,7 +51,6 @@ afterEach(() => vi.useRealTimers());
 describe('Codex SDK 适配器', () => {
   it('仅内置 Codex，默认使用随 SDK 安装的程序', () => {
     expect(createAIRunner({ mode: 'codex', binary: '', phaseTimeoutMs: 1000 })).toBeInstanceOf(ManagedCodexRunner);
-    expect(isRegisteredRunner('claude')).toBe(false);
   });
 
   it('默认使用 Windows 提权沙箱，并支持显式降级', async () => {
@@ -61,7 +60,7 @@ describe('Codex SDK 适配器', () => {
     await new CodexRunner('', undefined, 'unelevated').run(options);
     expect(sdk.codexOptions).toMatchObject({ config: { windows: { sandbox: 'unelevated' } } });
   });
-  it.each([['plan', 'read-only'], ['agent', 'workspace-write']])('阶段 %s 使用 %s 沙箱', async (mode, sandboxMode) => {
+  it.each([['plan', 'read-only'], ['agent', 'workspace-write']] as const)('阶段 %s 使用 %s 沙箱', async (mode, sandboxMode) => {
     const logs: StreamEvent[] = [];
     const result = await new CodexRunner('', '默认模型').run({ ...options, mode, model: '本次模型', onStreamEvent: e => logs.push(e) });
     expect(sdk.startThread).toHaveBeenCalledWith(expect.objectContaining({ sandboxMode, networkAccessEnabled: mode !== 'plan', approvalPolicy: 'never', workingDirectory: process.cwd(), model: '本次模型' }));

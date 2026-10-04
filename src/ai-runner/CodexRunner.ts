@@ -119,7 +119,10 @@ export class CodexRunner implements AIRunner {
         workingDirectory: path.resolve(options.workDir),
         sandboxMode: options.mode === 'plan' ? 'read-only' : 'workspace-write',
         // 构建阶段需要下载依赖；文件写入范围仍由工作区沙箱限制。
-        networkAccessEnabled: options.mode !== 'plan',
+        networkAccessEnabled: options.purpose === 'uat-visual-review' ? false : options.mode !== 'plan',
+        webSearchMode: options.purpose === 'uat-visual-review' ? 'disabled' : undefined,
+        // 视觉复核使用只存放截图的临时目录，该目录有意不初始化 Git。
+        skipGitRepoCheck: options.purpose === 'uat-visual-review',
         approvalPolicy: 'never',
         model: options.model || this.model || undefined,
       };
@@ -128,7 +131,16 @@ export class CodexRunner implements AIRunner {
         : client.startThread(threadOptions);
       scheduleWallTimeout(options.timeoutMs);
       refreshIdleTimeout();
-      const { events } = await thread.runStreamed(options.prompt, { signal: controller.signal });
+      const input = options.imagePaths?.length
+        ? [
+            { type: 'text' as const, text: options.prompt },
+            ...options.imagePaths.map((filePath) => ({ type: 'local_image' as const, path: filePath })),
+          ]
+        : options.prompt;
+      const { events } = await thread.runStreamed(input, {
+        signal: controller.signal,
+        outputSchema: options.outputSchema,
+      });
       for await (const event of events) {
         if (controller.signal.aborted) break;
         lastActivity = Date.now();

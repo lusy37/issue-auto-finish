@@ -1,5 +1,21 @@
 import type { ExecutionIdentity } from '../dag/contracts.js';
 /** AI 执行扩展接口；当前提供 Codex SDK 适配器。 */
+export type AICallPurpose =
+  | 'plan'
+  | 'verify'
+  | 'task'
+  | 'conflict-repair'
+  | 'integration-repair'
+  | 'uat-prepare'
+  | 'uat-visual-review'
+  | 'memory-distill'
+  | 'rule-distill';
+
+export type AIRunMode = 'plan' | 'agent';
+
+/** 交给 SDK 的 JSON Schema；具体字段由各边界契约定义。 */
+export type JsonSchema = Record<string, unknown>;
+
 export interface StreamEvent {
   identity?: ExecutionIdentity;
   type: string;
@@ -18,7 +34,7 @@ export interface RunOptions {
   idleTimeoutMs?: number;
   sessionId?: string;
   continueSession?: boolean;
-  mode?: string;
+  mode?: AIRunMode;
   /** 当前调用的模型，优先于执行器默认值。 */
   model?: string;
   phaseName?: string;
@@ -26,6 +42,12 @@ export interface RunOptions {
   timeoutGraceMs?: number;
   timeoutExtensionMs?: number;
   timeoutMaxExtensions?: number;
+  /** 视觉调用附加的本地图片；路径由服务端生成。 */
+  imagePaths?: string[];
+  /** 交给 Codex SDK turn 的普通 JSON Schema。 */
+  outputSchema?: JsonSchema;
+  /** 用于集中策略与审计的调用用途。 */
+  purpose?: AICallPurpose;
   onStreamEvent?: (event: StreamEvent) => void;
 }
 export interface RunResult {
