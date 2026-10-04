@@ -59,6 +59,42 @@ describe('真实 Git 上的任务图与恢复协议', () => {
     await new TaskGraphExecutor(graphDeps(fixture, ai)).execute();
     expect(calls).toEqual(['a', 'b', 'b']);
   });
+
+  // 六个真实 Git 任务还包含失败重试，为 Windows 文件系统留足执行时间。
+  it('多前置任务汇合节点失败后普通重试应重新执行失败节点', async () => {
+    const fixture = graphFixture([
+      task('task1'),
+      task('task2', ['task1']),
+      task('task3', ['task2']),
+      task('task4', ['task1']),
+      task('task5', ['task2', 'task3', 'task4']),
+      task('task6', ['task2', 'task3']),
+    ]);
+    directories.push(fixture.directory);
+    let failTask5 = true;
+    const calls: string[] = [];
+    const ai = runner(async options => {
+      const id = options.identity!.taskId;
+      calls.push(id);
+      fs.writeFileSync(path.join(options.workDir, `${id}-${calls.length}.txt`), id);
+      if (id === 'task5' && failTask5) {
+        failTask5 = false;
+        return { ...success, success: false, errorMessage: 'task5 首次失败' };
+      }
+      return success;
+    });
+
+    await expect(new TaskGraphExecutor(graphDeps(fixture, ai)).execute()).rejects.toThrow(
+      'task5 首次失败',
+    );
+    fixture.tracker.transaction(1, record => {
+      record.run!.dispatchId = 'retry';
+    });
+    await new TaskGraphExecutor(graphDeps(fixture, ai)).execute();
+
+    expect(calls.filter(id => id === 'task5')).toHaveLength(2);
+    expect(fixture.tracker.get(1)!.run!.tasks.task5.status).toBe('merged');
+  }, 90_000);
   it('无变化任务只有明确成功凭证才能完成', async () => {
     const fixture = graphFixture([task('a')]); directories.push(fixture.directory);
     const executor = new TaskGraphExecutor(graphDeps(fixture, runner(async () => success)));

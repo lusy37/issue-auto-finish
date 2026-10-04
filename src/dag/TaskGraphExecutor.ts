@@ -55,17 +55,22 @@ export class TaskGraphExecutor {
     planRevision: number;
     buildGeneration: number;
     dispatchId?: string;
+    checkpointNamespace: string;
   };
   constructor(private readonly deps: GraphDependencies) {
-    const run = deps.tracker.get(deps.number)!.run!;
+    const run = deps.tracker.get(deps.number)!.run;
     this.execution = {
       planRevision: run.planRevision,
       buildGeneration: run.buildGeneration,
       dispatchId: run.dispatchId,
+      // 任务图是一次构建阶段尝试的临时子图。外层 IssueWorkflow 会把嵌套图检查点
+      // 持久化到同一个 Issue 线程；每次阶段重试必须使用新命名空间，否则 LangGraph
+      // 会从上一次已结束的图恢复，直接跳过失败节点，最终只剩下“阻塞任务”。
+      checkpointNamespace: `dag:${run.dispatchId ?? randomUUID()}:${run.phaseExecutions.build ?? 0}`,
     };
   }
   private state() {
-    return this.deps.tracker.get(this.deps.number)!.run!;
+    return this.deps.tracker.get(this.deps.number)!.run;
   }
 
   /**
@@ -95,7 +100,7 @@ export class TaskGraphExecutor {
    */
   private update(id: string, update: (task: TaskRun) => void): void {
     this.check();
-    this.deps.tracker.transaction(this.deps.number, (record) => update(record.run!.tasks[id]));
+    this.deps.tracker.transaction(this.deps.number, (record) => update(record.run.tasks[id]));
   }
 
   /**
@@ -119,8 +124,8 @@ export class TaskGraphExecutor {
     if (!run.integrationBase) {
       const base = await this.deps.integration.head();
       tracker.transaction(number, (record) => {
-        record.run!.integrationBase = base;
-        record.run!.integrationHead = base;
+        record.run.integrationBase = base;
+        record.run.integrationHead = base;
       });
     }
 
@@ -173,7 +178,10 @@ export class TaskGraphExecutor {
       .compile()
       .invoke(
         { issueNumber: number },
-        { recursionLimit: taskGraphRecursionLimit(plan.tasks.length) },
+        {
+          recursionLimit: taskGraphRecursionLimit(plan.tasks.length),
+          configurable: { checkpoint_ns: this.execution.checkpointNamespace },
+        },
       );
 
     // 7. 汇总执行结果：优先抛出节点捕获的首个错误，再确认所有任务确实已经进入 merged 状态。
@@ -204,7 +212,7 @@ export class TaskGraphExecutor {
 
     // 3. 把任务启动状态写入 tracker，记录 workDir、branch、起点 commit，方便以后恢复。
     tracker.transaction(number, (record) => {
-      Object.assign(record.run!.tasks[definition.id], {
+      Object.assign(record.run.tasks[definition.id], {
         attemptNo,
         workDir,
         branch,
@@ -214,8 +222,8 @@ export class TaskGraphExecutor {
         merge: undefined,
         error: undefined,
       });
-      record.run!.workspaces ??= [];
-      record.run!.workspaces.push({
+      record.run.workspaces ??= [];
+      record.run.workspaces.push({
         directory: workDir,
         branch,
         taskId: definition.id,
@@ -409,11 +417,11 @@ export class TaskGraphExecutor {
     if (after !== task.merge!.postRebaseCommit)
       throw new RecoveryError('快进合并结果与已记录提交不一致');
     this.deps.tracker.transaction(this.deps.number, (record) => {
-      const t = record.run!.tasks[id];
+      const t = record.run.tasks[id];
       t.merge!.integrationAfter = after;
       t.merge!.stage = 'merged';
       t.status = 'merged';
-      record.run!.integrationHead = after;
+      record.run.integrationHead = after;
     });
   }
 }
