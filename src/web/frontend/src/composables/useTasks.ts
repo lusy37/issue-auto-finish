@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import type { ExecutableTask, TaskKind } from '@/types';
+import { isReviewWaiting } from '@/adapters/issueflowViewModel';
 import * as api from '@/api/client';
 import { t } from '@/i18n/index';
 
@@ -66,7 +67,7 @@ export function useTasks(kindFilter?: TaskKind) {
               : filter.value === 'failed'
                 ? task.stateCategory === 'failed'
                 : filter.value === 'review'
-                  ? task.stateCategory === 'blocked'
+                  ? isReviewWaiting(task.lifecycle)
                   : task.stateCategory === 'skipped';
       if (!matchesFilter || !keyword) return matchesFilter;
       return `${task.taskId} ${task.title} ${task.displayLabel ?? ''} ${task.branchName ?? ''}`

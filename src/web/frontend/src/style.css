@@ -419,15 +419,8 @@ select:focus-visible {
   background: #168875;
   color: #fff;
 }
-.prototype-nav-label {
-  margin: 0 12px 9px;
-  color: #849ca4;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
 .prototype-sidebar .n-menu {
+  margin-top: 16px;
   --n-item-height: 42px !important;
   --n-item-text-color: #5d7580 !important;
   --n-item-text-color-hover: #168875 !important;
@@ -1854,6 +1847,10 @@ select:focus-visible {
 .native-verification-card.failed {
   border-color: #f0d2d2;
 }
+.native-verification-card.pending {
+  border-color: #c8e5e6;
+  background: #fbfefe;
+}
 .native-verification-card > header {
   display: flex;
   align-items: flex-start;
@@ -1877,6 +1874,10 @@ select:focus-visible {
 .failed .native-verification-icon {
   background: #fff0f0;
   color: #ca6161;
+}
+.native-verification-card.pending .native-verification-icon {
+  background: #e8f6f7;
+  color: #2a8991;
 }
 .native-verification-status h3 {
   margin: 0;
@@ -1919,6 +1920,11 @@ select:focus-visible {
   color: #bd5a5a;
   font-size: 11px;
   line-height: 1.6;
+}
+.native-verification-card.pending .native-verification-detail {
+  border: 1px solid #d8eeee;
+  background: #effafa;
+  color: #39777d;
 }
 .native-verification-links {
   display: flex;

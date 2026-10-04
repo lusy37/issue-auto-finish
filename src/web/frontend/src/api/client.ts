@@ -166,8 +166,8 @@ export async function savePlanDoc(
   });
 }
 
-export async function fetchSupplement(number: number): Promise<SupplementInfo> {
-  return request<SupplementInfo>(`/api/issues/${number}/supplement`);
+export async function fetchSupplement(number: number): Promise<SupplementInfo | null> {
+  return request<SupplementInfo | null>(`/api/issues/${number}/supplement`);
 }
 
 export async function saveSupplement(

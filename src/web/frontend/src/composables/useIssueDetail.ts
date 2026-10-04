@@ -1,11 +1,10 @@
 import { ARTIFACTS } from '../../../../shared/runtime/artifacts.js';
-import { ref, type Ref } from 'vue';
+import { ref } from 'vue';
 import type {
   IssueRecord,
   SupplementInfo,
   AgentLogEntry,
   ReviewRound,
-  ExecutableTask,
 } from '@/types';
 import { getIssueIid } from '@/types';
 import * as api from '@/api/client';
@@ -54,14 +53,15 @@ export function useIssueDetail() {
   const planDocContent = ref('');
   const planDiff = ref<{ diff: string; hasChanges: boolean }>({ diff: '', hasChanges: false });
 
-  async function selectIssue(issue: IssueRecord, agentLogs: { value: AgentLogEntry[] }) {
+  async function selectIssue(number: number, agentLogs: { value: AgentLogEntry[] }) {
     const request = ++detailRequest;
-    selection++;
+    const selected = ++selection;
     detailLoading.value = true;
     detailError.value = '';
-    selectedIssue.value = issue;
+    selectedIssue.value = null;
     detailSupplementEditing.value = false;
     detailSupplement.value = emptySupplementForm();
+    reviewFeedback.value = '';
     reviewHistory.value = [];
     planDocContent.value = '';
     planDiff.value = { diff: '', hasChanges: false };
@@ -69,35 +69,28 @@ export function useIssueDetail() {
 
     try {
       const [detail, logs] = await Promise.all([
-        api.fetchIssueDetail(getIssueIid(issue)),
-        api.fetchIssueLogs(getIssueIid(issue)),
+        api.fetchIssueDetail(number),
+        api.fetchIssueLogs(number),
       ]);
-      if (
-        request !== detailRequest ||
-        !selectedIssue.value ||
-        getIssueIid(selectedIssue.value) !== getIssueIid(issue)
-      )
-        return;
-      if ((detail.run?.version ?? 0) >= (selectedIssue.value.run?.version ?? 0))
-        selectedIssue.value = detail;
+      if (request !== detailRequest) return;
+      selectedIssue.value = detail;
       agentLogs.value = logs.reverse();
+      fetchSupplement(number);
+      fetchReviewHistory(number);
+      fetchPlanDocContent(number);
+      fetchPlanDiff(number);
     } catch (e) {
       if (request === detailRequest) detailError.value = (e as Error).message;
-      console.error('Fetch detail failed', e);
+    } finally {
+      if (selected === selection) detailLoading.value = false;
     }
-
-    if (request !== detailRequest) return;
-    fetchSupplement(getIssueIid(issue));
-    fetchReviewHistory(getIssueIid(issue));
-    fetchPlanDocContent(getIssueIid(issue));
-    fetchPlanDiff(getIssueIid(issue));
-    detailLoading.value = false;
   }
 
   async function refreshDetail(): Promise<void> {
     if (!selectedIssue.value) return;
     const number = getIssueIid(selectedIssue.value);
     const request = ++detailRequest;
+    detailError.value = '';
     try {
       const fresh = await api.fetchIssueDetail(number);
       if (
@@ -106,12 +99,11 @@ export function useIssueDetail() {
         getIssueIid(selectedIssue.value) !== number
       )
         return;
-      if ((fresh.run?.version ?? 0) < (selectedIssue.value.run?.version ?? 0)) return;
+      if (fresh.run.version < selectedIssue.value.run.version) return;
       selectedIssue.value = fresh;
       detailVersion.value++;
     } catch (e) {
-      detailError.value = (e as Error).message;
-      console.error('Refresh detail failed', e);
+      if (request === detailRequest) detailError.value = (e as Error).message;
     }
     if (request !== detailRequest) return;
     fetchReviewHistory(number);
@@ -155,7 +147,7 @@ export function useIssueDetail() {
     detailSupplementError.value = '';
     try {
       const value = await api.fetchSupplement(number);
-      if (current()) detailSupplement.value = value;
+      if (current()) detailSupplement.value = value ?? emptySupplementForm();
     } catch (error) {
       if (current()) detailSupplementError.value = (error as Error).message;
     } finally {
@@ -177,228 +169,120 @@ export function useIssueDetail() {
         getIssueIid(selectedIssue.value),
         detailSupplementForm.value,
       );
-      detailSupplement.value = result.data ?? detailSupplementForm.value;
+      detailSupplement.value = result.data;
       detailSupplementEditing.value = false;
       if (confirm(t('confirm.supplementSaved'))) {
         await api.retryFromPhase(getIssueIid(selectedIssue.value), 'plan');
         await refreshIssues();
       }
-    } catch (e) {
-      alert(t('alert.saveFailed') + (e as Error).message);
     } finally {
       detailSupplementSaving.value = false;
     }
   }
 
-  async function doStartIssue(number: number, refreshIssues: () => Promise<void>) {
-    if (!confirm(t('confirm.start', { number }))) return;
-    try {
-      await api.startSkippedIssue(number);
-      await refreshIssues();
-      if (selectedIssue.value && getIssueIid(selectedIssue.value) === number) {
-        await selectIssue(selectedIssue.value, { value: [] });
-      }
-    } catch (e) {
-      alert(t('alert.startFailed') + (e as Error).message);
-    }
-  }
-
-  async function doRetryIssue(number: number, refreshIssues: () => Promise<void>) {
-    if (!confirm(t('confirm.retry', { number }))) return;
-    try {
-      await api.retryIssue(number);
-      await refreshIssues();
-      if (selectedIssue.value && getIssueIid(selectedIssue.value) === number) {
-        await selectIssue(selectedIssue.value, { value: [] });
-      }
-    } catch (e) {
-      alert(t('alert.retryFailed') + (e as Error).message);
-    }
-  }
-
-  async function doCancelIssue(number: number, refreshIssues: () => Promise<void>) {
-    if (!confirm(t('confirm.cancel', { number }))) return;
-    try {
-      await api.cancelIssue(number);
-      if (selectedIssue.value && getIssueIid(selectedIssue.value) === number)
-        selectedIssue.value = null;
-      await refreshIssues();
-    } catch (e) {
-      alert(t('alert.cancelFailed') + (e as Error).message);
-    }
-  }
-
-  async function doRestartIssue(
+  async function runIssueAction(
     number: number,
+    action: (number: number) => Promise<unknown>,
     refreshIssues: () => Promise<void>,
-    tasks?: Ref<ExecutableTask[]>,
+    confirmation?: string,
   ) {
-    if (!confirm(t('confirm.restart', { number }))) return;
-    try {
-      await api.restartIssue(number);
-      // 乐观更新：立即重置列表中对应 task 的进度，消除时序差
-      if (tasks?.value) {
-        tasks.value = tasks.value.map((task) =>
-          task.taskId === String(number)
-            ? {
-                ...task,
-                lifecycle: { kind: 'pending' },
-                stateCategory: 'idle',
-                status: 'idle' as const,
-                attempts: 0,
-                lastError: undefined,
-                phaseProgress: task.phaseProgress?.map((p) => ({
-                  ...p,
-                  status: 'pending' as const,
-                })),
-              }
-            : task,
-        );
-      }
-      await refreshIssues();
-      if (selectedIssue.value && getIssueIid(selectedIssue.value) === number) {
-        await selectIssue(selectedIssue.value, { value: [] });
-      }
-    } catch (e) {
-      alert(t('alert.restartFailed') + (e as Error).message);
-    }
+    if (confirmation && !confirm(confirmation)) return;
+    await action(number);
+    await refreshIssues();
   }
 
-  async function doRetryFromPhase(
+  function doStartIssue(number: number, refreshIssues: () => Promise<void>) {
+    return runIssueAction(number, api.startSkippedIssue, refreshIssues,
+      t('confirm.start', { number }));
+  }
+
+  function doRetryIssue(number: number, refreshIssues: () => Promise<void>) {
+    return runIssueAction(number, api.retryIssue, refreshIssues,
+      t('confirm.retry', { number }));
+  }
+
+  function doCancelIssue(number: number, refreshIssues: () => Promise<void>) {
+    return runIssueAction(number, api.cancelIssue, refreshIssues,
+      t('confirm.cancel', { number }));
+  }
+
+  function doRestartIssue(number: number, refreshIssues: () => Promise<void>) {
+    return runIssueAction(number, api.restartIssue, refreshIssues,
+      t('confirm.restart', { number }));
+  }
+
+  function doRetryFromPhase(
     number: number,
     phase: string,
     phaseLabel: string,
     refreshIssues: () => Promise<void>,
   ) {
-    if (!confirm(t('confirm.retryFromPhase', { phaseLabel, number }))) return;
-    try {
-      await api.retryFromPhase(number, phase);
-      await refreshIssues();
-      if (selectedIssue.value && getIssueIid(selectedIssue.value) === number) {
-        await selectIssue(selectedIssue.value, { value: [] });
-      }
-    } catch (e) {
-      alert(t('alert.retryFromPhaseFailed') + (e as Error).message);
-    }
+    return runIssueAction(number, () => api.retryFromPhase(number, phase), refreshIssues,
+      t('confirm.retryFromPhase', { phaseLabel, number }));
   }
 
-  async function doApprovePlan(number: number, refreshIssues: () => Promise<void>) {
-    if (!confirm(t('confirm.approve', { number }))) return;
+  async function submitReview(
+    number: number,
+    action: (revision: number) => Promise<void>,
+    refreshIssues: () => Promise<void>,
+    confirmation?: string,
+  ) {
+    const issue = selectedIssue.value;
+    if (!issue || getIssueIid(issue) !== number) throw new Error('请先加载当前 Issue 的计划');
     reviewSubmitting.value = true;
     try {
-      await api.approvePlan(number, selectedIssue.value?.run?.planRevision ?? 0);
-      await refreshIssues();
-      if (selectedIssue.value && getIssueIid(selectedIssue.value) === number) {
-        await selectIssue(selectedIssue.value, { value: [] });
-      }
-    } catch (e) {
-      alert(t('alert.approveFailed') + (e as Error).message);
+      await runIssueAction(
+        number, () => action(issue.run.planRevision), refreshIssues, confirmation,
+      );
     } finally {
       reviewSubmitting.value = false;
     }
+  }
+
+  function doApprovePlan(number: number, refreshIssues: () => Promise<void>) {
+    return submitReview(number, (revision) => api.approvePlan(number, revision), refreshIssues,
+      t('confirm.approve', { number }));
   }
 
   async function doRejectPlan(number: number, refreshIssues: () => Promise<void>) {
-    if (!reviewFeedback.value.trim()) {
-      alert(t('confirm.reject.noFeedback'));
-      return;
-    }
-    reviewSubmitting.value = true;
-    try {
-      await api.rejectPlan(
-        number,
-        reviewFeedback.value,
-        selectedIssue.value?.run?.planRevision ?? 0,
-      );
+    if (!reviewFeedback.value.trim()) throw new Error(t('confirm.reject.noFeedback'));
+    const feedback = reviewFeedback.value;
+    await submitReview(number, async (revision) => {
+      await api.rejectPlan(number, feedback, revision);
       reviewFeedback.value = '';
-      await refreshIssues();
-      if (selectedIssue.value && getIssueIid(selectedIssue.value) === number) {
-        await selectIssue(selectedIssue.value, { value: [] });
-      }
-    } catch (e) {
-      alert(t('alert.rejectFailed') + (e as Error).message);
-    } finally {
-      reviewSubmitting.value = false;
-    }
+    }, refreshIssues);
   }
 
-  async function doSkipReview(number: number, refreshIssues: () => Promise<void>) {
-    if (!confirm(t('confirm.skip', { number }))) return;
-    reviewSubmitting.value = true;
-    try {
-      await api.skipReview(number, selectedIssue.value?.run?.planRevision ?? 0);
-      await refreshIssues();
-      if (selectedIssue.value && getIssueIid(selectedIssue.value) === number) {
-        await selectIssue(selectedIssue.value, { value: [] });
-      }
-    } catch (e) {
-      alert(t('alert.skipFailed') + (e as Error).message);
-    } finally {
-      reviewSubmitting.value = false;
-    }
+  function doSkipReview(number: number, refreshIssues: () => Promise<void>) {
+    return submitReview(number, (revision) => api.skipReview(number, revision), refreshIssues,
+      t('confirm.skip', { number }));
   }
 
-  async function doAbortIssue(number: number, refreshIssues: () => Promise<void>) {
-    if (!confirm(t('confirm.abort', { number }))) return;
-    try {
-      await api.abortIssue(number);
-      await refreshIssues();
-      await refreshDetail();
-    } catch (e) {
-      alert(t('alert.abortFailed') + (e as Error).message);
-    }
+  function doAbortIssue(number: number, refreshIssues: () => Promise<void>) {
+    return runIssueAction(number, api.abortIssue, refreshIssues,
+      t('confirm.abort', { number }));
   }
 
-  async function doContinueIssue(number: number, refreshIssues: () => Promise<void>) {
-    if (!confirm(t('confirm.continue', { number }))) return;
-    try {
-      await api.continueIssue(number);
-      await refreshIssues();
-      await refreshDetail();
-    } catch (e) {
-      alert(t('alert.continueFailed') + (e as Error).message);
-    }
+  function doContinueIssue(number: number, refreshIssues: () => Promise<void>) {
+    return runIssueAction(number, api.continueIssue, refreshIssues,
+      t('confirm.continue', { number }));
   }
 
-  async function doRedoPhase(number: number, refreshIssues: () => Promise<void>) {
-    if (!confirm(t('confirm.redo', { number }))) return;
-    try {
-      await api.redoPhase(number);
-      await refreshIssues();
-      await refreshDetail();
-    } catch (e) {
-      alert(t('alert.redoFailed') + (e as Error).message);
-    }
+  function doRedoPhase(number: number, refreshIssues: () => Promise<void>) {
+    return runIssueAction(number, api.redoPhase, refreshIssues,
+      t('confirm.redo', { number }));
   }
 
-  async function doRestartPreview(number: number, refreshIssues: () => Promise<void>) {
-    try {
-      await api.restartPreview(number);
-      await refreshIssues();
-      await refreshDetail();
-    } catch (e) {
-      alert(t('alert.restartPreviewFailed') + (e as Error).message);
-    }
+  function doRestartPreview(number: number, refreshIssues: () => Promise<void>) {
+    return runIssueAction(number, api.restartPreview, refreshIssues);
   }
 
-  async function doStopPreview(number: number, refreshIssues: () => Promise<void>) {
-    try {
-      await api.stopPreview(number);
-      await refreshIssues();
-      await refreshDetail();
-    } catch (e) {
-      alert(t('alert.stopPreviewFailed') + (e as Error).message);
-    }
+  function doStopPreview(number: number, refreshIssues: () => Promise<void>) {
+    return runIssueAction(number, api.stopPreview, refreshIssues);
   }
 
-  async function doRebuildWorktree(number: number, refreshIssues: () => Promise<void>) {
-    try {
-      await api.rebuildWorktree(number);
-      await refreshIssues();
-      await refreshDetail();
-    } catch (e) {
-      alert(t('alert.rebuildWorktreeFailed') + (e as Error).message);
-    }
+  function doRebuildWorktree(number: number, refreshIssues: () => Promise<void>) {
+    return runIssueAction(number, api.rebuildWorktree, refreshIssues);
   }
 
   function hasSupplementData(s: SupplementInfo | null): boolean {

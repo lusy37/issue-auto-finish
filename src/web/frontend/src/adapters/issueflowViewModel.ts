@@ -1,4 +1,10 @@
-import type { ExecutableTask, IssueRecord, PhaseStatus, PipelineMeta } from '@/types';
+import type {
+  ExecutableTask,
+  IssueLifecycle,
+  IssueRecord,
+  PhaseStatus,
+  PipelineMeta,
+} from '@/types';
 
 /** 工作台展示使用的阶段摘要。原始任务数据仍然保留，便于详情页继续读取完整契约。 */
 export interface WorkbenchRow extends ExecutableTask {
@@ -19,23 +25,11 @@ export type AllowedAction =
   | 'stop-preview'
   | 'restart-preview';
 
-const PHASE_LABELS: Record<string, string> = {
-  plan: '计划',
-  review: '审核',
-  build: '构建',
-  verify: '验证',
-  uat: '验收',
-  deliver: '交付',
-};
-
-function phaseLabel(phase: string): string {
-  return PHASE_LABELS[phase] ?? phase;
-}
-
 function lifecycleLabel(task: ExecutableTask): string {
   const phase = 'phase' in task.lifecycle ? task.lifecycle.phase : undefined;
   if (phase && (task.lifecycle.kind === 'running' || task.lifecycle.kind === 'waiting')) {
-    return `${phaseLabel(phase)} · ${task.lifecycle.kind === 'running' ? '执行中' : '等待处理'}`;
+    const phaseLabel = task.phaseProgress?.find((item) => item.name === phase)?.label ?? phase;
+    return `${phaseLabel} · ${task.lifecycle.kind === 'running' ? '执行中' : '等待处理'}`;
   }
   const labels: Record<string, string> = {
     pending: '待启动',
@@ -88,6 +82,16 @@ export function toWorkbenchRow(task: ExecutableTask): WorkbenchRow {
 
 export function toWorkbenchRows(tasks: ExecutableTask[]): WorkbenchRow[] {
   return tasks.map(toWorkbenchRow);
+}
+
+/** 只有处于审核阶段的 waiting 生命周期才算“待审核”。暂停属于可恢复状态。 */
+export function isReviewWaiting(lifecycle: IssueLifecycle): boolean {
+  return lifecycle.kind === 'waiting' && lifecycle.phase === 'review';
+}
+
+/** 失败和暂停需要提供恢复入口，不受计划审核阶段限制。 */
+export function needsIntervention(lifecycle: IssueLifecycle): boolean {
+  return lifecycle.kind === 'failed' || lifecycle.kind === 'paused';
 }
 
 /**

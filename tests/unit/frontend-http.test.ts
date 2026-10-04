@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchIssueDetail } from '../../src/web/frontend/src/api/client.js';
-import { json } from '../../src/web/frontend/src/api/mini.js';
+import { json } from '../../src/web/frontend/src/api/http.js';
 
 afterEach(() => vi.unstubAllGlobals());
 

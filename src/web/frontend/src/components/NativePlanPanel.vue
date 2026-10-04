@@ -9,6 +9,7 @@ import { NModal } from 'naive-ui/es/modal';
 import { NTag } from 'naive-ui/es/tag';
 import { Check, FileCheck2, GitBranch, LockKeyhole, MessageSquare, ArrowRight } from '@lucide/vue';
 import type { IssueRecord } from '@/types';
+import { isReviewWaiting } from '@/adapters/issueflowViewModel';
 import { useIssueGraphs } from '@/composables/useIssueGraphs';
 
 const props = defineProps<{
@@ -26,26 +27,14 @@ const feedbackError = ref('');
 
 const tasks = computed(() => graph.value?.tasks ?? []);
 const firstTask = computed(() => tasks.value[0]?.id);
+const hasPlan = computed(() => (props.issue.run.planRevision) > 0);
+const isPaused = computed(() => props.issue.lifecycle.kind === 'paused');
 const acceptance = computed(() => {
   const values = tasks.value.flatMap((task) => task.acceptanceCriteria);
   const stable = [...new Set(values)];
   return [...stable, '所有前置任务合并后再执行下游', '浏览器验收使用本轮有效报告'].slice(0, 4);
 });
-const isWaitingReview = computed(
-  () => props.issue.lifecycle.kind === 'waiting' && props.issue.lifecycle.phase === 'review',
-);
-const planReadyTitle = computed(() =>
-  isWaitingReview.value
-    ? '实施计划已就绪，等待你的审核'
-    : props.issue.lifecycle.kind === 'failed'
-      ? '计划执行需要处理'
-      : '实施计划快照',
-);
-const planReadyDescription = computed(() =>
-  isWaitingReview.value
-    ? '确认范围、任务依赖和验收标准后，AI 才会进入构建阶段。'
-    : '此处展示当前计划版本与任务拆分，内容由 Native 服务端持久化。',
-);
+const isWaitingReview = computed(() => isReviewWaiting(props.issue.lifecycle));
 
 function submitReject() {
   if (!feedback.value.trim()) {
@@ -69,7 +58,7 @@ function submitReject() {
           size="small"
           :bordered="false"
         >
-          v{{ issue.run?.planRevision ?? 0 }}
+          v{{ issue.run.planRevision }}
         </NTag>
       </div>
       <span class="native-plan-readonly">
@@ -81,9 +70,23 @@ function submitReject() {
       <NAlert
         v-if="isWaitingReview"
         type="warning"
-        :title="planReadyTitle"
+        title="实施计划已就绪，等待你的审核"
       >
-        {{ planReadyDescription }}
+        确认范围、任务依赖和验收标准后，AI 才会进入构建阶段。
+      </NAlert>
+      <NAlert
+        v-else-if="isPaused && !hasPlan"
+        type="warning"
+        title="任务已暂停，实施计划尚未生成"
+      >
+        当前任务在规划阶段被暂停，继续执行后才会生成内部计划与任务拆分。
+      </NAlert>
+      <NAlert
+        v-else-if="isPaused"
+        type="info"
+        title="任务已暂停"
+      >
+        当前实施计划已保留，继续执行后将从暂停阶段恢复。
       </NAlert>
       <NAlert
         v-else-if="loading"
@@ -105,13 +108,6 @@ function submitReject() {
         >
           重新读取
         </NButton>
-      </NAlert>
-      <NAlert
-        v-else
-        type="info"
-        :title="planReadyTitle"
-      >
-        {{ planReadyDescription }}
       </NAlert>
 
       <section class="native-plan-section">
@@ -205,7 +201,7 @@ function submitReject() {
     class="native-feedback-modal"
   >
     <p class="prototype-modal-description">
-      修改意见将与完整的计划 v{{ issue.run?.planRevision ?? 0 }} 一起保留，用于下一轮规划。
+      修改意见将与完整的计划 v{{ issue.run.planRevision }} 一起保留，用于下一轮规划。
     </p>
     <NInput
       v-model:value="feedback"

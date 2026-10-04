@@ -11,8 +11,6 @@ import type {
 import { fetchPipelineMeta } from '@/api/client';
 import { t } from '@/i18n/index';
 
-const FALLBACK_PLAN_MODE_PHASES = ['plan', 'review', 'build', 'verify'];
-
 const CATEGORY_CLASS_MAP: Record<string, string> = {
   idle: 'bg-gray-100 text-gray-600',
   skipped: 'bg-orange-100 text-orange-600',
@@ -25,6 +23,7 @@ const CATEGORY_CLASS_MAP: Record<string, string> = {
 };
 
 const meta = ref<PipelineMeta | null>(null);
+const metaError = ref<Error | null>(null);
 let loadPromise: Promise<void> | null = null;
 
 export async function loadPipelineMeta(): Promise<void> {
@@ -33,9 +32,10 @@ export async function loadPipelineMeta(): Promise<void> {
   loadPromise = fetchPipelineMeta()
     .then((data) => {
       meta.value = data;
+      metaError.value = null;
     })
     .catch((err) => {
-      console.warn('Failed to load pipeline meta, using fallback', err);
+      metaError.value = err instanceof Error ? err : new Error(String(err));
     })
     .finally(() => {
       loadPromise = null;
@@ -71,13 +71,13 @@ export function usePipeline() {
 
   const phaseNames = computed(() => {
     const mode = pipelineMode.value;
-    return meta.value?.modes[mode]?.phases.map((p) => p.name) ?? [...FALLBACK_PLAN_MODE_PHASES];
+    return meta.value?.modes[mode]?.phases.map((p) => p.name) ?? [];
   });
 
   function getPlanDocs(issue?: IssueRecord | null): PlanFileSpec[] {
     if (issue?.planDocs) return issue.planDocs;
     const mode = issue?.pipelineMode ?? pipelineMode.value;
-    if (issue?.run?.workflow.definition)
+    if (issue?.run.workflow.definition)
       return issue.run.workflow.definition.phaseIds.flatMap(getPhaseArtifacts).map((artifact) => ({
         file: artifact.filename,
         label: t(`planFile.${artifact.filename}`),
@@ -85,23 +85,14 @@ export function usePipeline() {
     if (meta.value?.modes[mode]) {
       return meta.value.modes[mode].artifacts.map((a) => ({ file: a.filename, label: a.label }));
     }
-    const phases = issue?.run?.workflow.definition?.phaseIds ?? [
-      'plan',
-      'review',
-      'build',
-      'verify',
-    ];
-    return phases.flatMap(getPhaseArtifacts).map((artifact) => ({
-      file: artifact.filename,
-      label: t(`planFile.${artifact.filename}`),
-    }));
+    return [];
   }
 
   function getPhaseNames(issue?: IssueRecord | null): string[] {
-    if (issue?.run?.workflow.definition) return [...issue.run.workflow.definition.phaseIds];
+    if (issue?.run.workflow.definition) return [...issue.run.workflow.definition.phaseIds];
     if (issue?.phaseProgress) return Object.keys(issue.phaseProgress);
     const mode = issue?.pipelineMode ?? pipelineMode.value;
-    return meta.value?.modes[mode]?.phases.map((p) => p.name) ?? [...FALLBACK_PLAN_MODE_PHASES];
+    return meta.value?.modes[mode]?.phases.map((p) => p.name) ?? [];
   }
 
   function phaseLabel(phase: string): string {
@@ -207,6 +198,7 @@ export function usePipeline() {
   return {
     pipelineMode,
     phaseNames,
+    metaError,
     getPlanDocs,
     getPhaseNames,
     stateLabel,

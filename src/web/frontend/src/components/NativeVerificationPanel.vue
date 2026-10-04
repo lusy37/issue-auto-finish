@@ -3,7 +3,7 @@ import { ref, watch } from 'vue';
 import { NButton } from 'naive-ui/es/button';
 import { NEmpty } from 'naive-ui/es/empty';
 import { NTag } from 'naive-ui/es/tag';
-import { Check, ExternalLink, RefreshCw, ShieldCheck, X } from '@lucide/vue';
+import { Check, Clock3, ExternalLink, RefreshCw, ShieldCheck, X } from '@lucide/vue';
 import * as api from '@/api/client';
 import type { UatResult as UatRun } from '../../../../shared/workbench.js';
 import { useAction } from '@/composables/useAction';
@@ -11,6 +11,15 @@ import { useAction } from '@/composables/useAction';
 const props = defineProps<{ issueIid?: number }>();
 const runs = ref<UatRun[]>([]);
 const { busy, error, run } = useAction();
+function fileUrl(runId: string, file: string) {
+  const encodedFile = file.split('/').map(encodeURIComponent).join('/');
+  return `/api/uat/runs/${encodeURIComponent(runId)}/files/${encodedFile}`;
+}
+function visualLabel(item: UatRun) {
+  return item.visualReview.status === 'not-run' && item.visualReview.reasonCode === 'disabled'
+    ? '机器通过，视觉复核未启用'
+    : item.visualReview.status;
+}
 
 async function load() {
   if (props.issueIid) runs.value = await api.fetchUatRuns(props.issueIid);
@@ -63,7 +72,11 @@ watch(
         v-for="item in runs"
         :key="item.runId"
         class="native-verification-card"
-        :class="{ passed: item.passed, failed: !item.passed }"
+        :class="{
+          passed: item.passed,
+          failed: !item.passed && item.status !== 'running',
+          pending: item.status === 'running',
+        }"
       >
         <header>
           <div class="native-verification-status">
@@ -72,21 +85,25 @@ watch(
                 v-if="item.passed"
                 :size="16"
               />
+              <Clock3
+                v-else-if="item.status === 'running'"
+                :size="16"
+              />
               <X
                 v-else
                 :size="16"
               />
             </span>
             <div>
-              <h3>{{ item.passed ? '验收通过' : '验收未通过' }}</h3>
+                <h3>{{ item.passed ? '验收通过' : item.status === 'running' ? '验收进行中' : '验收未通过' }}</h3>
               <p>{{ new Date(item.startedAt).toLocaleString('zh-CN') }} · 运行 {{ item.runId }}</p>
             </div>
           </div>
           <NTag
-            :type="item.passed ? 'success' : 'error'"
+            :type="item.passed ? 'success' : item.status === 'running' ? 'warning' : 'error'"
             :bordered="false"
           >
-            {{ item.passed ? 'PASS' : 'FAIL' }}
+            {{ item.passed ? 'PASS' : item.status === 'running' ? 'PENDING' : 'FAIL' }}
           </NTag>
         </header>
         <dl class="native-verification-stats">
@@ -109,10 +126,41 @@ watch(
         >
           {{ item.error }}
         </p>
+        <p class="native-verification-detail">
+          视觉复核：{{ visualLabel(item) }} · 送审
+          {{ item.visualReview.selectedScreenshots.length }} · 已复核
+          {{ item.visualReview.checkedScreenshots.length }} · 未复核
+          {{ item.visualReview.unreviewedScreenshots.length }}
+        </p>
+        <p
+          v-if="item.visualReview.coverageGaps.length"
+          class="native-verification-detail"
+        >
+          覆盖缺口：{{ item.visualReview.coverageGaps.join('；') }}
+        </p>
+        <ul
+          v-if="item.visualReview.issues.length"
+          class="native-verification-detail"
+        >
+          <li
+            v-for="issue in item.visualReview.issues"
+            :key="`${issue.screenshotId}-${issue.description}`"
+          >
+            [{{ issue.severity }}]
+            <a
+              :href="fileUrl(item.runId, issue.screenshot)"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {{ issue.sceneId }} {{ issue.viewport.width }}x{{ issue.viewport.height }}
+            </a>：{{ issue.description }}；
+            期望：{{ issue.expected }}；观察：{{ issue.observed }}
+          </li>
+        </ul>
         <div class="native-verification-links">
           <a
             v-if="item.reportAvailable"
-            :href="`/api/uat/runs/${item.runId}/files/report/index.html`"
+            :href="fileUrl(item.runId, 'report/index.html')"
             target="_blank"
             rel="noreferrer"
           >
@@ -120,29 +168,29 @@ watch(
             打开本次 HTML 报告
           </a>
           <a
-            v-for="shot in item.screenshots"
-            :key="shot"
-            :href="`/api/uat/runs/${item.runId}/files/${shot}`"
+            v-for="shot in item.evidence"
+            :key="shot.id"
+            :href="fileUrl(item.runId, shot.path)"
             target="_blank"
             rel="noreferrer"
           >
-            查看截图 · {{ shot }}
+            查看截图 · {{ shot.path }}
           </a>
         </div>
         <div
-          v-if="item.screenshots?.length"
+          v-if="item.evidence.length"
           class="native-verification-shots"
         >
           <a
-            v-for="shot in item.screenshots"
-            :key="`preview-${shot}`"
-            :href="`/api/uat/runs/${item.runId}/files/${shot}`"
+            v-for="shot in item.evidence"
+            :key="`preview-${shot.id}`"
+            :href="fileUrl(item.runId, shot.path)"
             target="_blank"
             rel="noreferrer"
           >
             <img
-              :src="`/api/uat/runs/${item.runId}/files/${shot}`"
-              :alt="shot"
+              :src="fileUrl(item.runId, shot.path)"
+              :alt="shot.sceneId"
             />
           </a>
         </div>

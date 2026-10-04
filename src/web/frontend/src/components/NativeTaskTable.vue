@@ -10,6 +10,7 @@ import { NTag } from 'naive-ui/es/tag';
 import { ArrowUpRight, ListFilter, Search, X } from '@lucide/vue';
 import type { ExecutableTask, PhaseStatus } from '@/types';
 import { getTaskFilterOptions } from '@/composables/useTasks';
+import { isReviewWaiting } from '@/adapters/issueflowViewModel';
 import { formatTime } from '@/utils/formatters';
 import { usePipeline } from '@/composables/usePipeline';
 
@@ -30,7 +31,10 @@ const filters = computed(() =>
       item.value === 'all'
         ? props.tasks.length
         : props.tasks.filter(
-            (task) => item.value === task.stateCategory || item.value === task.lifecycle.kind,
+            (task) =>
+              item.value === 'review'
+                ? isReviewWaiting(task.lifecycle)
+                : item.value === task.stateCategory || item.value === task.lifecycle.kind,
           ).length,
   })),
 );
@@ -39,8 +43,9 @@ const rows = computed(() =>
     const text = `${task.taskId} ${task.title} ${task.branchName ?? ''}`.toLowerCase();
     const matchesFilter =
       filter.value === 'all' ||
-      task.stateCategory === filter.value ||
-      task.lifecycle.kind === filter.value;
+      (filter.value === 'review'
+        ? isReviewWaiting(task.lifecycle)
+        : task.stateCategory === filter.value || task.lifecycle.kind === filter.value);
     return (
       matchesFilter &&
       (!kind.value || task.kind === kind.value) &&

@@ -1,39 +1,19 @@
-import type { IssueLifecycle } from '../../../../shared/workbench';
-import type { PhaseHistoryEntry } from '../../../../shared/workbench';
-export type { IssueLifecycle } from '../../../../shared/workbench';
+import type { IssueRecord as StoredIssueRecord } from '../../../../shared/workbench';
+export type { IssueLifecycle, PhaseProgress } from '../../../../shared/workbench';
 
 export type PipelineMode = string;
 
-export type PhaseStatus =
-  | 'pending'
-  | 'in_progress'
-  | 'completed'
-  | 'failed'
-  | 'paused'
-  | 'gate_waiting';
+import type {
+  IssueLifecycle, PhaseStatus as StoredPhaseStatus,
+} from '../../../../shared/workbench';
 
-export interface IssueRecord {
-  run?: import('../../../../shared/workbench').IssueRun;
-  lifecycle: IssueLifecycle;
-  branchName: string;
-  sessionId?: string;
-  pipelineMode?: PipelineMode;
-  prUrl?: string;
-  issueNoteSyncEnabled?: boolean;
-  demandSpec: {
-    demandId: string;
-    sourceRef: { source: string; externalId: string; displayId?: string };
-    title: string;
-    description: string;
-  };
-  previewStartedAt?: string;
+/** 暂停由生命周期派生，属于前端展示状态。 */
+export type PhaseStatus = StoredPhaseStatus | 'paused';
+
+/** 复用聚合契约，只补充服务端提供的展示字段。 */
+export interface IssueRecord extends StoredIssueRecord {
   preview?: { running: boolean; previewUrl?: string };
   worktree?: { exists: boolean; cleanedAt?: string; path?: string };
-  createdAt: string;
-  updatedAt: string;
-  /** tracker 中的真实阶段进度（单一数据源） */
-  phaseProgress?: Record<string, PhaseProgress>;
-  phaseHistory?: PhaseHistoryEntry[];
   stateCategory?: string;
   /** 服务端按本轮阶段要求计算出的可查看计划产物。 */
   planDocs?: PlanFileSpec[];
@@ -43,17 +23,10 @@ export const getIssueIid = (r: IssueRecord): number => Number(r.demandSpec.sourc
 export const getIssueTitle = (r: IssueRecord): string => r.demandSpec.title;
 export const getReviewApprovalSource = (r: IssueRecord) =>
   r.phaseHistory
-    ?.slice()
+    .slice()
     .reverse()
     .find((entry) => entry.phaseId === 'review' && entry.outcome === 'gate-approved')
     ?.approvalSource;
-
-export interface PhaseProgress {
-  status: PhaseStatus;
-  startedAt?: string;
-  completedAt?: string;
-  error?: string;
-}
 
 export interface AgentLogEntry {
   identity?: import('../../../../shared/workbench').ExecutionIdentity;

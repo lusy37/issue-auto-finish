@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { NAlert } from 'naive-ui/es/alert';
 import { NButton } from 'naive-ui/es/button';
 import { NCard } from 'naive-ui/es/card';
@@ -22,7 +22,7 @@ import {
 import type { SystemStatus } from '@/types';
 import { getIssueIid, getIssueTitle } from '@/types';
 import { getAllowedActions, type AllowedAction } from '@/adapters/issueflowViewModel';
-import * as api from '@/api/client';
+import { useAction } from '@/composables/useAction';
 import { useIssueDetail } from '@/composables/useIssueDetail';
 import { useAgentLogs } from '@/composables/useAgentLogs';
 import { usePipeline } from '@/composables/usePipeline';
@@ -32,13 +32,13 @@ import TaskGraphPanel from './TaskGraphPanel.vue';
 import NativePlanPanel from './NativePlanPanel.vue';
 import NativeLogPanel from './NativeLogPanel.vue';
 import NativeVerificationPanel from './NativeVerificationPanel.vue';
+import NativeInterventionPanel from './NativeInterventionPanel.vue';
 
 const props = defineProps<{ issueNumber: number; systemStatus: SystemStatus | null }>();
 const detail = useIssueDetail();
 const logs = useAgentLogs();
 const activeTab = ref<'graph' | 'plan' | 'logs' | 'verification' | 'review'>('graph');
-const actionBusy = ref(false);
-const actionError = ref('');
+const { busy: actionBusy, error: actionError, run: runAction } = useAction();
 const selectedTask = ref<IssueGraphs['tasks'][number] | undefined>();
 const { stateLabel, stateClass } = usePipeline();
 const issue = computed(() => detail.selectedIssue.value);
@@ -77,7 +77,7 @@ const workflowPhaseLabel = computed(() => {
   const current = displayPhases.value.find(([, value]) => value.status !== 'completed');
   return current ? `当前阶段：${current[0]}` : '已完成交付';
 });
-const taskRuns = computed(() => Object.values(issue.value?.run?.tasks ?? {}));
+const taskRuns = computed(() => Object.values(issue.value?.run.tasks ?? {}));
 const mergedTaskCount = computed(
   () => taskRuns.value.filter((task) => task.status === 'merged').length,
 );
@@ -92,29 +92,11 @@ const reviewFeedback = computed({
   },
 });
 
-async function runAction(action: () => Promise<unknown>) {
-  if (actionBusy.value) return;
-  actionBusy.value = true;
+function selectIssue() {
   actionError.value = '';
-  try {
-    await action();
-  } catch (error) {
-    actionError.value = (error as Error).message;
-  } finally {
-    actionBusy.value = false;
-  }
+  return detail.selectIssue(props.issueNumber, logs.agentLogs);
 }
-async function selectIssue() {
-  try {
-    const record = await api.fetchIssueDetail(props.issueNumber);
-    await detail.selectIssue(record, logs.agentLogs);
-  } catch (error) {
-    actionError.value = (error as Error).message;
-  }
-}
-async function refreshIssues() {
-  await detail.refreshDetail();
-}
+const refreshIssues = detail.refreshDetail;
 function submitPlanReject(feedback: string) {
   reviewFeedback.value = feedback;
   return runAction(() => detail.doRejectPlan(props.issueNumber, refreshIssues));
@@ -157,9 +139,6 @@ const { connected } = useSSE((eventName, payload) => {
     detail.refreshDetail();
 });
 watch(() => props.issueNumber, selectIssue, { immediate: true });
-onMounted(() => {
-  if (!issue.value) selectIssue();
-});
 onUnmounted(() => logs.clear());
 </script>
 
@@ -256,16 +235,24 @@ onUnmounted(() => logs.clear());
         </div>
       </header>
       <NAlert
-        v-if="issueError || actionError"
+        v-if="issueError || actionError || detail.detailError.value"
         type="error"
         class="prototype-alert"
       >
-        {{ issueError || actionError }}
+        {{ actionError || detail.detailError.value || issueError }}
       </NAlert>
+      <NativeInterventionPanel
+        :key="props.issueNumber"
+        :issue="issue"
+        :max-retries="systemStatus?.config.maxRetries"
+        @refresh="refreshIssues"
+        @logs="activeTab = 'logs'"
+        @verification="activeTab = 'verification'"
+      />
       <section class="prototype-workflow-panel">
         <div class="prototype-workflow-label">
           <strong>Issue 主流程</strong>
-          <span>计划 v{{ issue.run?.planRevision ?? 0 }} · {{ workflowPhaseLabel }}</span>
+          <span>计划 v{{ issue.run.planRevision }} · {{ workflowPhaseLabel }}</span>
         </div>
         <NSteps
           :current="workflowCurrent"
@@ -314,7 +301,7 @@ onUnmounted(() => logs.clear());
           <template v-if="activeTab === 'graph'">
             <TaskGraphPanel
               :issue-number="getIssueIid(issue)"
-              :state-version="issue.run?.version"
+              :state-version="issue.run.version"
               @task-selected="selectedTask = $event"
             />
           </template>
@@ -322,7 +309,7 @@ onUnmounted(() => logs.clear());
             v-else-if="activeTab === 'plan'"
             :issue="issue"
             :issue-number="getIssueIid(issue)"
-            :state-version="issue.run?.version"
+            :state-version="issue.run.version"
             :review-submitting="detail.reviewSubmitting.value"
             @approve="runAction(() => detail.doApprovePlan(props.issueNumber, refreshIssues))"
             @reject="submitPlanReject"
@@ -355,8 +342,8 @@ onUnmounted(() => logs.clear());
               <div>
                 <dt>计划版本</dt>
                 <dd>
-                  v{{ issue.run?.planRevision ?? 0 }} ·
-                  {{ issue.run?.review?.decision === 'waiting' ? '等待审核' : '已批准' }}
+                  v{{ issue.run.planRevision }} ·
+                  {{ issue.run.review?.decision === 'waiting' ? '等待审核' : '已批准' }}
                 </dd>
               </div>
               <div>

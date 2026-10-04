@@ -19,11 +19,9 @@ import {
   CheckCheck,
   ChevronRight,
   CircleDot,
-  FileText,
   GitBranch,
   LayoutDashboard,
   Menu,
-  Plus,
   RefreshCw,
   Settings2,
   ShieldCheck,
@@ -33,6 +31,7 @@ import { getIssueIid } from '@/types';
 import { useTasks } from '@/composables/useTasks';
 import { useSSE } from '@/composables/useSSE';
 import { useIssueDetail } from '@/composables/useIssueDetail';
+import { isReviewWaiting, needsIntervention } from '@/adapters/issueflowViewModel';
 import * as api from '@/api/client';
 const NativeTaskTable = defineAsyncComponent(() => import('./NativeTaskTable.vue'));
 const NativeWorkspacePage = defineAsyncComponent(() => import('./NativeWorkspacePage.vue'));
@@ -65,7 +64,7 @@ const connectedState = useSSE((eventName, rawPayload) => {
 const connected = connectedState.connected;
 const page = computed(() => {
   const value = route.value.replace(/^#\//, '').split('/')[0];
-  return ['workbench', 'drafts', 'knowledge', 'analytics', 'settings'].includes(value)
+  return ['workbench', 'knowledge', 'analytics', 'settings'].includes(value)
     ? value
     : 'workbench';
 });
@@ -76,13 +75,17 @@ const issueNumber = computed(() => {
 });
 const navPage = computed(() => (isIssueRoute.value ? 'workbench' : page.value));
 const currentPage = computed(
-  () => page.value as 'workbench' | 'drafts' | 'knowledge' | 'analytics' | 'settings',
+  () => page.value as 'workbench' | 'knowledge' | 'analytics' | 'settings',
 );
 const workspacePage = computed(() =>
-  currentPage.value === 'workbench' ? 'drafts' : currentPage.value,
+  (currentPage.value === 'workbench' ? 'knowledge' : currentPage.value) as
+    'knowledge' | 'analytics' | 'settings',
 );
 const running = computed(() => tasks.value.filter((task) => task.stateCategory === 'active'));
-const reviews = computed(() => tasks.value.filter((task) => task.stateCategory === 'blocked'));
+const reviews = computed(() => tasks.value.filter((task) => isReviewWaiting(task.lifecycle)));
+const interventions = computed(() => (
+  tasks.value.filter((task) => needsIntervention(task.lifecycle))
+));
 const completed = computed(() => tasks.value.filter((task) => task.stateCategory === 'completed'));
 const aiConcurrencyLimit = computed(() => systemStatus.value?.config.aiMaxConcurrency ?? 4);
 const metrics = computed(() => [
@@ -122,7 +125,6 @@ const menuOptions: MenuOption[] = [
     icon: () => h(LayoutDashboard, { size: 18 }),
     extra: () => h('span', { class: 'prototype-nav-count' }, tasks.value.length),
   },
-  { key: 'drafts', label: '需求草稿', icon: () => h(FileText, { size: 18 }) },
   { key: 'knowledge', label: '知识与经验', icon: () => h(BookOpen, { size: 18 }) },
   { key: 'analytics', label: '任务统计', icon: () => h(ChartNoAxesCombined, { size: 18 }) },
   { key: 'settings', label: '设置', icon: () => h(Settings2, { size: 18 }) },
@@ -191,7 +193,6 @@ onUnmounted(() => window.removeEventListener('hashchange', onHashChange));
                 <small>AI ISSUE WORKSPACE</small>
               </span>
             </a>
-            <div class="prototype-nav-label">工作空间</div>
             <NMenu
               :value="navPage"
               :options="menuOptions"
@@ -229,9 +230,7 @@ onUnmounted(() => window.removeEventListener('hashchange', onHashChange));
                       ? 'Issue 执行详情'
                       : page === 'workbench'
                         ? '任务工作台'
-                        : page === 'drafts'
-                          ? '需求草稿'
-                          : page === 'knowledge'
+                        : page === 'knowledge'
                             ? '知识与经验'
                             : page === 'analytics'
                               ? '任务统计'
@@ -275,13 +274,6 @@ onUnmounted(() => window.removeEventListener('hashchange', onHashChange));
                       <template #icon><RefreshCw :size="16" /></template>
                       刷新
                     </NButton>
-                    <NButton
-                      type="primary"
-                      @click="navigate('drafts')"
-                    >
-                      <template #icon><Plus :size="18" /></template>
-                      新建需求
-                    </NButton>
                   </div>
                 </header>
                 <section
@@ -313,6 +305,23 @@ onUnmounted(() => window.removeEventListener('hashchange', onHashChange));
                 </section>
                 <div class="prototype-workbench-columns">
                   <div class="prototype-workbench-primary">
+                    <section
+                      v-if="interventions.length"
+                      class="prototype-review-notice"
+                      aria-label="需要人工介入的任务"
+                    >
+                      <span class="prototype-notice-symbol"><ShieldCheck :size="23" /></span>
+                      <div>
+                        <strong>{{ interventions.length }} 个任务需要人工介入</strong>
+                        <p>任务失败或已暂停，可查看原因、手动恢复或补充说明后重新规划。</p>
+                        <NButton
+                          v-for="task in interventions"
+                          :key="task.taskId"
+                          text
+                          @click="openIssue(Number(task.taskId))"
+                        >处理 #{{ task.taskId }} · {{ task.title }}</NButton>
+                      </div>
+                    </section>
                     <section
                       v-if="reviews.length"
                       class="prototype-review-notice"
@@ -447,7 +456,6 @@ onUnmounted(() => window.removeEventListener('hashchange', onHashChange));
                 :page="workspacePage"
                 :tasks="tasks"
                 :system-status="systemStatus"
-                @create="navigate('drafts')"
               />
             </main>
           </div>

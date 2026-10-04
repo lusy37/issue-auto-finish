@@ -1,57 +1,32 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { NAlert } from 'naive-ui/es/alert';
 import { NButton } from 'naive-ui/es/button';
 import { NCard } from 'naive-ui/es/card';
 import { NEmpty } from 'naive-ui/es/empty';
-import { NFormItem } from 'naive-ui/es/form';
 import { NInput } from 'naive-ui/es/input';
 import { useMessage } from 'naive-ui/es/message';
-import { NModal } from 'naive-ui/es/modal';
 import { NStatistic } from 'naive-ui/es/statistic';
 import { NSwitch } from 'naive-ui/es/switch';
-import { NTag } from 'naive-ui/es/tag';
-import {
-  ArrowUpRight,
-  FileText,
-  Plus,
-  Search,
-  Trash2,
-} from '@lucide/vue';
 import { fetchSettings, saveSettings } from '@/api/client';
-import { json, type DemandDraft } from '@/api/mini';
 import type { ExecutableTask, SystemStatus } from '@/types';
-import { useAction } from '@/composables/useAction';
+import { isReviewWaiting } from '@/adapters/issueflowViewModel';
 import TaskDistributionChart from '@/components/TaskDistributionChart.vue';
 import KnowledgeWorkspace from '@/components/KnowledgeWorkspace.vue';
 
 const props = defineProps<{
-  page: 'drafts' | 'knowledge' | 'analytics' | 'settings';
+  page: 'knowledge' | 'analytics' | 'settings';
   tasks: ExecutableTask[];
   systemStatus: SystemStatus | null;
 }>();
-const emit = defineEmits<{ create: []; refresh: [] }>();
+defineEmits<{ refresh: [] }>();
 const message = useMessage();
-const { busy, error, run } = useAction();
-const drafts = ref<DemandDraft[]>([]);
-const draftQuery = ref('');
-const showCreate = ref(false);
-const input = ref('');
 const pageMeta = computed(
   () =>
     ({
-      drafts: ['需求草稿', '先把想法整理清楚，再交给 AI 实施。'],
       knowledge: ['知识与经验', '项目约定与交付经验，为下一次实现提供依据。'],
       analytics: ['任务统计', '回顾任务分布，找到需要关注的执行环节。'],
       settings: ['工作台设置', '调整阅读与显示偏好，让工作台适合你的节奏。'],
     })[props.page],
-);
-const filteredDrafts = computed(() =>
-  drafts.value.filter((draft) =>
-    `${draft.title} ${draft.description}`
-      .toLowerCase()
-      .includes(draftQuery.value.trim().toLowerCase()),
-  ),
 );
 const analytics = computed(() => [
   { label: '总任务', value: props.tasks.length },
@@ -59,19 +34,45 @@ const analytics = computed(() => [
     label: '已交付',
     value: props.tasks.filter((task) => task.stateCategory === 'completed').length,
   },
-  { label: '待审核', value: props.tasks.filter((task) => task.stateCategory === 'blocked').length },
+  { label: '待审核', value: props.tasks.filter((task) => isReviewWaiting(task.lifecycle)).length },
   { label: '需处理', value: props.tasks.filter((task) => task.stateCategory === 'failed').length },
 ]);
 const distribution = computed(() => {
   const total = props.tasks.length;
   const categories = [
-    { label: '执行中', key: 'active', color: '#347abe' },
-    { label: '待审核', key: 'blocked', color: '#c78b22' },
-    { label: '失败待处理', key: 'failed', color: '#bd5a5a' },
-    { label: '已完成', key: 'completed', color: '#168875' },
+    {
+      label: '执行中',
+      key: 'active',
+      color: '#347abe',
+      matches: (task: ExecutableTask) => task.stateCategory === 'active',
+    },
+    {
+      label: '待审核',
+      key: 'review',
+      color: '#c78b22',
+      matches: (task: ExecutableTask) => isReviewWaiting(task.lifecycle),
+    },
+    {
+      label: '已暂停',
+      key: 'paused',
+      color: '#b37a16',
+      matches: (task: ExecutableTask) => task.lifecycle.kind === 'paused',
+    },
+    {
+      label: '失败待处理',
+      key: 'failed',
+      color: '#bd5a5a',
+      matches: (task: ExecutableTask) => task.stateCategory === 'failed',
+    },
+    {
+      label: '已完成',
+      key: 'completed',
+      color: '#168875',
+      matches: (task: ExecutableTask) => task.stateCategory === 'completed',
+    },
   ];
   return categories.map((category) => {
-    const count = props.tasks.filter((task) => task.stateCategory === category.key).length;
+    const count = props.tasks.filter(category.matches).length;
     const percentageValue = total ? (count / total) * 100 : 0;
     return {
       ...category,
@@ -131,6 +132,15 @@ const settingSections: SettingSection[] = [
       },
       { key: 'UAT_CONFIG_FILE', label: '验收配置文件', placeholder: 'playwright.config.ts' },
       { key: 'UAT_TIMEOUT_MS', label: '验收超时（毫秒）', type: 'number' },
+      {
+        key: 'E2E_VISUAL_REVIEW_ENABLED',
+        label: '视觉复核',
+        type: 'boolean',
+        help: '机器验收通过后复核截图；配置在每次 UAT 开始时固化。',
+      },
+      { key: 'E2E_VISUAL_REVIEW_MAX_IMAGES', label: '视觉复核最大图片数', type: 'number' },
+      { key: 'E2E_VISUAL_REVIEW_MODEL', label: '视觉复核模型', placeholder: '留空继承 AI 模型' },
+      { key: 'E2E_VISUAL_REVIEW_TIMEOUT_MS', label: '视觉复核超时（毫秒）', type: 'number' },
       { key: 'E2E_BASE_URL', label: '验收基础地址', placeholder: 'http://127.0.0.1:5173' },
       { key: 'PREVIEW_ENABLED', label: '预览服务', type: 'boolean' },
       { key: 'PREVIEW_BACKEND_COMMAND', label: '预览后端命令' },
@@ -210,26 +220,9 @@ function resetSettings() {
   settingsError.value = '';
 }
 
-async function loadDrafts() {
-  drafts.value = (await json<{ drafts: DemandDraft[] }>('/api/drafts')).drafts;
-}
-async function createDraft() {
-  if (!input.value.trim()) return;
-  await json('/api/drafts', 'POST', { input: input.value.trim() });
-  input.value = '';
-  showCreate.value = false;
-  await loadDrafts();
-  message.success('草稿已生成。');
-}
-async function removeDraft(draft: DemandDraft) {
-  await json(`/api/drafts/${draft.id}`, 'PUT', { ...draft, status: 'draft' });
-  drafts.value = drafts.value.filter((item) => item.id !== draft.id);
-  message.success('草稿已移除。');
-}
 watch(
   () => props.page,
   (value) => {
-    if (value === 'drafts') run(loadDrafts);
     if (value === 'settings') void loadSettings();
   },
   { immediate: true },
@@ -243,102 +236,8 @@ watch(
       <h1>{{ pageMeta[0] }}</h1>
       <p>{{ pageMeta[1] }}</p>
     </div>
-    <NButton
-      v-if="page === 'drafts'"
-      type="primary"
-      @click="showCreate = true"
-    >
-      <template #icon><Plus :size="17" /></template>
-      新建需求
-    </NButton>
   </header>
-
-  <template v-if="page === 'drafts'">
-    <NInput
-      v-if="drafts.length"
-      v-model:value="draftQuery"
-      placeholder="搜索草稿…"
-      clearable
-      class="prototype-draft-search"
-      aria-label="搜索草稿"
-    >
-      <template #prefix><Search :size="16" /></template>
-    </NInput>
-    <NAlert
-      v-if="error"
-      type="error"
-      class="prototype-alert"
-    >
-      {{ error }}
-    </NAlert>
-    <NCard
-      v-if="!filteredDrafts.length"
-      class="prototype-empty-card"
-    >
-      <NEmpty :description="draftQuery ? '没有匹配的草稿' : '把下一个想法写在这里'">
-        <template #extra>
-          <NButton
-            v-if="draftQuery"
-            @click="draftQuery = ''"
-          >
-            清除搜索
-          </NButton>
-          <NButton
-            v-else
-            type="primary"
-            @click="showCreate = true"
-          >
-            创建第一份草稿
-          </NButton>
-        </template>
-      </NEmpty>
-    </NCard>
-    <div
-      v-else
-      class="prototype-document-grid"
-    >
-      <NCard
-        v-for="draft in filteredDrafts"
-        :key="draft.id"
-        class="prototype-document-card"
-      >
-        <FileText
-          :size="23"
-          class="prototype-document-icon"
-        />
-        <h2>{{ draft.title }}</h2>
-        <p>{{ draft.description || '尚未填写背景说明。' }}</p>
-        <NTag
-          size="small"
-          :bordered="false"
-        >
-          草稿 · {{ new Date(draft.createdAt).toLocaleDateString('zh-CN') }}
-        </NTag>
-        <template #action>
-          <div class="prototype-card-actions">
-            <NButton
-              text
-              type="primary"
-              @click="emit('create')"
-            >
-              查看详情
-              <ArrowUpRight :size="15" />
-            </NButton>
-            <NButton
-              quaternary
-              circle
-              :aria-label="'删除草稿 ' + draft.title"
-              :loading="busy"
-              @click="run(() => removeDraft(draft))"
-            >
-              <template #icon><Trash2 :size="16" /></template>
-            </NButton>
-          </div>
-        </template>
-      </NCard>
-    </div>
-  </template>
-  <KnowledgeWorkspace v-else-if="page === 'knowledge'" />
+  <KnowledgeWorkspace v-if="page === 'knowledge'" />
   <template v-else-if="page === 'analytics'">
     <div class="prototype-analytics-metrics">
       <NCard
@@ -467,33 +366,4 @@ watch(
     />
   </NCard>
 
-  <NModal
-    v-model:show="showCreate"
-    preset="card"
-    title="新建需求草稿"
-    class="prototype-draft-modal"
-  >
-    <NFormItem
-      label="原始需求"
-      required
-    >
-      <NInput
-        v-model:value="input"
-        type="textarea"
-        :autosize="{ minRows: 5, maxRows: 12 }"
-        placeholder="描述希望完成的需求与验收标准"
-      />
-    </NFormItem>
-    <div class="prototype-modal-actions">
-      <NButton @click="showCreate = false">取消</NButton>
-      <NButton
-        type="primary"
-        :loading="busy"
-        :disabled="!input.trim()"
-        @click="run(createDraft)"
-      >
-        生成草稿
-      </NButton>
-    </div>
-  </NModal>
 </template>

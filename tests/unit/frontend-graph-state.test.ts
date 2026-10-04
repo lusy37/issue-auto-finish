@@ -39,7 +39,7 @@ it('元数据失败后可重试，并发只发一次；本轮阶段优先', asyn
   await loadPipelineMeta();
   expect(fetch).toHaveBeenCalledTimes(2);
   const run = newIssueRun(); run.workflow.definition = { phaseIds: ['plan', 'review', 'build', 'verify'] };
-  const issue: IssueRecord = { run, lifecycle: { kind: 'running', phase: 'build' }, branchName: 'iaf-2', demandSpec: { demandId: '2', sourceRef: { source: 'github-issue', externalId: '2' }, title: '需求', description: '测试' }, createdAt: '', updatedAt: '' };
+  const issue: IssueRecord = { run, phaseHistory: [], lifecycle: { kind: 'running', phase: 'build' }, branchName: 'iaf-2', demandSpec: { demandId: '2', sourceRef: { source: 'github-issue', externalId: '2' }, title: '需求', description: '测试', createdAt: '' }, createdAt: '', updatedAt: '' };
   expect(usePipeline().getPhaseNames(issue)).not.toContain('uat');
   expect(usePipeline().isEditableDoc('01-plan.md')).toBe(false);
 });
