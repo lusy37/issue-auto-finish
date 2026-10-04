@@ -27,10 +27,8 @@ import {
   ShieldCheck,
 } from '@lucide/vue';
 import type { SystemStatus } from '@/types';
-import { getIssueIid } from '@/types';
 import { useTasks } from '@/composables/useTasks';
 import { useSSE } from '@/composables/useSSE';
-import { useIssueDetail } from '@/composables/useIssueDetail';
 import { isReviewWaiting, needsIntervention } from '@/adapters/issueflowViewModel';
 import * as api from '@/api/client';
 const NativeTaskTable = defineAsyncComponent(() => import('./NativeTaskTable.vue'));
@@ -42,25 +40,7 @@ const route = ref(location.hash || '#/workbench');
 const mobileMenu = ref(false);
 const refreshBusy = ref(false);
 const { tasks, loading, error, refresh } = useTasks('issue');
-const detail = useIssueDetail();
-const connectedState = useSSE((eventName, rawPayload) => {
-  const payload = rawPayload as { data?: { issueIid?: number } };
-  if (
-    eventName.startsWith('issue:') ||
-    eventName.startsWith('gate:') ||
-    eventName.startsWith('phase:') ||
-    eventName.startsWith('pipeline:') ||
-    eventName.startsWith('uat:')
-  ) {
-    refresh();
-    if (
-      payload.data?.issueIid &&
-      detail.selectedIssue.value &&
-      getIssueIid(detail.selectedIssue.value) === payload.data.issueIid
-    )
-      detail.refreshDetail();
-  }
-});
+const connectedState = useSSE(() => {});
 const connected = connectedState.connected;
 const page = computed(() => {
   const value = route.value.replace(/^#\//, '').split('/')[0];

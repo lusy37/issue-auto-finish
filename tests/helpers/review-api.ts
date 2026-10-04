@@ -1,5 +1,5 @@
 import { suspendAtReview } from './native-review.js';
-import express from 'express';
+import { createApp } from '../../src/web/createApp.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -34,8 +34,7 @@ export async function reviewApi(subdir = '') {
   };
   await newPlan();
   const persistence = new PlanPersistence(directory, 42, data, tracker);
-  const app = express(); app.use(express.json());
-  app.use(createApiRouter({ tracker, config, github: github as unknown as import('../../src/clients/GitHubClient.js').GitHubClient, orchestrator, agentLogStore: { getLogs: () => [] } as never, supplementStore: undefined as never }));
+  const app = createApp(undefined, [createApiRouter({ tracker, config, github: github as unknown as import('../../src/clients/GitHubClient.js').GitHubClient, orchestrator, agentLogStore: { getLogs: () => [] } as never, supplementStore: undefined as never })]);
   let server: Server;
   await new Promise<void>(resolve => { server = app.listen(0, '127.0.0.1', resolve); });
   const baseUrl = `http://127.0.0.1:${(server!.address() as { port: number }).port}`;

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { DistillScheduler } from '../../distill/DistillScheduler.js';
 import type { DiaryStore } from '../../distill/DiaryStore.js';
 import type { Config } from '../../config.js';
+import { AppError } from '../../errors/BaseError.js';
 export function createDistillRouter(deps: {
   config: Config;
   diaryStore: DiaryStore;
@@ -22,14 +23,11 @@ export function createDistillRouter(deps: {
       total: deps.diaryStore.displayableCount(),
     }),
   );
-  router.post('/api/distill/run', async (_req, res, next) => {
-    try {
-      if (!deps.config.distill.enabled) throw new Error('经验蒸馏已关闭，请在设置中开启并重启服务');
-      if (!deps.distillScheduler) throw new Error('蒸馏组件未初始化');
-      res.json(await deps.distillScheduler.runDistill({ force: true }));
-    } catch (err) {
-      next(err);
-    }
+  router.post('/api/distill/run', async (_req, res) => {
+    if (!deps.config.distill.enabled)
+      throw new AppError('FEATURE_DISABLED', '经验蒸馏已关闭，请在设置中开启并重启服务');
+    if (!deps.distillScheduler) throw new Error('蒸馏组件未初始化');
+    res.json(await deps.distillScheduler.runDistill({ force: true }));
   });
   return router;
 }

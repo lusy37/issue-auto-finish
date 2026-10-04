@@ -1,8 +1,6 @@
 import { isWorkbenchLabel } from './IssueLabels.js';
-import { GITHUB_MAX_AUTO_WAIT_MS } from '../errors/GitHubPolicy.js';
 import { GitHubApiError } from '../errors/index.js';
-import { RetryPolicy } from '../utils/RetryPolicy.js';
-import { Semaphore } from '../utils/Semaphore.js';
+import { createGitHubTransport, githubError } from './GitHubTransport.js';
 
 export interface GitHubConfig {
   apiUrl: string;
@@ -96,19 +94,11 @@ const user = (u?: User) => ({
 
 export class GitHubClient {
   private config: GitHubConfig;
-  private readonly requests = new Semaphore(4);
+  private transport: ReturnType<typeof createGitHubTransport>;
   private readonly labels = new Set<string>();
-  private readonly retry = new RetryPolicy({
-    maxRetries: 3,
-    baseDelayMs: 1000,
-    maxDelayMs: GITHUB_MAX_AUTO_WAIT_MS,
-    jitterFactor: 0,
-    isRetryable: (error) =>
-      error instanceof GitHubApiError ? error.isRetryable : error instanceof TypeError,
-    getBaseDelay: (error) => (error instanceof GitHubApiError ? error.retryAfterMs : undefined),
-  });
   constructor(config: GitHubConfig) {
     this.config = this.validate(config);
+    this.transport = createGitHubTransport(this.config.apiUrl, this.config.token);
   }
   private validate(config: GitHubConfig): GitHubConfig {
     if (
@@ -139,47 +129,26 @@ export class GitHubClient {
     return `${this.config.apiUrl}/repos/${this.config.repository.split('/').map(encodeURIComponent).join('/')}`;
   }
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const send = async () => {
-      const response = await fetch(this.base + endpoint, {
-        ...options,
-        redirect: 'error',
-        signal: options.signal ?? AbortSignal.timeout(30000),
-        headers: {
-          Accept: 'application/vnd.github+json',
-          Authorization: `Bearer ${this.config.token}`,
-          'X-GitHub-Api-Version': '2026-03-10',
-          'Content-Type': 'application/json',
-        },
+    try {
+      const method = options.method ?? 'GET';
+      const result = await this.transport.request(`${method} ${this.base}${endpoint}`, {
+        data: options.body ? JSON.parse(String(options.body)) : undefined,
+        request: { ...(method === 'POST' ? { retries: 0 } : {}), signal: options.signal ?? undefined },
       });
-      if (!response.ok) {
-        const body = await response.text(),
-          wait = response.headers.get('retry-after'),
-          reset = response.headers.get('x-ratelimit-reset');
-        const limited =
-          response.status === 429 ||
-          (response.status === 403 &&
-            (wait !== null || response.headers.get('x-ratelimit-remaining') === '0'));
-        const delay = wait
-          ? /^\d+$/.test(wait)
-            ? Number(wait) * 1000
-            : Math.max(0, Date.parse(wait) - Date.now())
-          : reset
-            ? Math.max(0, Number(reset) * 1000 - Date.now())
-            : 60000;
-        throw new GitHubApiError(
-          response.status,
-          `GitHub 请求失败 ${response.status}${limited ? '（限流，请稍后重试）' : ''}: ${body}`,
-          body,
-          limited,
-          limited ? Math.max(1000, delay || 60000) : undefined,
-        );
+      return result.data as T;
+    } catch (error) { throw githubError(error); }
+  }
+  private async list<T>(endpoint: string, message: string): Promise<T[]> {
+    const items: T[] = [];
+    let pages = 0;
+    try {
+      for await (const response of this.transport.paginate.iterator(`GET ${this.base}${endpoint}`)) {
+        pages++;
+        items.push(...response.data as T[]);
+        if (pages === 100 && response.headers.link?.includes('rel="next"')) throw new Error(message);
       }
-      return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
-    };
-    // 创建请求响应丢失时结果未知，由上层核对，禁止自动重发。
-    return this.requests.run(() =>
-      options.method === 'POST' ? send() : this.retry.execute(send, endpoint),
-    );
+    } catch (error) { throw githubError(error); }
+    return items;
   }
   private issue(raw: RawIssue): GitHubIssue {
     if (raw.pull_request) throw new Error('所选编号是 PR，请选择普通 Issue');
@@ -231,21 +200,11 @@ export class GitHubClient {
     );
   }
   async listIssues(state = 'open', labels?: string): Promise<GitHubIssue[]> {
-    const items: GitHubIssue[] = [];
-    for (let page = 1; page <= 100; page++) {
-      const params = new URLSearchParams({
-        state,
-        per_page: '100',
-        page: String(page),
-        sort: 'created',
-        direction: 'asc',
-      });
-      if (labels) params.set('labels', labels);
-      const batch = await this.request<RawIssue[]>(`/issues?${params}`);
-      items.push(...batch.filter((i) => !i.pull_request).map((i) => this.issue(i)));
-      if (batch.length < 100) return items;
-    }
-    throw new Error('Issue 超过一次查询的 10000 条上限，请缩小标签或状态范围');
+    const params = new URLSearchParams({ state, per_page: '100', sort: 'created', direction: 'asc' });
+    if (labels) params.set('labels', labels);
+    const items = await this.list<RawIssue>(`/issues?${params}`,
+      'Issue 超过一次查询的 10000 条上限，请缩小标签或状态范围');
+    return items.filter((item) => !item.pull_request).map((item) => this.issue(item));
   }
   async listIssuesAdvanced(
     options: {
@@ -350,13 +309,8 @@ export class GitHubClient {
     };
   }
   async listPullRequests(): Promise<GitHubPullRequest[]> {
-    const result: GitHubPullRequest[] = [];
-    for (let page = 1; page <= 100; page++) {
-      const batch = await this.request<RawPull[]>(`/pulls?state=all&per_page=100&page=${page}`);
-      result.push(...batch.map((raw) => this.pull(raw)));
-      if (batch.length < 100) return result;
-    }
-    throw new Error('PR 查询结果不完整，不能可靠核对交付身份');
+    return (await this.list<RawPull>('/pulls?state=all&per_page=100',
+      'PR 查询结果不完整，不能可靠核对交付身份')).map((raw) => this.pull(raw));
   }
   async closePullRequest(number: number): Promise<void> {
     await this.request(`/pulls/${number}`, {
@@ -374,22 +328,10 @@ export class GitHubClient {
     await this.createIssueNote(number, body);
   }
   async listIssueNotes(number: number): Promise<GitHubNote[]> {
-    const result: GitHubNote[] = [];
-    for (let page = 1; page <= 100; page++) {
-      const batch = await this.request<RawNote[]>(
-        `/issues/${number}/comments?per_page=100&page=${page}`,
-      );
-      result.push(
-        ...batch.map((n) => ({
-          id: n.id,
-          body: n.body ?? '',
-          author: user(n.user),
-          created_at: n.created_at,
-        })),
-      );
-      if (batch.length < 100) return result;
-    }
-    throw new Error('评论超过查询上限，无法可靠核对交付结果');
+    return (await this.list<RawNote>(`/issues/${number}/comments?per_page=100`,
+      '评论超过查询上限，无法可靠核对交付结果')).map((note) => ({
+        id: note.id, body: note.body ?? '', author: user(note.user), created_at: note.created_at,
+      }));
   }
   async deleteIssueNote(_number: number, noteId: number): Promise<void> {
     await this.request(`/issues/comments/${noteId}`, { method: 'DELETE' });
@@ -409,6 +351,7 @@ export class GitHubClient {
   }
   updateConfig(config: GitHubConfig): void {
     this.config = this.validate(config);
+    this.transport = createGitHubTransport(this.config.apiUrl, this.config.token);
     this.labels.clear();
   }
 }

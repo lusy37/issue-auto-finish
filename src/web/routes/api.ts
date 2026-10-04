@@ -13,7 +13,8 @@ const { Router } = express;
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { marked } from 'marked';
+import { renderMarkdown } from '../renderMarkdown.js';
+import { issueNumberSchema, supplementSchema, startIssueSchema, reviewSchema, phaseSchema, contentSchema, noteSyncSchema, booleanSettingSchema, browseQuerySchema, logQuerySchema } from '../RequestContracts.js';
 import { createPatch } from 'diff';
 import { IssueTracker } from '../../tracker/IssueTracker.js';
 import { issueStateCategory } from '../../tracker/ExecutableTask.js';
@@ -124,6 +125,10 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     worktreeReaper,
   } = deps;
   const router = Router();
+  router.param('number', (_req, _res, next, value) => {
+    issueNumberSchema.parse(value);
+    next();
+  });
   // 在首次异步请求前占用编号，防止并发启动覆盖同一个任务。
   const startingIssues = new Set<number>();
 
@@ -162,7 +167,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   });
 
   router.get('/api/issues/:number', async (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     const record = tracker.get(number);
     if (!record) {
       res.status(404).json({ error: 'Issue not found' });
@@ -186,7 +191,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   }
 
   router.get('/api/issues/:number/plans/:filename', async (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     const filename = req.params.filename;
     const def = getIssuePipelineDef(number);
     const allowed = [
@@ -204,7 +209,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     }
     if (filename.endsWith('.json')) {
       if (req.query.format === 'html') {
-        const html = await marked(
+        const html = await renderMarkdown(
           '```json\n' + JSON.stringify(JSON.parse(content), null, 2) + '\n```',
         );
         res.type('html').send(html);
@@ -214,7 +219,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       return;
     }
     if (req.query.format === 'html') {
-      const html = await marked(content);
+      const html = await renderMarkdown(content);
       res.type('html').send(html);
       return;
     }
@@ -222,7 +227,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   });
 
   router.post('/api/issues/:number/start', (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     const ok = tracker.startSkipped(number);
     if (!ok) {
       res.status(400).json({ error: 'Issue is not in skipped state or not found' });
@@ -245,7 +250,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   };
 
   router.post('/api/issues/:number/retry', (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     let ok: boolean;
     try {
       ok = orch.retryIssue(number);
@@ -267,7 +272,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   });
 
   router.post('/api/issues/:number/cancel', async (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     const record = tracker.get(number);
     if (!record) {
       res.status(404).json({ error: 'Issue not found in tracker' });
@@ -290,7 +295,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   });
 
   router.post('/api/issues/:number/restart', async (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     try {
       await orch.restartIssue(number);
       // 必须在 restartIssue 完成后再释放，否则 drive() 会在清理期间重新拾取 issue
@@ -308,8 +313,8 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   });
 
   router.post('/api/issues/:number/retry-from-phase', (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
-    const { phase } = req.body as { phase?: string };
+    const number = Number(req.params.number);
+    const { phase } = phaseSchema.parse(req.body);
     const def = getIssuePipelineDef(number);
     const validPhases = getRetryablePhases(def);
     if (!phase || !validPhases.includes(phase)) {
@@ -334,7 +339,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   // ── 阶段级中止/继续/重做 ──
 
   router.post('/api/issues/:number/abort', async (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     try {
       await orch.abortIssue(number);
       poller?.forceReleaseIssue(number);
@@ -351,7 +356,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   });
 
   router.post('/api/issues/:number/continue', (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     try {
       orch.continueIssue(number);
       res.json({
@@ -367,7 +372,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   });
 
   router.post('/api/issues/:number/redo-phase', async (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     try {
       await orch.redoPhase(number);
       poller?.forceReleaseIssue(number);
@@ -384,7 +389,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   });
 
   router.put('/api/issues/:number/plans/:filename', (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     const filename = req.params.filename;
     if (filename === ARTIFACTS.plan.filename) {
       res.status(403).json({ error: '计划由结构化版本生成，只能通过审核反馈重新规划' });
@@ -398,11 +403,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(400).json({ error: `File not editable. Allowed: ${editableFiles.join(', ')}` });
       return;
     }
-    const { content } = req.body as { content?: string };
-    if (typeof content !== 'string') {
-      res.status(400).json({ error: 'Request body must contain a "content" string field' });
-      return;
-    }
+    const { content } = contentSchema.parse(req.body);
     const planDir = resolveIssueArtifactsDir(number, tracker.store.dataDir);
     const filePath = resolveIssueArtifactPath(number, filename, tracker.store.dataDir);
     if (!fs.existsSync(planDir)) {
@@ -455,18 +456,19 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   });
 
   router.get('/api/issues/:number/logs', (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     const record = tracker.get(number);
     if (!record) {
       res.status(404).json({ error: 'Issue not found' });
       return;
     }
+    const query = logQuerySchema.parse(req.query);
     const logs = logStore
       .getLogs(number)
       .filter(
         (entry) =>
-          (!req.query.taskId || entry.identity?.taskId === req.query.taskId) &&
-          (!req.query.attemptNo || entry.identity?.attemptNo === Number(req.query.attemptNo)),
+          (!query.taskId || entry.identity?.taskId === query.taskId) &&
+          (!query.attemptNo || entry.identity?.attemptNo === query.attemptNo),
       );
     res.json(logs);
   });
@@ -474,22 +476,14 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   // --- Supplement endpoints ---
 
   router.get('/api/issues/:number/supplement', (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     const info = supplementStore.get(number);
     res.json(info);
   });
 
   router.put('/api/issues/:number/supplement', (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
-    const body = req.body as Record<string, unknown>;
-    const data = {
-      requirements: String(body.requirements || ''),
-      acceptanceCriteria: String(body.acceptanceCriteria || ''),
-      scope: String(body.scope || ''),
-      constraints: String(body.constraints || ''),
-      references: String(body.references || ''),
-      freeText: String(body.freeText || ''),
-    };
+    const number = Number(req.params.number);
+    const data = supplementSchema.parse(req.body);
     const saved = supplementStore.save(number, data);
     res.json({ success: true, data: saved });
   });
@@ -497,11 +491,8 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   // --- GitHub issue browsing ---
 
   router.get('/api/github/issues', async (req: Request, res: Response) => {
+    const { search, page, per_page: perPage } = browseQuerySchema.parse(req.query);
     try {
-      const search = (req.query.search as string) || '';
-      const page = parseInt(req.query.page as string, 10) || 1;
-      const perPage = parseInt(req.query.per_page as string, 10) || 20;
-
       const result = await github.listIssuesAdvanced({
         state: 'open',
         search: search || undefined,
@@ -526,20 +517,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   // --- Start processing an issue ---
 
   router.post('/api/issues/start', async (req: Request, res: Response) => {
-    const body = req.body as {
-      issueId?: number;
-      issueIid?: number;
-      issueTitle?: string;
-      supplement?: Record<string, string>;
-    };
-    if (
-      typeof body.issueIid !== 'number' ||
-      !Number.isSafeInteger(body.issueIid) ||
-      body.issueIid < 1
-    ) {
-      res.status(400).json({ error: '需要正整数 Issue 编号 issueIid' });
-      return;
-    }
+    const body = startIssueSchema.parse(req.body);
 
     const existing = tracker.get(body.issueIid);
     if (existing || startingIssues.has(body.issueIid)) {
@@ -571,14 +549,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       });
 
       if (body.supplement) {
-        supplementStore.save(body.issueIid, {
-          requirements: String(body.supplement.requirements || ''),
-          acceptanceCriteria: String(body.supplement.acceptanceCriteria || ''),
-          scope: String(body.supplement.scope || ''),
-          constraints: String(body.supplement.constraints || ''),
-          references: String(body.supplement.references || ''),
-          freeText: String(body.supplement.freeText || ''),
-        });
+        supplementStore.save(body.issueIid, body.supplement);
       }
 
       res.json({ success: true, record });
@@ -613,7 +584,8 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
         res.status(404).json({ error: 'Issue not found' });
         return;
       }
-      const revision = req.body?.planRevision;
+      const body = reviewSchema.parse(req.body);
+      const revision = body.planRevision;
       if (!Number.isInteger(revision) || revision !== record.run.planRevision) {
         res.status(409).json({ error: '审核版本已过期或缺失，请刷新计划后重试' });
         return;
@@ -627,7 +599,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       }
       let action: GateAction = { action: 'approve' };
       if (route === 'reject-plan') {
-        const feedback: unknown = req.body?.feedback;
+        const feedback = body.feedback;
         if (typeof feedback !== 'string' || !feedback.trim()) {
           res.status(400).json({ error: 'Feedback is required' });
           return;
@@ -663,7 +635,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   }
 
   router.get('/api/issues/:number/review-history', (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     const record = tracker.get(number);
     if (!record) {
       res.status(404).json({ error: 'Issue not found' });
@@ -689,7 +661,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
    *   - hasChanges=false：首轮（无 history）/ snapshot 缺失 / 内容相同 / 文件缺失
    */
   router.get('/api/issues/:number/plan-diff', (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     const record = tracker.get(number);
     if (!record) {
       res.status(404).json({ error: 'Issue not found' });
@@ -737,13 +709,13 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   // --- Note Sync toggle endpoints ---
 
   router.put('/api/issues/:number/note-sync', (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     const record = tracker.get(number);
     if (!record) {
       res.status(404).json({ error: 'Issue not found' });
       return;
     }
-    const { enabled } = req.body as { enabled?: boolean | null };
+    const { enabled } = noteSyncSchema.parse(req.body);
     const value = enabled === null ? undefined : enabled;
     tracker.transaction(number, (current) => {
       current.issueNoteSyncEnabled = value;
@@ -753,11 +725,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   });
 
   router.put('/api/system/note-sync', (req: Request, res: Response) => {
-    const { enabled } = req.body as { enabled?: boolean };
-    if (typeof enabled !== 'boolean') {
-      res.status(400).json({ error: 'enabled must be a boolean' });
-      return;
-    }
+    const { enabled } = booleanSettingSchema.parse(req.body);
     setNoteSyncOverride(enabled);
     logger.info('System note-sync toggled', { enabled });
     res.json({ success: true, issueNoteSyncEnabled: enabled });
@@ -766,7 +734,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   // --- Preview endpoints ---
 
   router.get('/api/issues/:number/preview', (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     const record = tracker.get(number);
     if (!record) {
       res.status(404).json({ error: 'Issue not found' });
@@ -777,7 +745,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   });
 
   router.post('/api/issues/:number/stop-preview', async (_req: Request, res: Response) => {
-    const number = parseInt(_req.params.number, 10);
+    const number = Number(_req.params.number);
     const record = tracker.get(number);
     if (!record) {
       res.status(404).json({ error: 'Issue not found' });
@@ -788,7 +756,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   });
 
   router.post('/api/issues/:number/restart-preview', async (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     try {
       const previewUrl = await orch.restartPreview(number);
       res.json({ success: true, previewUrl });
@@ -798,7 +766,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   });
 
   router.post('/api/issues/:number/rebuild-worktree', async (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     try {
       await orch.rebuildWorktree(number);
       res.json({ success: true, worktree: orch.getWorktreeStatus(number) });
@@ -808,7 +776,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   });
 
   router.get('/api/issues/:number/preview-logs/:type', (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     const logType = req.params.type;
     if (logType !== 'backend' && logType !== 'frontend') {
       res.status(400).json({ error: 'type must be "backend" or "frontend"' });
@@ -819,7 +787,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(404).json({ error: 'Log file not found' });
       return;
     }
-    const tail = parseInt(req.query.tail as string, 10);
+    const tail = req.query.tail === undefined ? 0 : issueNumberSchema.parse(req.query.tail);
     if (tail > 0) {
       const content = fs.readFileSync(logPath, 'utf-8');
       const lines = content.split('\n');
@@ -943,7 +911,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   // --- Standalone document viewer (linked from issue notes) ---
 
   router.get('/doc/:number/:filename', async (req: Request, res: Response) => {
-    const number = parseInt(req.params.number, 10);
+    const number = Number(req.params.number);
     const filename = req.params.filename;
     const record = tracker.get(number);
     const title = record ? getTitle(record) : `Issue #${number}`;
@@ -967,7 +935,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       return;
     }
 
-    const htmlBody = await marked(content);
+    const htmlBody = await renderMarkdown(content);
     res.type('html').send(renderDocPage(number, title, htmlBody, filename));
   });
 

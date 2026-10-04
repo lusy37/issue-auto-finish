@@ -12,21 +12,6 @@ export function scopedRunner(
   taskId = '$phase',
   attemptNo?: number,
 ): AIRunner {
-  const composeSignals = (local?: AbortSignal): { signal: AbortSignal; cleanup: () => void } => {
-    if (!local || local === signal) return { signal, cleanup: () => undefined };
-    const controller = new AbortController();
-    const abort = () => controller.abort();
-    signal.addEventListener('abort', abort, { once: true });
-    local.addEventListener('abort', abort, { once: true });
-    if (signal.aborted || local.aborted) controller.abort();
-    return {
-      signal: controller.signal,
-      cleanup: () => {
-        signal.removeEventListener('abort', abort);
-        local.removeEventListener('abort', abort);
-      },
-    };
-  };
   return {
     canResumeSession: (id) => runner.canResumeSession?.(id) ?? true,
     // 运行器已经被限定到单个 Issue，不能让调用方绕过边界终止其他 Issue 的任务。
@@ -60,11 +45,11 @@ export function scopedRunner(
         if (record.run.tasks[taskId]) record.run.tasks[taskId].identity = identity;
       });
       // 执行阶段：启动并等待 Worker；这里的异常继续交给上层处理。
-      const combined = composeSignals(options.signal);
+      const combined = options.signal ? AbortSignal.any([signal, options.signal]) : signal;
       try {
         const result = await runner.run({
           ...options,
-          signal: combined.signal,
+          signal: combined,
           identity,
           onWorkerStarted: (pid) => {
             // Worker 启动可能晚于新一轮调度，先确认它仍属于当前执行。
@@ -92,7 +77,6 @@ export function scopedRunner(
         tracker.assertIdentity(identity);
         return { ...result, identity };
       } finally {
-        combined.cleanup();
         // 收尾阶段：无论成功、失败还是取消，都登记调用已退出。
         tracker.transaction(issueNumber, (record) => {
           const call = record.run.calls[identity.callId];

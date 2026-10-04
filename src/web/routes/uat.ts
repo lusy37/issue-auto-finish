@@ -1,10 +1,12 @@
 import express from 'express';
+import { issueNumberSchema } from '../RequestContracts.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveDataDir } from '../../paths.js';
 import { UAT_FORMAT } from '../../shared/runtime/formats.js';
 export function createUatRouter(dataDir = resolveDataDir()) {
   const router = express.Router();
+  router.param('number', (_req, _res, next, value) => { issueNumberSchema.parse(value); next(); });
   const root = path.join(dataDir, 'uat');
   router.get('/api/issues/:number/uat-runs', (req, res) => {
     const runs = fs.existsSync(root)

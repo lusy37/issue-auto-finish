@@ -1,6 +1,6 @@
 import { buildCallOptions, type AICallPolicy } from '../ai-runner/CallPolicy.js';
 import { parseJsonOutput } from '../prompts/parseJsonOutput.js';
-import { ruleActionsSchema } from './ActionSchema.js';
+import { ruleOutputSchema, RULE_OUTPUT_SCHEMA } from './ActionSchema.js';
 /**
  * AgentRuleDistiller — Layer 3: 从成熟 memory 提取可执行的 Agent 规则。
  *
@@ -86,6 +86,7 @@ export class AgentRuleDistiller {
       prompt,
       workDir: this.workDir,
       ...buildCallOptions(this.aiPolicy, 'rule-distill'),
+      outputSchema: RULE_OUTPUT_SCHEMA,
     });
 
     if (!result.success) {
@@ -134,9 +135,7 @@ export class AgentRuleDistiller {
   private parseActions(output: string): RuleDistillAction[] {
     try {
       const parsed = parseJsonOutput(output);
-      if (!parsed || typeof parsed !== 'object' || !('actions' in parsed))
-        throw new Error('蒸馏结果缺少 actions');
-      return ruleActionsSchema.parse(parsed.actions);
+      return ruleOutputSchema.parse(parsed).actions;
     } catch (err) {
       logger.warn('Failed to parse AI rule distill output', {
         error: (err as Error).message,

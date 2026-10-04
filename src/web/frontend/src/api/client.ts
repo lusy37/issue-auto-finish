@@ -24,28 +24,30 @@ async function post<T = { success: boolean; message?: string }>(
 export async function fetchTasks(params?: {
   kind?: TaskKind;
   status?: string;
-}): Promise<ExecutableTask[]> {
+}, signal?: AbortSignal): Promise<ExecutableTask[]> {
   const qs = new URLSearchParams();
   if (params?.kind) qs.set('kind', params.kind);
   if (params?.status) qs.set('status', params.status);
   const query = qs.toString();
-  return request<ExecutableTask[]>('/api/tasks' + (query ? '?' + query : ''));
+  return request<ExecutableTask[]>('/api/tasks' + (query ? '?' + query : ''), { signal });
 }
 
 export async function fetchPipelineMeta(): Promise<PipelineMeta> {
   return request<PipelineMeta>('/api/pipeline-meta');
 }
 
-export async function fetchIssueDetail(number: number): Promise<IssueRecord> {
-  return request<IssueRecord>(`/api/issues/${number}`);
+export async function fetchIssueDetail(number: number, signal?: AbortSignal): Promise<IssueRecord> {
+  return request<IssueRecord>(`/api/issues/${number}`, { signal });
 }
 
-export async function fetchIssueLogs(number: number): Promise<AgentLogEntry[]> {
-  return request<AgentLogEntry[]>(`/api/issues/${number}/logs`);
+export async function fetchIssueLogs(
+  number: number, signal?: AbortSignal,
+): Promise<AgentLogEntry[]> {
+  return request<AgentLogEntry[]>(`/api/issues/${number}/logs`, { signal });
 }
 
-export async function fetchIssueGraphs(number: number): Promise<IssueGraphs> {
-  return request<IssueGraphs>(`/api/issues/${number}/graphs`);
+export async function fetchIssueGraphs(number: number, signal?: AbortSignal): Promise<IssueGraphs> {
+  return request<IssueGraphs>(`/api/issues/${number}/graphs`, { signal });
 }
 
 export async function fetchUatRuns(number: number): Promise<UatResult[]> {
@@ -120,8 +122,10 @@ export async function skipReview(number: number, planRevision: number): Promise<
   await post(`/api/issues/${number}/skip-review`, { planRevision });
 }
 
-export async function fetchReviewHistory(number: number): Promise<ReviewRound[]> {
-  return request<ReviewRound[]>(`/api/issues/${number}/review-history`);
+export async function fetchReviewHistory(
+  number: number, signal?: AbortSignal,
+): Promise<ReviewRound[]> {
+  return request<ReviewRound[]>(`/api/issues/${number}/review-history`, { signal });
 }
 
 export interface PlanDiff {
@@ -132,21 +136,23 @@ export interface PlanDiff {
 export async function fetchPlanDiff(
   number: number,
   file = ARTIFACTS.plan.filename,
+  signal?: AbortSignal,
 ): Promise<PlanDiff> {
   const url = `/api/issues/${number}/plan-diff?file=${encodeURIComponent(file)}`;
-  return request<PlanDiff>(url);
+  return request<PlanDiff>(url, { signal });
 }
 
 export async function loadPlanDoc(
   number: number,
   filename: string,
   format: 'html' | 'raw' = 'html',
+  signal?: AbortSignal,
 ): Promise<string> {
   const url =
     format === 'html'
       ? `/api/issues/${number}/plans/${filename}?format=html`
       : `/api/issues/${number}/plans/${filename}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error((body as Record<string, string>).error || 'Failed to load');
@@ -166,8 +172,10 @@ export async function savePlanDoc(
   });
 }
 
-export async function fetchSupplement(number: number): Promise<SupplementInfo | null> {
-  return request<SupplementInfo | null>(`/api/issues/${number}/supplement`);
+export async function fetchSupplement(
+  number: number, signal?: AbortSignal,
+): Promise<SupplementInfo | null> {
+  return request<SupplementInfo | null>(`/api/issues/${number}/supplement`, { signal });
 }
 
 export async function saveSupplement(

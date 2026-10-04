@@ -66,14 +66,8 @@ describe('GitHubClient.removeLabelsWithPrefix', () => {
     // Mock fetch
     const issueLabels = ['auto-finish', 'auto-finish:processing', 'auto-finish:done', 'bug', 'priority:high'];
     const mockFetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: 100, labels: issueLabels }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 100, labels: issueLabels }), { headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response('{}', { headers: { 'content-type': 'application/json' } }));
 
     vi.stubGlobal('fetch', mockFetch);
 
@@ -97,10 +91,7 @@ describe('GitHubClient.removeLabelsWithPrefix', () => {
     const client = new GitHubClient(config);
 
     const mockFetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: 100, labels: ['bug', 'feature'] }),
-      });
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 100, labels: ['bug', 'feature'] }), { headers: { 'content-type': 'application/json' } }));
 
     vi.stubGlobal('fetch', mockFetch);
 

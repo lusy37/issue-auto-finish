@@ -26,6 +26,8 @@ const taskPlanSchema = z
   })
   .strict();
 
+export const TASK_PLAN_OUTPUT_SCHEMA = z.toJSONSchema(taskPlanSchema);
+
 /** AI/文件输入边界：先校验字段形状，再执行普通 DAG invariant。 */
 export function decodePlanContent(value: unknown): PlanContent {
   const plan = taskPlanSchema.parse(value);

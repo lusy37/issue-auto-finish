@@ -145,7 +145,7 @@ describe('GitHubClient.cleanupAgentNotes', () => {
 
     fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(fullPage), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Link: '<https://github.example.com/repos/test/project/issues/100/comments?per_page=100&page=2>; rel="next"' },
     }));
     fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(secondPage), {
       status: 200,

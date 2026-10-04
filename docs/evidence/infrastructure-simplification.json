@@ -1,0 +1,124 @@
+{
+  "completedAt": "2026-10-05T00:09:59.520112+08:00",
+  "baselineCommit": "b69aa678d6d42b152b7e183c498c4e333eafcac7",
+  "committedAtValidation": false,
+  "scope": [
+    "GitHub HTTP",
+    "Execa 进程生命周期",
+    "Zod SDK 输出契约",
+    "HTTP 输入与错误状态",
+    "原生 SSE 与 Markdown 净化",
+    "TanStack Vue Query"
+  ],
+  "sourceLineStatistics": {
+    "production": {
+      "added": 477,
+      "deleted": 717,
+      "net": -240
+    },
+    "tests": {
+      "added": 301,
+      "deleted": 318,
+      "net": -17
+    },
+    "scripts": {
+      "added": 69,
+      "deleted": 0,
+      "net": 69
+    }
+  },
+  "statisticsPolicy": "Git 新增/删除行，包含注释、空行、新文件；依赖锁与文档单独处理",
+  "addedDirectDependencies": {
+    "runtime": 6,
+    "developmentTypes": 1
+  },
+  "checks": {
+    "typecheck": {
+      "status": "passed",
+      "log": ".iaf-mini/infrastructure-simplification/typecheck.log"
+    },
+    "lint": {
+      "status": "passed",
+      "log": ".iaf-mini/infrastructure-simplification/lint.log"
+    },
+    "backendBuild": {
+      "status": "passed",
+      "log": ".iaf-mini/infrastructure-simplification/backend-build.log"
+    },
+    "frontendBuild": {
+      "status": "passed",
+      "log": ".iaf-mini/infrastructure-simplification/frontend-build.log"
+    },
+    "retainedSuite": {
+      "status": "passed-after-targeted-recheck",
+      "fullRun": {
+        "files": 115,
+        "tests": 881,
+        "passed": 879,
+        "failed": 2,
+        "log": ".iaf-mini/infrastructure-simplification/regression.log"
+      },
+      "recheck": {
+        "files": 2,
+        "tests": 26,
+        "passed": 26,
+        "failed": 0,
+        "maxWorkers": 1,
+        "log": ".iaf-mini/infrastructure-simplification/final-recheck.log"
+      },
+      "notes": [
+        "真实 Git after-merge-before-save 在并行构建负载下达到原有 30 秒上限，串行复验约 3.6 秒通过，未放宽断言或超时。",
+        "全量运行启动后补充二级限流修正，该批次使用旧模块缓存；独立复验读取最终源码并通过。"
+      ]
+    },
+    "additionalContracts": {
+      "status": "passed",
+      "files": 5,
+      "tests": 30,
+      "log": ".iaf-mini/infrastructure-simplification/final-contract-tests.log",
+      "distinctOutsideRetainedSuite": {
+        "tests": 8,
+        "file": "tests/unit/web-error-handling.test.ts"
+      },
+      "note": "其余 22 项已包含在保留集或复验中，不能重复累加。"
+    },
+    "windows": {
+      "status": "passed",
+      "files": 2,
+      "tests": 8,
+      "log": ".iaf-mini/infrastructure-simplification/windows-tests.log"
+    },
+    "browserE2E": {
+      "status": "passed",
+      "files": 1,
+      "tests": 1,
+      "log": ".iaf-mini/infrastructure-simplification/e2e-tests.log",
+      "ai": "mock",
+      "github": "mock",
+      "browser": "real"
+    },
+    "normalNpmInstall": {
+      "status": "passed",
+      "legacyPeerDeps": false,
+      "log": ".iaf-mini/infrastructure-simplification/dependency-install.log"
+    },
+    "realCodexSchemas": {
+      "status": "passed",
+      "cases": [
+        "plan",
+        "verify",
+        "memory",
+        "rule"
+      ],
+      "evidence": ".iaf-mini/infrastructure-simplification/sdk-schema-smoke.json",
+      "mode": "plan",
+      "managedWorker": true,
+      "businessFlow": false
+    }
+  },
+  "limitations": [
+    "未重新执行真实 GitHub Issue/PR 写入或发布。",
+    "未进行 Linux/macOS 实机验证。",
+    "未进行性能基准测试。"
+  ]
+}

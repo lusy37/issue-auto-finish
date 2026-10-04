@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { settingsSchema } from '../RequestContracts.js';
+import { AppError } from '../../errors/BaseError.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parse as parseEnv } from 'dotenv';
@@ -138,39 +140,33 @@ export function createSetupRouter(config: Config) {
       restartRequired: true,
     });
   });
-  router.put('/api/settings', (req, res, next) => {
-    try {
-      if (req.body.values?.WEB_ENABLED !== undefined) {
-        extractEnvSubset({ WEB_ENABLED: String(req.body.values.WEB_ENABLED) });
-      }
-      const file = resolveConfigFilePath();
-      const old = fs.existsSync(file) ? parseEnv(fs.readFileSync(file)) : {};
-      const values: Record<string, string> = {
-        GITHUB_TOKEN: config.github.token,
-        ...old,
-      };
-      for (const key of keys) {
-        const value = req.body.values?.[key];
-        if (typeof value !== 'string') continue;
-        if (key === 'GITHUB_TOKEN' && !value) continue;
-        if (/[\r\n']/.test(value)) throw new Error('配置值不能包含换行或单引号');
-        values[key] = value;
-      }
-      const checked = envSchema.safeParse(extractEnvSubset({ ...process.env, ...values }));
-      if (!checked.success)
-        throw new Error(checked.error.issues.map((i) => `${i.path}: ${i.message}`).join('\n'));
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      delete values.WEB_ENABLED;
-      writeTextAtomicSync(
-        file,
-        Object.entries(values)
-          .map(([k, v]) => `${k}='${v}'`)
-          .join('\n') + '\n',
-      );
-      res.json({ success: true, restartRequired: true });
-    } catch (e) {
-      next(e);
+  router.put('/api/settings', (req, res) => {
+    const body = settingsSchema.parse(req.body);
+    if (body.values?.WEB_ENABLED !== undefined) {
+      throw new AppError('INVALID_CONFIG', 'WEB_ENABLED 不支持在线配置');
     }
+    const file = resolveConfigFilePath();
+    const old = fs.existsSync(file) ? parseEnv(fs.readFileSync(file)) : {};
+    const values: Record<string, string> = {
+      GITHUB_TOKEN: config.github.token,
+      ...old,
+    };
+    for (const key of keys) {
+      const value = body.values?.[key];
+      if (typeof value !== 'string') continue;
+      if (key === 'GITHUB_TOKEN' && !value) continue;
+      values[key] = value;
+    }
+    envSchema.parse(extractEnvSubset({ ...process.env, ...values }));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    delete values.WEB_ENABLED;
+    writeTextAtomicSync(
+      file,
+      Object.entries(values)
+        .map(([k, v]) => `${k}='${v}'`)
+        .join('\n') + '\n',
+    );
+    res.json({ success: true, restartRequired: true });
   });
   router.get('/api/settings/check', async (_req, res) => {
     const checks = await Promise.all(

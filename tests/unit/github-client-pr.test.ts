@@ -47,11 +47,10 @@ it("使用 GitHub 认证、版本及 PR head/base/body 协议", async () => {
   ).toBe(7);
   const [url, options] = fetch.mock.calls[0];
   expect(url).toBe("https://api.github.com/repos/owner/repo/pulls");
-  expect(options?.headers).toMatchObject({
-    Authorization: "Bearer test-token",
-    Accept: "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2026-03-10",
-  });
+  const headers = new Headers(options?.headers);
+  expect(headers.get('authorization')).toMatch(/^(token|Bearer) test-token$/);
+  expect(headers.get('accept')).toBe('application/vnd.github+json');
+  expect(headers.get('x-github-api-version')).toBe('2026-03-10');
   expect(JSON.parse(options?.body as string)).toEqual({
     head: "feat/issue-1",
     base: "main",
@@ -91,6 +90,7 @@ it("Issue 分页过滤 PR，使用仓库内 number 并转换标签及作者", as
         Array.from({ length: 100 }, (_, i) =>
           i ? { ...issue(i), pull_request: {} } : issue(1),
         ),
+        200, { link: '<https://api.github.com/repos/owner/repo/issues?per_page=100&page=2>; rel="next"' },
       ),
     )
     .mockResolvedValueOnce(response([issue(101)]));
@@ -179,4 +179,73 @@ it("GitHub 已合并与可合并状态未知分别转换", async () => {
   const c = client();
   expect((await c.getPullRequestDetail(7)).state).toBe("merged");
   expect((await c.getPullRequestDetail(8)).has_conflicts).toBe(false);
+});
+
+it('读取遇到临时服务错误由 SDK 重试，POST 服务错误也只发一次', async () => {
+  const fetch = vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(response({ message: 'temporary failure' }, 503))
+    .mockResolvedValueOnce(response(issue(1)))
+    .mockResolvedValueOnce(response({ message: 'temporary failure' }, 503));
+  const c = client();
+  expect((await c.getIssueDetail(1)).number).toBe(1);
+  await expect(c.createIssueNote(1, '报告')).rejects.toThrow('503');
+  expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+it('短期限流由 SDK 等待重试，长限流和 POST 不自动重发', async () => {
+  const fetch = vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(response({ message: 'secondary rate limit' }, 429, { 'retry-after': '1' }))
+    .mockResolvedValueOnce(response(issue(1)))
+    .mockResolvedValueOnce(response({ message: 'secondary rate limit' }, 429, { 'retry-after': '60' }))
+    .mockResolvedValueOnce(response({ message: 'secondary rate limit' }, 429, { 'retry-after': '1' }));
+  const c = client();
+  expect((await c.getIssueDetail(1)).number).toBe(1);
+  await expect(c.getIssueDetail(2)).rejects.toMatchObject({ isRateLimited: true, retryAfterMs: 60_000 });
+  await expect(c.createIssueNote(1, '报告')).rejects.toThrow('429');
+  expect(fetch).toHaveBeenCalledTimes(4);
+});
+
+it('并行读取最多四个网络请求，配置刷新后使用新的平台地址', async () => {
+  let active = 0;
+  let maximum = 0;
+  let release!: () => void;
+  const blocked = new Promise<void>(resolve => { release = resolve; });
+  const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+    active++;
+    maximum = Math.max(maximum, active);
+    await blocked;
+    active--;
+    return response(issue(1));
+  });
+  const c = client();
+  const pending = Promise.all(Array.from({ length: 8 }, () => c.getIssueDetail(1)));
+  try { await vi.waitFor(() => expect(active).toBe(4)); }
+  finally { release(); }
+  await pending;
+  expect(maximum).toBe(4);
+  c.updateConfig({ apiUrl: 'https://github.example.com/api/v3', token: 'new-token', repository: 'new/repo' });
+  await c.getIssueDetail(1);
+  expect(String(fetch.mock.calls.at(-1)?.[0])).toBe('https://github.example.com/api/v3/repos/new/repo/issues/1');
+});
+
+it('二级限流缺少等待头时保守交回业务层，不当成普通权限失败', async () => {
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    response({ message: 'You have exceeded a secondary rate limit.' }, 403),
+  );
+  await expect(client().getIssueDetail(1)).rejects.toMatchObject({
+    isRateLimited: true, retryAfterMs: 60_000,
+  });
+  expect(fetch).toHaveBeenCalledOnce();
+});
+
+it('超过分页预算立即报错，不获取第 101 页或返回不完整结果', async () => {
+  let page = 0;
+  const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+    page++;
+    return response([issue(page)], 200, {
+      link: `<https://api.github.com/repos/owner/repo/issues?page=${page + 1}>; rel="next"`,
+    });
+  });
+  await expect(client().listIssues()).rejects.toThrow('10000');
+  expect(fetch).toHaveBeenCalledTimes(100);
 });

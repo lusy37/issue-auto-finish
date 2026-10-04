@@ -1,7 +1,5 @@
 import { execa, type Options } from 'execa';
 import which from 'which';
-import path from 'node:path';
-import { execFile } from 'node:child_process';
 import { getIssueContext } from '../context/IssueContext.js';
 
 type ProcessOptions = Pick<Options, 'cwd' | 'env' | 'timeout' | 'cancelSignal' | 'ipc'> & {
@@ -41,33 +39,10 @@ export function stopProcess(child: ManagedProcess): Promise<void> {
     return Promise.resolve();
   }
 
-  const stopping =
-    process.platform === 'win32'
-      ? new Promise<void>((resolve) => {
-          const windowsRoot = process.env.SystemRoot ?? process.env.WINDIR;
-          const taskkill = windowsRoot
-            ? path.join(windowsRoot, 'System32', 'taskkill.exe')
-            : 'taskkill.exe';
-          execFile(
-            taskkill,
-            ['/pid', String(child.pid), '/T', '/F'],
-            { windowsHide: true, timeout: 10_000 },
-            (error) => {
-              // 目标可能已自行退出；taskkill 真正失败时至少终止直接子进程。
-              if (
-                error &&
-                child.nodeChildProcess.exitCode === null &&
-                child.nodeChildProcess.signalCode === null
-              ) {
-                child.nodeChildProcess.kill();
-              }
-              resolve();
-            },
-          );
-        })
-      : Promise.resolve().then(() => {
-          child.kill();
-        });
+  const stopping = Promise.resolve().then(async () => {
+    child.kill();
+    await child;
+  });
   stoppingProcesses.set(child, stopping);
   return stopping;
 }
@@ -88,22 +63,14 @@ export async function runProcess(
   const child = spawnProcess(binary, args, {
     cwd: options.cwd,
     env: options.env,
+    timeout: options.timeoutMs ?? 300_000,
+    cancelSignal: options.signal,
   });
   let stdout = '',
     stderr = '';
   let callbackError: unknown;
-  let terminationReason: 'cancel' | 'timeout' | undefined;
   let stopRequested: Promise<void> | undefined;
   const requestStop = () => (stopRequested ??= stopProcess(child));
-  const onAbort = () => {
-    terminationReason ??= 'cancel';
-    void requestStop();
-  };
-  options.signal?.addEventListener('abort', onAbort, { once: true });
-  const timeout = setTimeout(() => {
-    terminationReason ??= 'timeout';
-    void requestStop();
-  }, options.timeoutMs ?? 300_000);
   const emitOutput = (text: string) => {
     try {
       options.onOutput?.(text);
@@ -132,14 +99,12 @@ export async function runProcess(
     await child;
     throw error;
   } finally {
-    clearTimeout(timeout);
-    options.signal?.removeEventListener('abort', onAbort);
     if (stopRequested) await stopRequested;
     if (callId) lifecycle?.processExited?.(callId);
   }
   if (callbackError) throw callbackError;
-  if (terminationReason === 'timeout') throw new Error('命令执行超时', { cause: result });
-  if (terminationReason === 'cancel' || options.signal?.aborted)
+  if (result.timedOut) throw new Error('命令执行超时', { cause: result });
+  if (result.isCanceled || options.signal?.aborted)
     throw new Error('操作已取消', { cause: result });
   if (result.failed && result.exitCode === undefined && !result.isTerminated) throw result;
   return { code: result.exitCode ?? null, stdout, stderr };

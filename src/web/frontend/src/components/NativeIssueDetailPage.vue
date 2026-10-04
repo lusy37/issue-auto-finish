@@ -126,18 +126,7 @@ function issueAction(action: AllowedAction) {
   if (action === 'restart') return detail.doRestartIssue(number, refreshIssues);
   return detail.doCancelIssue(number, refreshIssues);
 }
-const { connected } = useSSE((eventName, payload) => {
-  const data = (payload as { data?: { issueIid?: number } }).data;
-  if (
-    (eventName.startsWith('issue:') ||
-      eventName.startsWith('gate:') ||
-      eventName.startsWith('phase:') ||
-      eventName.startsWith('pipeline:') ||
-      eventName.startsWith('uat:')) &&
-    data?.issueIid === props.issueNumber
-  )
-    detail.refreshDetail();
-});
+const { connected } = useSSE(() => {});
 watch(() => props.issueNumber, selectIssue, { immediate: true });
 onUnmounted(() => logs.clear());
 </script>

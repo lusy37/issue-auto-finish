@@ -31,41 +31,8 @@ const verifyAgentResultSchema = z
   })
   .strict();
 
-/** 传给 Codex SDK 的普通 JSON Schema；最终仍由 Zod 做服务端权威校验。 */
-const VERIFY_CHECK_JSON_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    status: { type: 'string', enum: ['passed', 'failed'] },
-    command: { type: 'string', minLength: 1 },
-    exitCode: { type: ['integer', 'null'] },
-    summary: { type: 'string', minLength: 1 },
-    diagnostics: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 100 },
-  },
-  required: ['status', 'command', 'exitCode', 'summary', 'diagnostics'],
-} as const;
-
-export const VERIFY_AGENT_OUTPUT_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    schemaVersion: { type: 'string', enum: [VERIFY_AGENT_SCHEMA_VERSION] },
-    phase: { type: 'string', enum: ['verify'] },
-    checks: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        lint: VERIFY_CHECK_JSON_SCHEMA,
-        build: VERIFY_CHECK_JSON_SCHEMA,
-        test: VERIFY_CHECK_JSON_SCHEMA,
-      },
-      required: ['lint', 'build', 'test'],
-    },
-    summary: { type: 'string', minLength: 1 },
-    reportMarkdown: { type: 'string', minLength: 1 },
-  },
-  required: ['schemaVersion', 'phase', 'checks', 'summary', 'reportMarkdown'],
-} as const;
+/** SDK 输出契约由运行时校验生成，避免字段重复维护。 */
+export const VERIFY_AGENT_OUTPUT_SCHEMA = z.toJSONSchema(verifyAgentResultSchema);
 
 export type VerifyCheck = z.infer<typeof checkSchema>;
 export type VerifyAgentResult = z.infer<typeof verifyAgentResultSchema>;

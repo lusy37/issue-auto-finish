@@ -39,7 +39,9 @@ describe('Verify Agent JSON 契约', () => {
       'summary',
       'reportMarkdown',
     ]);
-    expect(VERIFY_AGENT_OUTPUT_SCHEMA.properties.checks.required).toEqual(['lint', 'build', 'test']);
+    expect(VERIFY_AGENT_OUTPUT_SCHEMA).toMatchObject({
+      properties: { checks: { required: ['lint', 'build', 'test'] } },
+    });
     expect(VERIFY_AGENT_OUTPUT_SCHEMA.additionalProperties).toBe(false);
   });
 });

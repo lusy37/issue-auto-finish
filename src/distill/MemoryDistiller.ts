@@ -1,6 +1,6 @@
 import { buildCallOptions, type AICallPolicy } from '../ai-runner/CallPolicy.js';
 import { parseJsonOutput } from '../prompts/parseJsonOutput.js';
-import { memoryActionsSchema } from './ActionSchema.js';
+import { memoryOutputSchema, MEMORY_OUTPUT_SCHEMA } from './ActionSchema.js';
 /**
  * MemoryDistiller — Layer 2: 批量分析日记，提取共性模式。
  *
@@ -84,6 +84,7 @@ export class MemoryDistiller {
       prompt,
       workDir: this.workDir,
       ...buildCallOptions(this.aiPolicy, 'memory-distill'),
+      outputSchema: MEMORY_OUTPUT_SCHEMA,
     });
 
     if (!result.success) {
@@ -144,9 +145,7 @@ export class MemoryDistiller {
   private parseActions(output: string): MemoryDistillAction[] {
     try {
       const parsed = parseJsonOutput(output);
-      if (!parsed || typeof parsed !== 'object' || !('actions' in parsed))
-        throw new Error('蒸馏结果缺少 actions');
-      return memoryActionsSchema.parse(parsed.actions);
+      return memoryOutputSchema.parse(parsed).actions;
     } catch (err) {
       logger.warn('Failed to parse AI distillation output', {
         error: (err as Error).message,

@@ -20,3 +20,7 @@
 ## 2026-09-12 遗留兼容清理
 
 提交 e4fb2f2 移除无调用的旧恢复算法与状态辅助函数、报告和字段别名、旧临时文件清理规则，源码与脚本净减少 141 行。保留数据校验、当前初始化与恢复默认值、审核备份等实际行为；完整删除依据见 [遗留兼容盘点](compatibility-audit.md)。
+
+## 2026-10 基础设施简化
+
+Octokit、Execa、Zod、原生 EventSource、sanitize-html 和 TanStack Vue Query 分别接管通用协议与请求生命周期。保留工作台业务适配、全局 AI 并发和聚合事务；实施范围、兼容性与验收证据见 [基础设施简化落地记录](infrastructure-simplification.md)。

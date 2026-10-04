@@ -1,3 +1,4 @@
+import { TASK_PLAN_OUTPUT_SCHEMA } from '../dag/codecs/TaskPlanCodec.js';
 import { MAX_PLAN_TASKS } from '../dag/limits.js';
 import { BasePhase, PhaseContext } from './BasePhase.js';
 import {
@@ -10,6 +11,10 @@ import {
 /** 计划与驳回重规划均返回结构化只读结果；SDK 会话恢复也显式携带完整上版计划与反馈。 */
 export class PlanPhase extends BasePhase {
   readonly phaseName = 'plan' as const;
+
+  protected getOutputSchema() {
+    return TASK_PLAN_OUTPUT_SCHEMA;
+  }
 
   protected buildPrompt(ctx: PhaseContext): string {
     const pc = demandToPromptContext(ctx.demand);

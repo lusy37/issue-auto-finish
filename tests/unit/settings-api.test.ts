@@ -85,7 +85,7 @@ it('流程配置：默认值、持久化、重启生效与非法输入保护', a
     expect(fs.readFileSync(file, 'utf8')).toBe(before);
     vi.spyOn(atomic, 'writeTextAtomicSync').mockImplementationOnce(() => { throw new Error('模拟磁盘已满'); });
     const failed = await put({ REVIEW_ENABLED: 'true' });
-    expect(failed.status).toBe(400);
+    expect(failed.status).toBe(500);
     expect(await failed.json()).toMatchObject({ error: '模拟磁盘已满' });
     expect(fs.readFileSync(file, 'utf8')).toBe(before);
 

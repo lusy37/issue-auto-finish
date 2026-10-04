@@ -1,10 +1,11 @@
 import { ARTIFACTS } from '../../../../shared/runtime/artifacts.js';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+import { useQuery, useMutation } from '@tanstack/vue-query';
+import { queryClient } from '../api/queryClient.js';
 import type {
   IssueRecord,
   SupplementInfo,
   AgentLogEntry,
-  ReviewRound,
 } from '@/types';
 import { getIssueIid } from '@/types';
 import * as api from '@/api/client';
@@ -22,137 +23,79 @@ function emptySupplementForm(): SupplementInfo {
 }
 
 export function useIssueDetail() {
-  const selectedIssue = ref<IssueRecord | null>(null);
-  const detailLoading = ref(false);
-  const detailError = ref('');
+  const number = ref(0);
   const detailVersion = ref(0);
-  let detailRequest = 0;
-  let selection = 0;
-  const resourceRequests = new Map<string, number>();
-  function resourceGuard(key: string, number: number) {
-    const request = (resourceRequests.get(key) ?? 0) + 1;
-    resourceRequests.set(key, request);
-    const selected = selection;
-    return () =>
-      resourceRequests.get(key) === request &&
-      selected === selection &&
-      selectedIssue.value &&
-      getIssueIid(selectedIssue.value) === number;
+  const detail = useQuery({
+    queryKey: computed(() => ['issue', number.value, 'detail']),
+    queryFn: async ({ signal }) => {
+      const id = number.value;
+      const value = await api.fetchIssueDetail(id, signal);
+      if (getIssueIid(value) !== id) throw new Error('详情不属于当前 Issue');
+      const previous = queryClient.getQueryData<IssueRecord>(['issue', id, 'detail']);
+      return previous && previous.run.version > value.run.version ? previous : value;
+    },
+    enabled: computed(() => number.value > 0),
+  }, queryClient);
+  const selectedIssue = computed(() => {
+    const value = detail.data.value;
+    return value && getIssueIid(value) === number.value ? value : null;
+  });
+  function resource<T>(name: string, load: (id: number, signal?: AbortSignal) => Promise<T>) {
+    return useQuery({
+      queryKey: computed(() => ['issue', number.value, name]),
+      queryFn: ({ signal }) => load(number.value, signal),
+      enabled: computed(() => selectedIssue.value !== null),
+    }, queryClient);
   }
-
-  const detailSupplement = ref<SupplementInfo>(emptySupplementForm());
+  const supplement = resource('supplement', api.fetchSupplement);
+  const history = resource('review-history', api.fetchReviewHistory);
+  const plan = resource('plan', (id, signal) =>
+    api.loadPlanDoc(id, ARTIFACTS.plan.filename, 'html', signal));
+  const diff = resource('plan-diff', (id, signal) =>
+    api.fetchPlanDiff(id, ARTIFACTS.plan.filename, signal));
+  const logs = useQuery({
+    queryKey: computed(() => ['issue', number.value, 'logs']),
+    queryFn: ({ signal }) => api.fetchIssueLogs(number.value, signal),
+    enabled: false,
+  }, queryClient);
+  const detailLoading = computed(() => detail.isFetching.value || logs.isFetching.value);
+  const detailError = computed(() =>
+    detail.error.value?.message ?? logs.error.value?.message ?? '');
+  const detailSupplement = computed(() => supplement.data.value ?? emptySupplementForm());
   const detailSupplementForm = ref<SupplementInfo>(emptySupplementForm());
-  const detailSupplementLoading = ref(false);
-  const detailSupplementError = ref('');
+  const detailSupplementLoading = supplement.isFetching;
+  const detailSupplementError = computed(() => supplement.error.value?.message ?? '');
   const detailSupplementEditing = ref(false);
   const detailSupplementSaving = ref(false);
-
   const reviewFeedback = ref('');
   const reviewSubmitting = ref(false);
-  const reviewHistory = ref<ReviewRound[]>([]);
-  const planDocContent = ref('');
-  const planDiff = ref<{ diff: string; hasChanges: boolean }>({ diff: '', hasChanges: false });
+  const reviewHistory = computed(() => history.data.value ?? []);
+  const planDocContent = computed(() => plan.data.value ?? '');
+  const planDiff = computed(() => diff.data.value ?? { diff: '', hasChanges: false });
+  const action = useMutation({
+    mutationFn: (input: { number: number; run: (id: number) => Promise<unknown> }) =>
+      input.run(input.number),
+  }, queryClient);
 
-  async function selectIssue(number: number, agentLogs: { value: AgentLogEntry[] }) {
-    const request = ++detailRequest;
-    const selected = ++selection;
-    detailLoading.value = true;
-    detailError.value = '';
-    selectedIssue.value = null;
+  async function selectIssue(id: number, agentLogs: { value: AgentLogEntry[] }) {
+    number.value = id;
     detailSupplementEditing.value = false;
-    detailSupplement.value = emptySupplementForm();
     reviewFeedback.value = '';
-    reviewHistory.value = [];
-    planDocContent.value = '';
-    planDiff.value = { diff: '', hasChanges: false };
     agentLogs.value = [];
-
-    try {
-      const [detail, logs] = await Promise.all([
-        api.fetchIssueDetail(number),
-        api.fetchIssueLogs(number),
-      ]);
-      if (request !== detailRequest) return;
-      selectedIssue.value = detail;
-      agentLogs.value = logs.reverse();
-      fetchSupplement(number);
-      fetchReviewHistory(number);
-      fetchPlanDocContent(number);
-      fetchPlanDiff(number);
-    } catch (e) {
-      if (request === detailRequest) detailError.value = (e as Error).message;
-    } finally {
-      if (selected === selection) detailLoading.value = false;
-    }
+    const [, result] = await Promise.all([
+      detail.refetch({ cancelRefetch: false }), logs.refetch({ cancelRefetch: false }),
+    ]);
+    if (number.value === id && selectedIssue.value)
+      agentLogs.value = [...(result.data ?? [])].reverse();
   }
-
   async function refreshDetail(): Promise<void> {
     if (!selectedIssue.value) return;
-    const number = getIssueIid(selectedIssue.value);
-    const request = ++detailRequest;
-    detailError.value = '';
-    try {
-      const fresh = await api.fetchIssueDetail(number);
-      if (
-        request !== detailRequest ||
-        !selectedIssue.value ||
-        getIssueIid(selectedIssue.value) !== number
-      )
-        return;
-      if (fresh.run.version < selectedIssue.value.run.version) return;
-      selectedIssue.value = fresh;
-      detailVersion.value++;
-    } catch (e) {
-      if (request === detailRequest) detailError.value = (e as Error).message;
-    }
-    if (request !== detailRequest) return;
-    fetchReviewHistory(number);
-    fetchPlanDocContent(number);
-    fetchPlanDiff(number);
-  }
-
-  async function fetchReviewHistory(number: number) {
-    const current = resourceGuard('fetchReviewHistory', number);
-    try {
-      const value = await api.fetchReviewHistory(number);
-      if (current()) reviewHistory.value = value;
-    } catch {
-      /* ignore - history may not exist */
-    }
-  }
-
-  async function fetchPlanDocContent(number: number) {
-    const current = resourceGuard('fetchPlanDocContent', number);
-    try {
-      const value = await api.loadPlanDoc(number, ARTIFACTS.plan.filename, 'html');
-      if (current()) planDocContent.value = value;
-    } catch {
-      if (current()) planDocContent.value = '';
-    }
-  }
-
-  async function fetchPlanDiff(number: number) {
-    const current = resourceGuard('fetchPlanDiff', number);
-    try {
-      const value = await api.fetchPlanDiff(number, ARTIFACTS.plan.filename);
-      if (current()) planDiff.value = value;
-    } catch {
-      if (current()) planDiff.value = { diff: '', hasChanges: false };
-    }
-  }
-
-  async function fetchSupplement(number: number) {
-    const current = resourceGuard('fetchSupplement', number);
-    detailSupplementLoading.value = true;
-    detailSupplementError.value = '';
-    try {
-      const value = await api.fetchSupplement(number);
-      if (current()) detailSupplement.value = value ?? emptySupplementForm();
-    } catch (error) {
-      if (current()) detailSupplementError.value = (error as Error).message;
-    } finally {
-      if (current()) detailSupplementLoading.value = false;
-    }
+    const id = number.value;
+    const result = await detail.refetch({ cancelRefetch: false });
+    if (number.value !== id || result.isError) return;
+    detailVersion.value++;
+    await Promise.all([supplement, history, plan, diff].map((query) =>
+      query.refetch({ cancelRefetch: false })));
   }
 
   function enterSupplementEdit() {
@@ -163,21 +106,27 @@ export function useIssueDetail() {
 
   async function saveDetailSupplement(refreshIssues: () => Promise<void>) {
     if (!selectedIssue.value) return;
+    const id = getIssueIid(selectedIssue.value);
     detailSupplementSaving.value = true;
     try {
       const result = await api.saveSupplement(
-        getIssueIid(selectedIssue.value),
+        id,
         detailSupplementForm.value,
       );
-      detailSupplement.value = result.data;
+      queryClient.setQueryData(['issue', id, 'supplement'], result.data);
+      if (number.value !== id) return;
       detailSupplementEditing.value = false;
       if (confirm(t('confirm.supplementSaved'))) {
-        await api.retryFromPhase(getIssueIid(selectedIssue.value), 'plan');
+        await api.retryFromPhase(id, 'plan');
         await refreshIssues();
       }
     } finally {
       detailSupplementSaving.value = false;
     }
+  }
+
+  async function actionMutation(id: number, run: (id: number) => Promise<unknown>) {
+    await action.mutateAsync({ number: id, run });
   }
 
   async function runIssueAction(
@@ -187,7 +136,7 @@ export function useIssueDetail() {
     confirmation?: string,
   ) {
     if (confirmation && !confirm(confirmation)) return;
-    await action(number);
+    await actionMutation(number, action);
     await refreshIssues();
   }
 
@@ -249,7 +198,8 @@ export function useIssueDetail() {
     const feedback = reviewFeedback.value;
     await submitReview(number, async (revision) => {
       await api.rejectPlan(number, feedback, revision);
-      reviewFeedback.value = '';
+      if (selectedIssue.value && getIssueIid(selectedIssue.value) === number)
+        reviewFeedback.value = '';
     }, refreshIssues);
   }
 

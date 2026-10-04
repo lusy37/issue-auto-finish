@@ -1,4 +1,6 @@
 import { ref, computed } from 'vue';
+import { useQuery } from '@tanstack/vue-query';
+import { queryClient } from '../api/queryClient.js';
 import type { ExecutableTask, TaskKind } from '@/types';
 import { isReviewWaiting } from '@/adapters/issueflowViewModel';
 import * as api from '@/api/client';
@@ -18,29 +20,16 @@ export function getTaskFilterOptions(): { value: TaskFilter; label: string }[] {
 }
 
 export function useTasks(kindFilter?: TaskKind) {
-  const tasks = ref<ExecutableTask[]>([]);
+  const state = useQuery({
+    queryKey: ['tasks', kindFilter ?? 'all'],
+    queryFn: ({ signal }) => api.fetchTasks(kindFilter ? { kind: kindFilter } : undefined, signal),
+  }, queryClient);
+  const tasks = computed<ExecutableTask[]>(() => state.data.value ?? []);
   const filter = ref<TaskFilter>('all');
   const query = ref('');
-  const loading = ref(false);
-  const error = ref('');
-  let requestId = 0;
-
-  async function refresh() {
-    const current = ++requestId;
-    loading.value = true;
-    error.value = '';
-    try {
-      const result = await api.fetchTasks(kindFilter ? { kind: kindFilter } : undefined);
-      if (current === requestId) tasks.value = result;
-    } catch (e) {
-      if (current === requestId) {
-        error.value = (e as Error).message;
-        console.error('Fetch tasks failed', e);
-      }
-    } finally {
-      if (current === requestId) loading.value = false;
-    }
-  }
+  const loading = state.isFetching;
+  const error = computed(() => state.error.value?.message ?? '');
+  async function refresh() { await state.refetch({ cancelRefetch: false }); }
 
   const activeCount = computed(
     () =>

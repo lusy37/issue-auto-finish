@@ -4,6 +4,7 @@ import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { GitHubClient } from '../../src/clients/GitHubClient.js';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import express from 'express';
+import { createApp } from '../../src/web/createApp.js';
 import http from 'node:http';
 import { createApiRouter } from '../../src/web/routes/api.js';
 import { createMockIssueTracker, createMockGitOperations, createTestConfig } from '../helpers/mock-factories.js';
@@ -56,9 +57,19 @@ const mockOrchestrator = {
   stopPreviewServers: vi.fn(),
   getWorktreeStatus: vi.fn().mockReturnValue({ exists: true }),
 };
-const app = express();
-app.use(express.json());
-app.use(createApiRouter({tracker: tracker as never,config: config,github: new GitHubClient(config.github),agentLogStore: mockAgentLogStore as never,orchestrator: mockOrchestrator as never} as never));
+const app = createApp(undefined, [createApiRouter({tracker: tracker as never,config: config,github: new GitHubClient(config.github),agentLogStore: mockAgentLogStore as never,orchestrator: mockOrchestrator as never} as never)]);
+
+it.each(['0', '-1', '42abc', '9007199254740992'])('无效 Issue 编号 %s 在读取或执行前返回 400', async number => {
+  const spy = vi.mocked(mockOrchestrator.restartIssue);
+  const calls = spy.mock.calls.length;
+  expect((await req('POST', `/api/issues/${number}/restart`)).status).toBe(400);
+  expect(spy.mock.calls).toHaveLength(calls);
+});
+
+it('错误分页与补充资料类型返回 400，不接受隐式类型转换', async () => {
+  expect((await req('GET', '/api/github/issues?page=2abc')).status).toBe(400);
+  expect((await req('PUT', '/api/issues/42/supplement', { requirements: 123 })).status).toBe(400);
+});
 
 let server: http.Server;
 let baseUrl: string;
