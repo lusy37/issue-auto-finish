@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resolveDataDir } from '../paths.js';
 import { logger as rootLogger } from '../logger.js';
+import { writeTextAtomicSync } from '../utils/atomicFile.js';
 
 const logger = rootLogger.child('PlanPersistence');
 
@@ -37,6 +38,11 @@ export class PlanPersistence {
     return this.workDir;
   }
 
+  /** 当前 Issue 使用的数据根目录，供 UAT 结果存储复用同一配置。 */
+  get dataDirectory(): string {
+    return this.dataDir;
+  }
+
   get planDir(): string {
     return resolveIssueArtifactsDir(this.issueIid, this.dataDir);
   }
@@ -60,7 +66,7 @@ export class PlanPersistence {
   }): void {
     this.ensureDir();
     const filePath = this.artifactPath(ARTIFACTS.issueMeta.filename);
-    fs.writeFileSync(filePath, JSON.stringify(meta, null, 2), 'utf-8');
+    writeTextAtomicSync(filePath, JSON.stringify(meta, null, 2));
     logger.info('Issue meta written');
   }
 
@@ -71,13 +77,13 @@ export class PlanPersistence {
 
   writePlan(content: string): void {
     this.ensureDir();
-    fs.writeFileSync(this.artifactPath(ARTIFACTS.plan.filename), content, 'utf-8');
+    writeTextAtomicSync(this.artifactPath(ARTIFACTS.plan.filename), content);
     logger.info('Plan document written');
   }
 
   /** 审核事实只从当前 Issue 聚合记录读取，不读取后备文件或展示副本。 */
   readReviewHistory(): ReviewRound[] {
-    return this.tracker?.get(this.issueIid)?.run?.reviewHistory ?? [];
+    return this.tracker?.get(this.issueIid)?.run.reviewHistory ?? [];
   }
 
   readReviewFeedback(): string | null {
@@ -145,6 +151,6 @@ export class PlanPersistence {
     if (filename === ARTIFACTS.plan.filename)
       throw new Error('计划展示副本只读，请生成结构化计划版本');
     this.ensureDir();
-    fs.writeFileSync(this.artifactPath(filename), content, 'utf-8');
+    writeTextAtomicSync(this.artifactPath(filename), content);
   }
 }

@@ -7,13 +7,12 @@ import { writeJsonAtomicSync } from '../utils/atomicFile.js';
 import {
   PLAN_FORMAT,
   RUN_FORMAT,
-  newIssueRun,
   planDigest,
   type PlanContent,
   type TaskPlan,
 } from './contracts.js';
 import { decodePlanContent } from './codecs/TaskPlanCodec.js';
-import { assertIssueRunShape } from './codecs/IssueRunCodec.js';
+import { decodeIssueRun } from './codecs/IssueRunCodec.js';
 import { assertIssueRunInvariants } from './invariants.js';
 
 const REMOVED_STATE_FIELDS = [
@@ -45,11 +44,11 @@ export class IssueRunStore {
       if (!fs.existsSync(file)) continue;
       const record = this.readRecord(Number(name));
       this.records.set(Number(name), record);
-      if (record.run!.planRevision) {
-        const plan = this.readPlan(Number(name), record.run!.planRevision, record.run!.planDigest);
-        if (record.run!.review || Object.keys(record.run!.tasks).length) {
+      if (record.run.planRevision) {
+        const plan = this.readPlan(Number(name), record.run.planRevision, record.run.planDigest);
+        if (record.run.review || Object.keys(record.run.tasks).length) {
           const ids = plan.tasks.map((task) => task.id).sort();
-          if (JSON.stringify(ids) !== JSON.stringify(Object.keys(record.run!.tasks).sort()))
+          if (JSON.stringify(ids) !== JSON.stringify(Object.keys(record.run.tasks).sort()))
             this.invalid(file, '运行任务与不可变计划不一致');
         }
       }
@@ -81,7 +80,7 @@ export class IssueRunStore {
       if (REMOVED_STATE_FIELDS.some((field) => Object.hasOwn(value.record, field)))
         this.invalid(file, '聚合状态包含已删除字段');
       assertIssueLifecycleShape(value.record.lifecycle);
-      assertIssueRunShape(value.record.run);
+      value.record.run = decodeIssueRun(value.record.run);
       assertIssueRunInvariants(value.record.run, number);
       return value.record as IssueRecord;
     } catch (error) {
@@ -100,13 +99,13 @@ export class IssueRunStore {
   }
   insert(number: number, record: IssueRecord): void {
     if (this.records.has(number)) throw new Error(`Issue #${number} 已存在`);
-    this.persist(number, { ...structuredClone(record), run: record.run ?? newIssueRun() });
+    this.persist(number, structuredClone(record));
   }
   private persist(number: number, record: IssueRecord): void {
     if (this.blocked.has(number))
       throw new Error(`Issue #${number} 持久化失败后已停止调度，请重启并检查状态文件`);
     assertIssueLifecycleShape(record.lifecycle);
-    record.run!.version++;
+    record.run.version++;
     record.updatedAt = new Date().toISOString();
     try {
       fs.mkdirSync(path.dirname(this.file(number)), { recursive: true });
@@ -135,7 +134,7 @@ export class IssueRunStore {
   replace(record: IssueRecord): void {
     const number = getIssueNumber(record);
     const saved = this.transaction(number, (current) => {
-      if (current.run!.version !== record.run!.version) throw new Error('聚合状态版本冲突');
+      if (current.run.version !== record.run.version) throw new Error('聚合状态版本冲突');
       Object.assign(current, structuredClone(record));
     });
     Object.assign(record, saved);
@@ -143,7 +142,7 @@ export class IssueRunStore {
   delete(number: number): boolean {
     if (!this.records.has(number)) return false;
     const record = this.get(number)!;
-    if (Object.values(record.run!.calls).some((c) => c.status !== 'exited'))
+    if (Object.values(record.run.calls).some((c) => c.status !== 'exited'))
       throw new Error('调用尚未退出，不能删除任务状态');
     fs.renameSync(
       this.file(number),
@@ -154,8 +153,8 @@ export class IssueRunStore {
   }
   savePlan(number: number, content: PlanContent, expectedVersion: number): TaskPlan {
     const record = this.get(number)!;
-    if (record.run!.version !== expectedVersion) throw new Error('生成计划期间状态已改变');
-    const revision = record.run!.planRevision + 1;
+    if (record.run.version !== expectedVersion) throw new Error('生成计划期间状态已改变');
+    const revision = record.run.planRevision + 1;
     const base = {
       ...decodePlanContent(content),
       format: PLAN_FORMAT,
@@ -175,9 +174,9 @@ export class IssueRunStore {
     plan.digest = planDigest(unsigned);
     this.write(this.planFile(number, nextRevision), plan);
     this.transaction(number, (current) => {
-      if (current.run!.version !== expectedVersion || current.run!.stopIntent)
+      if (current.run.version !== expectedVersion || current.run.stopIntent)
         throw new Error('生成计划期间执行身份已失效');
-      const run = current.run!;
+      const run = current.run;
       if (Object.values(run.tasks).some((task) => task.attemptNo > 0))
         throw new Error('已执行任务的计划只能通过完整重做替换');
       if (run.planRevision) {
@@ -188,22 +187,26 @@ export class IssueRunStore {
           retryUsed: run.retryUsed,
           phaseExecutions: run.phaseExecutions,
           repairRounds: run.repairRounds,
+          uatReviewRounds: run.uatReviewRounds,
         });
       }
       run.retryUsed = {};
       run.phaseExecutions = {};
       run.repairRounds = 0;
+      run.uatReviewRounds = 0;
       run.repairs = [];
       run.buildEntry = 'execute-graph';
       run.candidateCommit = undefined;
       run.verify = undefined;
       run.uat = undefined;
+      run.uatExecution = undefined;
+      run.temporaryDirectories = [];
       run.integrationBase = undefined;
       run.integrationHead = undefined;
-      current.run!.planRevision = plan.revision;
-      current.run!.planDigest = plan.digest;
-      current.run!.review = { revision: plan.revision, decision: 'waiting' };
-      current.run!.tasks = Object.fromEntries(
+      current.run.planRevision = plan.revision;
+      current.run.planDigest = plan.digest;
+      current.run.review = { revision: plan.revision, decision: 'waiting' };
+      current.run.tasks = Object.fromEntries(
         plan.tasks.map((t) => [
           t.id,
           { taskId: t.id, status: 'pending', attemptNo: 0, conflictCallsUsed: 0 },

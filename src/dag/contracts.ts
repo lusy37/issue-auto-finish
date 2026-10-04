@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { DemandSpec } from '../demand/DemandSpec.js';
 import { newWorkflowStorage, type WorkflowStorage } from '../orchestration/WorkflowState.js';
+import type { UatExecution, UatPolicySnapshot, VisualRepairContext, VisualRepairDecision } from '../shared/workbench.js';
 
-import { PLAN_FORMAT } from '../shared/runtime/formats.js';
+import { PLAN_FORMAT, UAT_FORMAT } from '../shared/runtime/formats.js';
 export { PLAN_FORMAT, RUN_FORMAT } from '../shared/runtime/formats.js';
 export interface TaskDefinition {
   /** 任务在当前计划中的稳定标识，用于依赖关系和执行状态关联。 */
@@ -90,6 +91,30 @@ export interface AcceptanceReceipt {
   reportPath: string;
   runId?: string;
 }
+export interface UatEvidenceReceipt {
+  format: typeof UAT_FORMAT;
+  summaryDigest: string;
+  execution: UatExecution;
+  policy: UatPolicySnapshot;
+}
+export interface UatAcceptanceReceipt extends AcceptanceReceipt {
+  runId: string;
+  uatEvidence: UatEvidenceReceipt;
+}
+export interface UatExecutionState {
+  runId: string;
+  status: 'running' | 'completed' | 'cancelled' | 'interrupted';
+  startedAt: string;
+  execution: UatEvidenceReceipt['execution'];
+  policy: UatEvidenceReceipt['policy'];
+}
+export interface TemporaryDirectoryRecord {
+  kind: 'visual-review';
+  runId: string;
+  directory: string;
+  dispatchId: string;
+  createdAt: string;
+}
 export interface DeliveryIdentity {
   repository: string;
   issueNumber: number;
@@ -115,6 +140,7 @@ export interface IssueRun {
     retryUsed: Record<string, number>;
     phaseExecutions: Record<string, number>;
     repairRounds: number;
+    uatReviewRounds: number;
   }>;
   workspaces?: Array<{
     directory: string;
@@ -125,6 +151,7 @@ export interface IssueRun {
     cleanedAt?: string;
   }>;
   temporaryFiles?: string[];
+  temporaryDirectories?: TemporaryDirectoryRecord[];
   installedLockDigest?: string;
   version: number;
   /** 当前运行引用的计划版本及其摘要。 */
@@ -155,6 +182,8 @@ export interface IssueRun {
   phaseExecutions: Record<string, number>;
   buildEntry: 'execute-graph' | 'repair-integration';
   repairRounds: number;
+  /** 当前 Build 处理周期内已使用的 UAT 视觉重试次数。 */
+  uatReviewRounds: number;
   repairs: Array<{
     round: number;
     report: string;
@@ -162,6 +191,8 @@ export interface IssueRun {
     before?: string;
     after?: string;
     identity?: ExecutionIdentity;
+    visual?: VisualRepairContext;
+    visualDecision?: VisualRepairDecision;
   }>;
   integrationBase?: string;
   integrationHead?: string;
@@ -169,7 +200,9 @@ export interface IssueRun {
   /** verify 阶段的验收凭证。 */
   verify?: AcceptanceReceipt;
   /** UAT 阶段的验收凭证。 */
-  uat?: AcceptanceReceipt;
+  uat?: UatAcceptanceReceipt;
+  /** 当前 UAT 尝试的状态，完成后保留用于恢复和审计。 */
+  uatExecution?: UatExecutionState;
   /** 交付到目标分支或 PR 的幂等信息。 */
   delivery?: DeliveryIdentity;
   /** 检测到状态无法可靠恢复时置为 true。 */
@@ -187,6 +220,7 @@ export function newIssueRun(): IssueRun {
     phaseExecutions: {},
     buildEntry: 'execute-graph',
     repairRounds: 0,
+    uatReviewRounds: 0,
     repairs: [],
   };
 }

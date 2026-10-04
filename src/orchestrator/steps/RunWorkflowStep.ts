@@ -34,6 +34,7 @@ export async function runWorkflow(
     number: issueIid,
     maxRetries: deps.config.poll.maxRetries,
     maxRepairs: deps.config.verifyFixLoop.enabled ? deps.config.verifyFixLoop.maxIterations : 0,
+    maxVisualRetries: deps.config.e2e.visualReviewMaxRetries,
     signal: deps.signal,
     runner: {
       async run(spec, phaseContext) {

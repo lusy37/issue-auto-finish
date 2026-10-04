@@ -22,6 +22,7 @@ import { createApp } from '../../src/web/createApp.js';
 import { createDistillRouter } from '../../src/web/routes/distill.js';
 import { createTestConfig, createMockGitOperations } from '../helpers/mock-factories.js';
 import type { AIRunner, RunOptions } from '../../src/ai-runner/AIRunner.js';
+import { verifyAgentOutput } from '../helpers/verify-result.js';
 
 let dir: string;
 const graphDirectories: string[] = [];
@@ -67,8 +68,9 @@ it.each([
     async run(options) {
       calls.push(options);
       if (options.phaseName === 'build') fs.writeFileSync(path.join(options.workDir, 'feature.txt'), '代码变化');
-      if (options.phaseName === 'verify') plan.writeFile('02-verify-report.md', '# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: 通过\n\n## 总结\n所有检查通过。');
-      return { success: true, exitCode: 0, output: options.phaseName === 'verify' ? plan.readFile('02-verify-report.md')! : JSON.stringify({ actions: [] }) };
+      return { success: true, exitCode: 0, output: options.phaseName === 'verify'
+        ? verifyAgentOutput({ reportMarkdown: '# 验证报告\n\nLint、Build、Test 均已执行并通过，本次代码检查和关联测试满足进入下一阶段的条件。' })
+        : JSON.stringify({ actions: [] }) };
     },
   };
   const git = createMockGitOperations();

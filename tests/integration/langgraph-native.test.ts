@@ -9,6 +9,9 @@ import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { buildPlanModePipeline } from '../../src/pipeline/PipelineMetadata.js';
 import { IssueService } from '../../src/orchestrator/IssueService.js';
 import { AsyncMutex } from '../../src/utils/AsyncMutex.js';
+import { TaskGraphExecutor } from '../../src/dag/TaskGraphExecutor.js';
+import type { AIRunner } from '../../src/ai-runner/AIRunner.js';
+import { graphDeps, graphFixture, task } from '../helpers/dag-repository.js';
 
 let directory: string;
 beforeEach(() => { directory = fs.mkdtempSync(path.join(os.tmpdir(), 'langgraph-native-')); });
@@ -26,6 +29,7 @@ function fixture(e2eEnabled = true) {
     return { kind: 'completed', output: spec.id };
   } };
   const options = (): WorkflowOptions => ({ tracker, number: 1, runner, context: { issueIid: 1, demand, branchName: 'iaf-1', workDir: directory }, maxRetries: 1, maxRepairs: 2,
+    maxVisualRetries: 2,
     deliver: async () => {
       calls.push('deliver');
       tracker.transaction(1, record => {
@@ -58,6 +62,25 @@ async function projectBuildRetryWindow(f: ReturnType<typeof fixture>, retryUsed:
 }
 
 describe('LangGraph 原生持久化和人工介入', () => {
+  it('UAT 视觉运行时重试使用显式 uat 回边并保留审计计数', async () => {
+    const f = fixture();
+    const original = f.runner.run;
+    let uatAttempts = 0;
+    vi.spyOn(f.runner, 'run').mockImplementation(async (spec, context) => {
+      if (spec.id === 'uat' && uatAttempts++ === 0)
+        return { kind: 'retryCurrent', phaseId: 'uat', reason: 'uat-visual-review-timeout', context: { runId: 'run-1' } };
+      return original(spec, context);
+    });
+    await f.workflow().drive();
+    await f.restart().resumeReview({ action: 'approve', planRevision: 1 });
+    await f.restart().drive();
+    expect(f.calls).toEqual(['plan', 'build', 'verify', 'uat', 'deliver']);
+    expect(uatAttempts).toBe(2);
+    expect(f.tracker().get(1)?.run?.uatReviewRounds).toBe(1);
+    expect(f.tracker().get(1)?.phaseHistory?.some(entry => entry.outcome === 'retried-current' && entry.visualRetry?.sourceRunId === 'run-1')).toBe(true);
+    expect(f.tracker().get(1)?.lifecycle.kind).toBe('completed');
+  });
+
   it('审核中断跨实例保存；批准只恢复审核，下一次驱动只执行剩余节点', async () => {
     const f = fixture();
     await f.workflow().drive();
@@ -307,6 +330,78 @@ describe('LangGraph 原生持久化和人工介入', () => {
     expect(f.calls).toEqual(['plan', 'build', 'verify', 'uat', 'deliver']);
     expect(f.tracker().get(1)?.run?.workflow.generation).toBe(0);
   });
+
+  it('构建任务图失败后阶段重试必须使用新的嵌套检查点命名空间', async () => {
+    const graph = graphFixture([
+      task('task1'),
+      task('task2', ['task1']),
+      task('task3', ['task2']),
+      task('task4', ['task1']),
+      task('task5', ['task2', 'task3', 'task4']),
+      task('task6', ['task2', 'task3']),
+    ]);
+    const demand = graph.tracker.get(1)!.demandSpec;
+    graph.tracker.initPhaseProgress(1, buildPlanModePipeline({ e2eEnabled: false }));
+    graph.tracker.transaction(1, record => {
+      record.lifecycle = { kind: 'ready' };
+      record.run!.workflow.entry = 'build';
+      record.run!.dispatchId = 'nested-retry';
+    });
+    let failTask5 = true;
+    const calls: string[] = [];
+    const ai: AIRunner = {
+      run: async options => {
+        const taskId = options.identity!.taskId;
+        calls.push(taskId);
+        if (taskId === 'task5' && failTask5) {
+          failTask5 = false;
+          return { success: false, output: '', exitCode: 1, errorMessage: 'task5 首次失败' };
+        }
+        return { success: true, output: '完成', exitCode: 0 };
+      },
+      killAll() {},
+      killByWorkDir() {
+        return 0;
+      },
+    };
+    const runner: WorkflowOptions['runner'] = {
+      run: async spec => {
+        if (spec.id === 'build') {
+          try {
+            await new TaskGraphExecutor(graphDeps(graph, ai)).execute();
+          } catch (error) {
+            return {
+              kind: 'failed',
+              error: { message: (error as Error).message, retryable: 'hard-no-auto' },
+            };
+          }
+        }
+        return { kind: 'completed', output: spec.id };
+      },
+    };
+    const options = (): WorkflowOptions => ({
+      tracker: graph.tracker,
+      number: 1,
+      runner,
+      context: { issueIid: 1, demand, branchName: 'iaf-1', workDir: graph.directory },
+      maxRetries: 0,
+      maxRepairs: 0,
+      deliver: async () => {
+        graph.tracker.transaction(1, record => {
+          record.lifecycle = { kind: 'completed' };
+        });
+      },
+    });
+
+    await new IssueWorkflow(options()).drive();
+    expect(graph.tracker.get(1)!.lifecycle).toMatchObject({ kind: 'failed', phase: 'build' });
+    graph.tracker.resetForRetry(1);
+    await new IssueWorkflow(options()).drive();
+
+    expect(calls.filter(taskId => taskId === 'task5')).toHaveLength(2);
+    expect(graph.tracker.get(1)!.run!.tasks.task5.status).toBe('merged');
+    fs.rmSync(graph.directory, { recursive: true, force: true });
+  }, 90_000);
 
   it('已完成图的 PR 冲突修复明确重入 build，并保留原 PR 身份', async () => {
     const f = fixture();

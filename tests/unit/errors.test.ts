@@ -13,7 +13,6 @@ import {
   PhaseNotRegisteredError,
   RunnerNotRegisteredError,
   PipelineNotFoundError,
-  UnregisteredPhasesError,
 } from '../../src/errors/index.js';
 
 describe('Error Type Hierarchy', () => {
@@ -171,12 +170,6 @@ describe('Error Type Hierarchy', () => {
       expect(err.pipelineMode).toBe('xxx');
     });
 
-    it('UnregisteredPhasesError', () => {
-      const err = new UnregisteredPhasesError(['missing1'], ['plan', 'build']);
-      expect(err.code).toBe('UNREGISTERED_PHASES');
-      expect(err.missingPhases).toEqual(['missing1']);
-      expect(err.registeredPhases).toEqual(['plan', 'build']);
-    });
   });
 
   // ── instanceof checks across hierarchy ──────────────────────────────

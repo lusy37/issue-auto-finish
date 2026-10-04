@@ -16,7 +16,6 @@ import { fileURLToPath } from 'node:url';
 import { marked } from 'marked';
 import { createPatch } from 'diff';
 import { IssueTracker } from '../../tracker/IssueTracker.js';
-import type { IssueRecord } from '../../tracker/IssueRecord.js';
 import { issueStateCategory } from '../../tracker/ExecutableTask.js';
 import type { DemandSpec } from '../../demand/DemandSpec.js';
 import { getIssueNumber, getTitle } from '../../tracker/IssueRecordHelper.js';
@@ -28,8 +27,6 @@ import { GitHubClient } from '../../clients/GitHubClient.js';
 import { SupplementStore } from '../../supplement/SupplementStore.js';
 import {
   buildPlanModePipeline,
-  getPipelineDef,
-  getAllPipelineDefs,
 } from '../../pipeline/PipelineMetadata.js';
 import type { PipelineDef } from '../../pipeline/PipelineMetadata.js';
 import {
@@ -38,7 +35,7 @@ import {
   getRetryablePhases,
 } from '../../pipeline/PipelineProjection.js';
 import { eventBus, EventPayload } from '../../events/EventBus.js';
-import { GateActionError } from '../../orchestration/index.js';
+import { GateActionError, type GateAction } from '../../orchestration/index.js';
 import { getNoteSyncEnabled, setNoteSyncOverride } from '../../notesync/NoteSyncSettings.js';
 import { getE2eEnabled, isE2eEnabledForIssue } from '../../e2e/E2eSettings.js';
 
@@ -70,17 +67,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function readPackageVersion(): string {
   try {
-    for (let dir = __dirname; dir !== path.dirname(dir); dir = path.dirname(dir)) {
-      const candidate = path.join(dir, 'package.json');
-      if (fs.existsSync(candidate)) {
-        const content = JSON.parse(fs.readFileSync(candidate, 'utf-8'));
-        if (content.name === 'issue-auto-finish') {
-          return content.version;
-        }
-      }
+    const content = JSON.parse(
+      fs.readFileSync(path.resolve(__dirname, '../../../package.json'), 'utf-8'),
+    );
+    if (content.name === 'issue-auto-finish' && typeof content.version === 'string') {
+      return content.version;
     }
   } catch {
-    /* ignore */
+    return 'unknown';
   }
   return 'unknown';
 }
@@ -134,7 +128,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   const startingIssues = new Set<number>();
 
   router.get('/api/pipeline-meta', (_req: Request, res: Response) => {
-    const allDefs = getAllPipelineDefs();
+    const allDefs = [orch.getPipelineDef()];
 
     const modes: Record<string, unknown> = {};
     for (const def of allDefs) {
@@ -162,7 +156,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     const issues = tracker.getAll();
     const enriched = issues.map((r) => {
       const stateCategory = issueStateCategory(r);
-      return { ...r, stateCategory, planDocs: getIssuePlanDocs(getIssueNumber(r), r) };
+      return { ...r, stateCategory, planDocs: getIssuePlanDocs(getIssueNumber(r)) };
     });
     res.json(enriched);
   });
@@ -177,21 +171,15 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
     const preview = buildPreviewInfo(number, orch);
     const worktree = orch.getWorktreeStatus(number);
-    res.json({ ...record, preview, worktree, planDocs: getIssuePlanDocs(number, record) });
+    res.json({ ...record, preview, worktree, planDocs: getIssuePlanDocs(number) });
   });
 
-  function getIssuePipelineDef(
-    number: number,
-    record: IssueRecord | undefined = tracker.get(number),
-  ): PipelineDef {
-    const mode = record?.pipelineMode ?? orch.getPipelineDef().mode;
-    return mode === 'plan-mode'
-      ? buildPlanModePipeline({ e2eEnabled: isE2eEnabledForIssue(number, tracker, cfg) })
-      : getPipelineDef(mode);
+  function getIssuePipelineDef(number: number): PipelineDef {
+    return buildPlanModePipeline({ e2eEnabled: isE2eEnabledForIssue(number, tracker, cfg) });
   }
 
-  function getIssuePlanDocs(number: number, record: IssueRecord | undefined = tracker.get(number)) {
-    return collectPipelineArtifacts(getIssuePipelineDef(number, record)).map((artifact) => ({
+  function getIssuePlanDocs(number: number) {
+    return collectPipelineArtifacts(getIssuePipelineDef(number)).map((artifact) => ({
       file: artifact.filename,
       label: artifact.label,
     }));
@@ -269,6 +257,8 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(400).json({ error: 'Issue is not in failed state or not found' });
       return;
     }
+    // 重试已确认停止的执行，立即释放轮询器占位，避免要等下一个调度周期。
+    poller?.forceReleaseIssue(number);
     res.json({
       success: true,
       control: persistedControl(number),
@@ -446,7 +436,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(404).json({ error: 'Issue 不存在' });
       return;
     }
-    const run = record.run!;
+    const run = record.run;
     const plan =
       run.planRevision && run.planDigest
         ? tracker.store.readPlan(number, run.planRevision, run.planDigest)
@@ -484,20 +474,12 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   // --- Supplement endpoints ---
 
   router.get('/api/issues/:number/supplement', (req: Request, res: Response) => {
-    if (!supplementStore) {
-      res.status(501).json({ error: 'Supplement store not available' });
-      return;
-    }
     const number = parseInt(req.params.number, 10);
     const info = supplementStore.get(number);
     res.json(info);
   });
 
   router.put('/api/issues/:number/supplement', (req: Request, res: Response) => {
-    if (!supplementStore) {
-      res.status(501).json({ error: 'Supplement store not available' });
-      return;
-    }
     const number = parseInt(req.params.number, 10);
     const body = req.body as Record<string, unknown>;
     const data = {
@@ -515,10 +497,6 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   // --- GitHub issue browsing ---
 
   router.get('/api/github/issues', async (req: Request, res: Response) => {
-    if (!github) {
-      res.status(501).json({ error: 'GitHub client not available' });
-      return;
-    }
     try {
       const search = (req.query.search as string) || '';
       const page = parseInt(req.query.page as string, 10) || 1;
@@ -548,10 +526,6 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   // --- Start processing an issue ---
 
   router.post('/api/issues/start', async (req: Request, res: Response) => {
-    if (!github) {
-      res.status(501).json({ error: 'GitHub client not available' });
-      return;
-    }
     const body = req.body as {
       issueId?: number;
       issueIid?: number;
@@ -596,7 +570,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
         demandSpec,
       });
 
-      if (supplementStore && body.supplement) {
+      if (body.supplement) {
         supplementStore.save(body.issueIid, {
           requirements: String(body.supplement.requirements || ''),
           acceptanceCriteria: String(body.supplement.acceptanceCriteria || ''),
@@ -615,175 +589,78 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
 
   // --- Review Gate endpoints ---
 
-  router.post('/api/issues/:number/approve-plan', async (req: Request, res: Response) => {
-    const revisionRecord = tracker.get(Number(req.params.number));
-    if (
-      !Number.isInteger(req.body?.planRevision) ||
-      req.body.planRevision !== revisionRecord?.run?.planRevision
-    ) {
-      res.status(409).json({ error: '审核版本已过期或缺失，请刷新计划后重试' });
-      return;
-    }
-    const number = parseInt(req.params.number, 10);
-    const record = tracker.get(number);
-    if (!record) {
-      res.status(404).json({ error: 'Issue not found' });
-      return;
-    }
-    const lifecycle = record.lifecycle;
-    if (lifecycle.kind !== 'waiting') {
-      res
-        .status(400)
-        .json({ error: `Issue is not waiting for review (current lifecycle: ${lifecycle.kind})` });
-      return;
-    }
-
-    // 审核入口只处理当前流水线的审核阶段，避免覆盖其他阶段。
-    const def = getIssuePipelineDef(number);
-    const gateSpec = getGatePhase(def);
-    if (!gateSpec) {
-      res.status(400).json({ error: 'Pipeline has no gate phase' });
-      return;
-    }
-    if (lifecycle.phase !== gateSpec.name) {
-      res.status(400).json({
-        error: `approve-plan only applies to the ${gateSpec.name} gate phase, but issue is currently at ${lifecycle.phase} gate. Use phase-specific approval instead.`,
-      });
-      return;
-    }
-    try {
-      await orch.applyGateAction(number, { action: 'approve' }, req.body.planRevision);
-      logger.info('Plan approved', { number });
-      res.json({
-        success: true,
-        message: `Issue #${number} plan approved, will resume on next drive cycle`,
-      });
-    } catch (err) {
-      if (err instanceof GateActionError) {
-        res.status(409).json({ error: err.message });
+  const reviewRoutes = [
+    {
+      route: 'approve-plan', verb: 'approve plan',
+      message: (number: number) =>
+        `Issue #${number} plan approved, will resume on next drive cycle`,
+    },
+    {
+      route: 'reject-plan', verb: 'reject plan',
+      message: (number: number) =>
+        `Issue #${number} plan rejected, will re-plan on next drive cycle`,
+    },
+    {
+      route: 'skip-review', verb: 'skip review',
+      message: (number: number) => `Issue #${number} review skipped`,
+    },
+  ];
+  for (const { route, verb, message } of reviewRoutes) {
+    router.post(`/api/issues/:number/${route}`, async (req: Request, res: Response) => {
+      const number = Number(req.params.number);
+      const record = tracker.get(number);
+      if (!record) {
+        res.status(404).json({ error: 'Issue not found' });
         return;
       }
-      const e = err as NodeJS.ErrnoException;
-      logger.error('Failed to approve plan', { number, code: e.code, error: e.message });
-      res.status(500).json({
-        error: `Failed to approve plan: ${e.message}`,
-        code: e.code,
-      });
-    }
-  });
-
-  router.post('/api/issues/:number/reject-plan', async (req: Request, res: Response) => {
-    const revisionRecord = tracker.get(Number(req.params.number));
-    if (
-      !Number.isInteger(req.body?.planRevision) ||
-      req.body.planRevision !== revisionRecord?.run?.planRevision
-    ) {
-      res.status(409).json({ error: '审核版本已过期或缺失，请刷新计划后重试' });
-      return;
-    }
-    const number = parseInt(req.params.number, 10);
-    const record = tracker.get(number);
-    if (!record) {
-      res.status(404).json({ error: 'Issue not found' });
-      return;
-    }
-    const lifecycle = record.lifecycle;
-    if (lifecycle.kind !== 'waiting') {
-      res
-        .status(400)
-        .json({ error: `Issue is not waiting for review (current lifecycle: ${lifecycle.kind})` });
-      return;
-    }
-    const { feedback } = req.body as { feedback?: string };
-    if (!feedback || typeof feedback !== 'string') {
-      res.status(400).json({ error: 'Feedback is required' });
-      return;
-    }
-    // 严格校验 lifecycle.phase 与 gate phase 一致：reject 语义只对 review gate 有意义。
-
-    // 抛 GateActionError('reject-not-allowed')，这里翻译为 409。
-    const def = getIssuePipelineDef(number);
-    const gateSpec = getGatePhase(def);
-    if (!gateSpec) {
-      res.status(400).json({ error: 'Pipeline has no gate phase' });
-      return;
-    }
-    if (lifecycle.phase !== gateSpec.name) {
-      res.status(400).json({
-        error: `reject-plan only applies to the ${gateSpec.name} gate phase, but issue is currently at ${lifecycle.phase} gate.`,
-      });
-      return;
-    }
-    try {
-      await orch.applyGateAction(number, { action: 'reject', feedback }, req.body.planRevision);
-      logger.info('Plan rejected', { number, feedback: feedback.slice(0, 100) });
-      res.json({
-        success: true,
-        message: `Issue #${number} plan rejected, will re-plan on next drive cycle`,
-      });
-    } catch (err) {
-      if (err instanceof GateActionError) {
-        res.status(409).json({ error: err.message });
+      const revision = req.body?.planRevision;
+      if (!Number.isInteger(revision) || revision !== record.run.planRevision) {
+        res.status(409).json({ error: '审核版本已过期或缺失，请刷新计划后重试' });
         return;
       }
-      const e = err as NodeJS.ErrnoException;
-      logger.error('Failed to reject plan', { number, code: e.code, error: e.message });
-      res.status(500).json({
-        error: `Failed to reject plan: ${e.message}`,
-        code: e.code,
-      });
-    }
-  });
-
-  router.post('/api/issues/:number/skip-review', async (req: Request, res: Response) => {
-    const revisionRecord = tracker.get(Number(req.params.number));
-    if (
-      !Number.isInteger(req.body?.planRevision) ||
-      req.body.planRevision !== revisionRecord?.run?.planRevision
-    ) {
-      res.status(409).json({ error: '审核版本已过期或缺失，请刷新计划后重试' });
-      return;
-    }
-    const number = parseInt(req.params.number, 10);
-    const record = tracker.get(number);
-    if (!record) {
-      res.status(404).json({ error: 'Issue not found' });
-      return;
-    }
-    const lifecycle = record.lifecycle;
-    if (lifecycle.kind !== 'waiting') {
-      res
-        .status(400)
-        .json({ error: `Issue is not waiting for review (current lifecycle: ${lifecycle.kind})` });
-      return;
-    }
-    // skip-review 与 approve-plan 等价，同样严格校验 lifecycle.phase。
-    const def = getIssuePipelineDef(number);
-    const gateSpec = getGatePhase(def);
-    if (!gateSpec) {
-      res.status(400).json({ error: 'Pipeline has no gate phase' });
-      return;
-    }
-    if (lifecycle.phase !== gateSpec.name) {
-      res.status(400).json({
-        error: `skip-review only applies to the ${gateSpec.name} gate phase, but issue is currently at ${lifecycle.phase} gate.`,
-      });
-      return;
-    }
-    try {
-      await orch.applyGateAction(number, { action: 'approve' }, req.body.planRevision);
-      logger.info('Review skipped', { number });
-      res.json({ success: true, message: `Issue #${number} review skipped` });
-    } catch (err) {
-      if (err instanceof GateActionError) {
-        res.status(409).json({ error: err.message });
+      const lifecycle = record.lifecycle;
+      if (lifecycle.kind !== 'waiting') {
+        res.status(400).json({
+          error: `Issue is not waiting for review (current lifecycle: ${lifecycle.kind})`,
+        });
         return;
       }
-      const e = err as Error;
-      logger.error('Failed to skip review', { number, error: e.message });
-      res.status(500).json({ error: `Failed to skip review: ${e.message}` });
-    }
-  });
+      let action: GateAction = { action: 'approve' };
+      if (route === 'reject-plan') {
+        const feedback: unknown = req.body?.feedback;
+        if (typeof feedback !== 'string' || !feedback.trim()) {
+          res.status(400).json({ error: 'Feedback is required' });
+          return;
+        }
+        action = { action: 'reject', feedback };
+      }
+      const gateSpec = getGatePhase(getIssuePipelineDef(number));
+      if (!gateSpec) {
+        res.status(400).json({ error: 'Pipeline has no gate phase' });
+        return;
+      }
+      if (lifecycle.phase !== gateSpec.name) {
+        res.status(400).json({
+          error: `${route} only applies to the ${gateSpec.name} gate phase, `
+            + `but issue is currently at ${lifecycle.phase} gate.`,
+        });
+        return;
+      }
+      try {
+        await orch.applyGateAction(number, action, revision);
+        logger.info(message(number), { number });
+        res.json({ success: true, message: message(number) });
+      } catch (err) {
+        if (err instanceof GateActionError) {
+          res.status(409).json({ error: err.message });
+          return;
+        }
+        const error = err as NodeJS.ErrnoException;
+        logger.error(`Failed to ${verb}`, { number, code: error.code, error: error.message });
+        res.status(500).json({ error: `Failed to ${verb}: ${error.message}`, code: error.code });
+      }
+    });
+  }
 
   router.get('/api/issues/:number/review-history', (req: Request, res: Response) => {
     const number = parseInt(req.params.number, 10);
@@ -829,10 +706,10 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
     }
 
     const currentContent =
-      filename === ARTIFACTS.plan.filename && record.run?.planRevision
+      filename === ARTIFACTS.plan.filename && record.run.planRevision
         ? renderPlan(tracker.store.readPlan(number, record.run.planRevision, record.run.planDigest))
         : null;
-    const history = record.run?.reviewHistory ?? [];
+    const history = record.run.reviewHistory ?? [];
     const lastRound = history.length > 0 ? history[history.length - 1] : null;
     const baselineSnapshot = lastRound?.planSnapshot ?? null;
 
@@ -1166,7 +1043,7 @@ function escapeHtml(text: string): string {
 
 /** 审核历史与工作目录是否存在无关，仅以聚合状态为准。 */
 function loadReviewHistory(number: number, tracker: IssueTracker) {
-  return tracker.get(number)?.run?.reviewHistory ?? [];
+  return tracker.get(number)?.run.reviewHistory ?? [];
 }
 
 async function readPlanFile(

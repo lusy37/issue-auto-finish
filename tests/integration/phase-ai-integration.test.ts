@@ -15,12 +15,12 @@ import {
   ScriptedAIRunner,
   successScript,
   failureScript,
-  writeArtifact,
 } from '../helpers/scripted-ai-runner.js';
 import {
   createMockGitOperations,
   createTestConfig,
 } from '../helpers/mock-factories.js';
+import { verifyAgentOutput } from '../helpers/verify-result.js';
 import type { PhaseContext } from '../../src/phases/BasePhase.js';
 
 vi.mock('../../src/knowledge/index.js', () => ({
@@ -84,13 +84,11 @@ describe('Phase-AI Integration', () => {
     expect(runner.runCalls[0].phaseName).toBe('plan');
   });
 
-  // ── Verify → parses report ──
+  // ── Verify → parses structured result and writes display report ──
 
   it('VerifyPhase: should return completed when report passes', async () => {
-    const report = `# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: 通过\n\n## 总结\n所有检查均通过。`;
-
     const runner = new ScriptedAIRunner([
-      successScript(undefined, writeArtifact(ISSUE_IID, '02-verify-report.md', report)),
+      successScript({ output: verifyAgentOutput({ reportMarkdown: '# 验证报告\n\nLint、Build、Test 均已执行并通过，本次代码检查和关联测试满足进入下一阶段的条件。' }) }),
     ]);
     const phase = new VerifyPhase(runner, createMockGitOperations() as any, wtPlan, config);
 
@@ -99,10 +97,8 @@ describe('Phase-AI Integration', () => {
   });
 
   it('VerifyPhase: should return requestRetryFrom build when test fails', async () => {
-    const report = `# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: 失败\n\n## 总结\n验证失败。`;
-
     const runner = new ScriptedAIRunner([
-      successScript(undefined, writeArtifact(ISSUE_IID, '02-verify-report.md', report)),
+      successScript({ output: verifyAgentOutput({ test: 'failed', reportMarkdown: '# 验证报告\n\nTest 执行失败，存在未通过的检查项，需要回到 build 修复后重新验证。' }) }),
     ]);
     const phase = new VerifyPhase(runner, createMockGitOperations() as any, wtPlan, config);
 
@@ -112,7 +108,7 @@ describe('Phase-AI Integration', () => {
       expect(intent.targetPhaseId).toBe('build');
       expect(intent.reason).toBe('verify-failed');
       const failures = intent.context?.verifyFailures as readonly string[] | undefined;
-      expect(failures).toContain('测试未通过');
+      expect(failures).toContain('Test 检查失败：Test 失败');
     }
   });
 

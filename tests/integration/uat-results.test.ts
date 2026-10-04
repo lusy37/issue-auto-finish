@@ -37,7 +37,8 @@ it("真实 Playwright 的失败、零测试、全跳过和超时均不通过，�
         // 允许 Windows 上的 Node/Playwright 冷启动；测试自身的 200ms 超时仍由上方配置验证。
         timeoutMs: 60000,
       });
-      expect(result.passed, name + ": " + result.error).toBe(name === "通过");
+      const machinePassed = result.playwrightExitCode === 0 && result.reportValid && result.passedTests > 0 && result.failedTests === 0 && result.reportErrors.length === 0 && !result.machineCancelled;
+      expect(machinePassed, name + ": " + result.error).toBe(name === "通过");
       expect(runIds.has(result.runId)).toBe(false);
       runIds.add(result.runId);
     }
@@ -48,7 +49,7 @@ it("真实 Playwright 的失败、零测试、全跳过和超时均不通过，�
       baseUrl: "http://127.0.0.1:9",
       timeoutMs: 1000,
     });
-    expect(missing.passed).toBe(false);
+    expect(missing.reportValid).toBe(false);
     expect(missing.reportAvailable).toBe(false);
     expect(
       fs.existsSync(

@@ -228,10 +228,7 @@ describe('集成测试：流水线正常流程', () => {
     const { IssueTracker: TrackerClass } = await import('../../src/tracker/IssueTracker.js');
     const { PLAN_MODE_PIPELINE: planPipeline } = await import('../../src/pipeline/PipelineMetadata.js');
 
-    const lifecycleManagers = new Map();
-    lifecycleManagers.set('plan-mode', planPipeline);
-
-    const tracker2 = new TrackerClass(harness.dataDir, lifecycleManagers);
+    const tracker2 = new TrackerClass(harness.dataDir, planPipeline);
     const recoveredRecord = tracker2.get(issue.number);
     expect(recoveredRecord).toBeDefined();
     expect(recoveredRecord!.lifecycle).toEqual(record!.lifecycle);

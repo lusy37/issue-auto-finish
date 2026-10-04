@@ -7,8 +7,8 @@ import type { IssueLifecycle } from '../../src/tracker/IssueLifecycle.js';
 import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 
 let directory: string;
-const managers = () => new Map([['plan-mode', PLAN_MODE_PIPELINE]]);
-const input = (pipelineMode?: string) => ({
+const managers = () => PLAN_MODE_PIPELINE;
+const input = (pipelineMode?: 'plan-mode') => ({
   lifecycle: { kind: 'pending' } as const, branchName: 'feat/issue-1', pipelineMode,
   demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue' as const, externalId: '1', displayId: '1' }, title: '需求', description: '', createdAt: new Date().toISOString() },
 });
@@ -75,9 +75,9 @@ it('v6 文件出现已删除状态字段时直接拒绝，不做清理或适配'
   expect(fs.readFileSync(file, 'utf8')).toBe(content);
 });
 
-it('未初始化任务不依赖展示状态映射器，未知模式保持可读取', () => {
+it('未初始化任务使用唯一的 plan-mode 流水线', () => {
   const tracker = new IssueTracker(directory, managers());
-  tracker.create(input('unknown-mode'));
+  tracker.create(input('plan-mode'));
   expect(tracker.getAllActive()).toHaveLength(1);
-  expect(new IssueTracker(directory, new Map()).getAllActive()).toHaveLength(1);
+  expect(new IssueTracker(directory).getAllActive()).toHaveLength(1);
 });

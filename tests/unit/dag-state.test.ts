@@ -18,7 +18,7 @@ beforeEach(() => { directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dag-state-
 afterEach(() => { fs.rmSync(directory, { recursive: true, force: true }); vi.restoreAllMocks(); });
 const record = (number: number): IssueRecord => ({ lifecycle: { kind: 'pending' }, branchName: `iaf-${number}`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), demandSpec: { demandId: `gh-${number}`, sourceRef: { source: 'github-issue', externalId: String(number), displayId: String(number) }, title: '需求', description: '实现并验收', createdAt: new Date().toISOString() }, run: newIssueRun(), phaseHistory: [] });
 const content = (): PlanContent => ({ title: '计划', description: '共同完成父需求', acceptanceCriteria: ['验证通过'], tasks: [{ id: 'a', title: '接口', instructions: '实现接口', acceptanceCriteria: ['接口测试通过'], dependsOn: [] }, { id: 'b', title: '页面', instructions: '实现页面', acceptanceCriteria: ['页面可用'], dependsOn: ['a'] }] });
-const tracker = () => new IssueTracker(directory, new Map([['plan-mode', PLAN_MODE_PIPELINE]]));
+const tracker = () => new IssueTracker(directory, PLAN_MODE_PIPELINE);
 
 describe('聚合事务与不可变计划', () => {
   it('写入失败时磁盘、缓存与版本保持原值，后续调度被阻断', () => {

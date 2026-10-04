@@ -229,6 +229,11 @@ export function createTestConfig(overrides?: TestConfigOverrides): Config {
       baseUrl: 'https://localhost:8890',
       backendPortBase: 14000,
       frontendPortBase: 19000,
+      visualReviewEnabled: false,
+      visualReviewMaxImages: 12,
+      visualReviewMaxRetries: 2,
+      visualReviewModel: undefined,
+      visualReviewTimeoutMs: 180000,
       ...overrides?.e2e,
     },
     preview: {

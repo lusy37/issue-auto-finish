@@ -10,13 +10,14 @@ export async function inspectWorkflow(tracker: IssueTracker, number: number): Pr
   for (let attempt = 0; attempt < 3; attempt++) {
     const record = tracker.get(number);
     if (!record) throw new Error('Issue 不存在');
-    const run = record.run!;
+    const run = record.run;
     const version = run.version;
     const workflow = new IssueWorkflow({
       tracker,
       number,
       maxRetries: 0,
       maxRepairs: 0,
+      maxVisualRetries: 0,
       context: {
         issueIid: number,
         demand: record.demandSpec,
@@ -31,10 +32,10 @@ export async function inspectWorkflow(tracker: IssueTracker, number: number): Pr
     });
     const read = await Promise.all([workflow.getGraph(), workflow.getState()]).catch((error) => {
       // 重做可能在原生读取期间切换线程；丢弃旧取样，不把正常代次切换报成服务错误。
-      if (tracker.get(number)?.run?.version !== version) return undefined;
+      if (tracker.get(number)?.run.version !== version) return undefined;
       throw error;
     });
-    if (!read || tracker.get(number)?.run?.version !== version) continue;
+    if (!read || tracker.get(number)?.run.version !== version) continue;
     const [graph, snapshot] = read;
     const phaseIds = [...(run.workflow.definition?.phaseIds ?? [])];
     const enabled = new Set<string>(phaseIds);

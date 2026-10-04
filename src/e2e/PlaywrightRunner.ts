@@ -1,50 +1,80 @@
-import type { UatResult } from '../shared/workbench.js';
-export type { UatResult } from '../shared/workbench.js';
 import fs from 'node:fs';
 import path from 'node:path';
+import { writeJsonAtomicSync } from '../utils/atomicFile.js';
 import { randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
-import { runProcess } from '../utils/process.js';
+import type { MachineUatResult, ScreenshotEvidence } from '../shared/workbench.js';
+export type { UatResult } from '../shared/workbench.js';
 import { resolveDataDir, ensureDir } from '../paths.js';
+import { collectScreenshotEvidence } from './VisualEvidence.js';
+import { runPlaywrightProcess } from './PlaywrightProcess.js';
+import {
+  parsePlaywrightReport,
+  playwrightReportErrors,
+  type PlaywrightReport,
+} from './PlaywrightReportCodec.js';
 
 const active = new Map<number, AbortController>();
+
 export function cancelUat(issueIid?: number): void {
-  for (const [number, controller] of active)
-    if (issueIid === undefined || number === issueIid) controller.abort();
+  for (const [number, controller] of active) {
+    if (issueIid === undefined || issueIid === number) controller.abort();
+  }
 }
-/** 实际测试报告为唯一通过依据。 */
-export function validateUatReport(report: unknown, code: number | null) {
-  const value = report as {
-    stats?: {
-      expected?: number;
-      unexpected?: number;
-      flaky?: number;
-      skipped?: number;
-    };
-    errors?: unknown[];
-  } | null;
-  const stats = value?.stats;
-  if (
-    !stats ||
-    !['expected', 'unexpected', 'flaky', 'skipped'].every(
-      (key) =>
-        Number.isInteger(stats[key as keyof typeof stats]) &&
-        Number(stats[key as keyof typeof stats]) >= 0,
-    )
-  )
-    throw new Error('Playwright 报告格式不完整');
-  const passedTests = stats.expected!,
-    failedTests = stats.unexpected! + stats.flaky!,
-    skippedTests = stats.skipped!;
+
+export interface ValidatedUatReport {
+  report: PlaywrightReport;
+  passed: boolean;
+  reportValid: boolean;
+  reportErrors: string[];
+  passedTests: number;
+  failedTests: number;
+  skippedTests: number;
+  failureKind?: MachineUatResult['failureKind'];
+}
+
+/** 只有实际读取的本次报告才能生成机器结果。 */
+export function validateUatReport(report: unknown, code: number | null): ValidatedUatReport {
+  const value = parsePlaywrightReport(report);
+  const reportErrors = playwrightReportErrors(value);
+  const passedTests = value.stats.expected;
+  const failedTests = value.stats.unexpected + value.stats.flaky;
+  const skippedTests = value.stats.skipped;
+  const passed = code === 0 && passedTests > 0 && failedTests === 0 && reportErrors.length === 0;
   return {
-    passed: code === 0 && passedTests > 0 && failedTests === 0 && !value?.errors?.length,
+    report: value,
+    passed,
+    reportValid: true,
+    reportErrors,
     passedTests,
     failedTests,
     skippedTests,
+    failureKind: passed
+      ? undefined
+      : failedTests > 0 && value.errors.length === 0 ? 'assertion' : 'environment',
   };
 }
+
+type MachineResultWithRun = MachineUatResult & {
+  runId: string;
+  issueIid: number;
+  reportAvailable: boolean;
+};
+
+function saveUatArtifacts(
+  outputDir: string,
+  commandLog: string,
+  machine: MachineResultWithRun,
+): void {
+  fs.writeFileSync(path.join(outputDir, 'command.log'), commandLog);
+  writeJsonAtomicSync(path.join(outputDir, 'machine.json'), machine);
+  writeJsonAtomicSync(path.join(outputDir, 'screenshots.json'), machine.screenshots);
+}
+
 export async function executeUat(options: {
   issueIid: number;
+  runId?: string;
+  dataDir?: string;
+  outputDir?: string;
   signal?: AbortSignal;
   onTemporaryFile?: (file: string, present: boolean) => void;
   workDir: string;
@@ -53,166 +83,87 @@ export async function executeUat(options: {
   baseUrl: string;
   timeoutMs: number;
   onOutput?: (text: string) => void;
-}): Promise<UatResult> {
+}): Promise<MachineResultWithRun> {
   if (active.has(options.issueIid)) throw new Error('该任务正在执行浏览器验收');
   const controller = new AbortController();
   const abort = () => controller.abort();
   options.signal?.addEventListener('abort', abort, { once: true });
   if (options.signal?.aborted) controller.abort();
   active.set(options.issueIid, controller);
-  const runId = randomUUID(),
-    startedAt = new Date().toISOString();
-  const outputDir = ensureDir(path.join(resolveDataDir(), 'uat', runId));
-  let result: UatResult = {
-    runId,
-    issueIid: options.issueIid,
-    startedAt,
-    finishedAt: startedAt,
-    passed: false,
-    passedTests: 0,
-    failedTests: 0,
-    skippedTests: 0,
-  };
-  let wrapper: string | undefined;
+
+  const runId = options.runId ?? randomUUID();
+  const startedAt = new Date().toISOString();
+  const dataDir = options.dataDir ?? resolveDataDir();
+  const outputDir = ensureDir(options.outputDir ?? path.join(dataDir, 'uat', runId));
+  let report: PlaywrightReport | undefined;
+  let commandCode: number | null = null;
+  let reportAvailable = false;
   let commandLog = '';
+  let error: string | undefined;
+  let failureKind: MachineUatResult['failureKind'];
+  let reportResult: ValidatedUatReport | undefined;
+
   try {
-    const config = path.resolve(options.workDir, options.configFile);
-    if (!fs.existsSync(config)) throw new Error(`找不到 Playwright 配置：${config}`);
-    // CLI 与配置、用例必须使用同一份 Playwright，否则独立仓库会出现 test() 上下文冲突。
-    let playwrightPackage: string;
-    try {
-      playwrightPackage = createRequire(config).resolve('playwright/package.json');
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'MODULE_NOT_FOUND') throw error;
-      playwrightPackage = createRequire(import.meta.url).resolve('playwright/package.json');
+    const processResult = await runPlaywrightProcess({
+      runId,
+      issueIid: options.issueIid,
+      dataDir,
+      outputDir,
+      workDir: options.workDir,
+      configFile: options.configFile,
+      browserChannel: options.browserChannel,
+      baseUrl: options.baseUrl,
+      timeoutMs: options.timeoutMs,
+      signal: controller.signal,
+      onTemporaryFile: options.onTemporaryFile,
+      onOutput: options.onOutput,
+    });
+    commandCode = processResult.code;
+    reportAvailable = processResult.reportAvailable;
+    commandLog = processResult.commandLog;
+    if (processResult.error) throw new Error(processResult.error);
+    reportResult = validateUatReport(processResult.report, commandCode);
+    report = reportResult.report;
+    if (!reportResult.passed) {
+      error = reportResult.reportErrors.join('\n').slice(0, 2000)
+        || processResult.stderr.slice(-1000)
+        || '没有实际通过的测试，请查看本次报告';
+      failureKind = reportResult.failureKind;
     }
-    const cli = path.join(path.dirname(playwrightPackage), 'cli.js');
-    const reportPath = path.join(outputDir, 'results.json');
-    wrapper = path.join(path.dirname(config), '.iaf-uat-' + runId + '.config.ts');
-    const configImport = './' + path.basename(config);
-    const browserChannel = options.browserChannel || process.env.PLAYWRIGHT_CHANNEL;
-    options.onTemporaryFile?.(wrapper, true);
-    fs.writeFileSync(
-      wrapper,
-      `import original from ${JSON.stringify(configImport)};
-
-const config = original ?? {};
-const browserChannel = ${JSON.stringify(browserChannel ?? null)};
-const forcedUse = {
-  ...config.use,
-  browserName: 'chromium',
-  screenshot: 'on',
-  ...(browserChannel ? { channel: browserChannel } : {}),
-};
-
-export default {
-  ...config,
-  use: forcedUse,
-  projects: config.projects?.map((project: any) => ({
-    ...project,
-    use: {
-      ...config.use,
-      ...project.use,
-      browserName: 'chromium',
-      screenshot: 'on',
-      ...(browserChannel ? { channel: browserChannel } : {}),
-    },
-  })),
-};
-`,
-    );
-    const command = await runProcess(
-      process.execPath,
-      [
-        cli,
-        'test',
-        '--config',
-        wrapper,
-        '--reporter=json,html',
-        '--output',
-        path.join(outputDir, 'artifacts'),
-        '--retries=0',
-      ],
-      {
-        cwd: options.workDir,
-        timeoutMs: options.timeoutMs,
-        signal: controller.signal,
-        onOutput: (text) => {
-          commandLog = (commandLog + text).slice(-2_000_000);
-          options.onOutput?.(text);
-        },
-        env: {
-          ...process.env,
-          CI: '1',
-          UAT_BASE_URL: options.baseUrl,
-          PLAYWRIGHT_CHANNEL: browserChannel,
-          PLAYWRIGHT_JSON_OUTPUT_FILE: reportPath,
-          PLAYWRIGHT_HTML_OUTPUT_DIR: path.join(outputDir, 'report'),
-          PLAYWRIGHT_HTML_OPEN: 'never',
-        },
-      },
-    );
-    if (!fs.existsSync(reportPath))
-      throw new Error(`本次验收没有生成报告：${command.stderr.slice(-500)}`);
-    const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
-    result = { ...result, ...validateUatReport(report, command.code) };
-    if (!result.passed) {
-      const messages: string[] = [];
-      const collectErrors = (value: unknown): void => {
-        if (!value || typeof value !== 'object') return;
-        if (Array.isArray(value)) {
-          value.forEach(collectErrors);
-          return;
-        }
-        for (const [key, item] of Object.entries(value)) {
-          if (key === 'error' || key === 'errors') {
-            const errors = Array.isArray(item) ? item : [item];
-            for (const error of errors) if (error?.message) messages.push(String(error.message));
-          } else if (typeof item === 'object') collectErrors(item);
-        }
-      };
-      collectErrors(report);
-      result.error =
-        [...new Set(messages)].join('\n').slice(0, 2000) ||
-        command.stderr.slice(-1000) ||
-        '没有实际通过的测试，请查看本次报告';
-      const environmentError =
-        /ECONNREFUSED|ENOTFOUND|ERR_CONNECTION|browserType\.launch|Executable doesn't exist|Authentication|Unauthorized|401|403/i.test(
-          result.error ?? '',
-        ) || !!report.errors?.length;
-      const assertions = /expect\(|AssertionError|toBe|toHave|toEqual|toContain/i.test(
-        result.error ?? '',
-      );
-      result.failureKind =
-        result.failedTests > 0 && assertions && !environmentError ? 'assertion' : 'environment';
-    }
-  } catch (err) {
-    result.error = (err as Error).message;
-    result.failureKind = 'environment';
+  } catch (cause) {
+    error = cause instanceof Error ? cause.message : String(cause);
+    failureKind = 'environment';
   } finally {
     options.signal?.removeEventListener('abort', abort);
     active.delete(options.issueIid);
-    if (wrapper) {
-      fs.rmSync(wrapper, { force: true });
-      options.onTemporaryFile?.(wrapper, false);
-    }
   }
-  const listImages = (dir: string): string[] =>
-    fs
-      .readdirSync(dir, { withFileTypes: true })
-      .flatMap((entry) =>
-        entry.isSymbolicLink()
-          ? []
-          : entry.isDirectory()
-            ? listImages(path.join(dir, entry.name))
-            : /\.(png|jpe?g|webp)$/i.test(entry.name)
-              ? [path.relative(outputDir, path.join(dir, entry.name)).split(path.sep).join('/')]
-              : [],
-      );
-  fs.writeFileSync(path.join(outputDir, 'command.log'), commandLog);
-  result.screenshots = listImages(outputDir);
-  result.reportAvailable = fs.existsSync(path.join(outputDir, 'report', 'index.html'));
-  result.finishedAt = new Date().toISOString();
-  fs.writeFileSync(path.join(outputDir, 'summary.json'), JSON.stringify(result, null, 2));
-  return result;
+
+  const collection = report
+    ? collectScreenshotEvidence(report, outputDir)
+    : { evidence: [] as ScreenshotEvidence[], errors: [] };
+  if (collection.errors.length && !error) {
+    error = collection.errors.join('\n').slice(0, 2000);
+  }
+  const machineCancelled = controller.signal.aborted || options.signal?.aborted === true;
+  const machineFinishedAt = new Date().toISOString();
+  const machine: MachineResultWithRun = {
+    runId,
+    issueIid: options.issueIid,
+    startedAt,
+    machineFinishedAt,
+    passed: (reportResult?.passed ?? false) && !machineCancelled,
+    playwrightExitCode: commandCode,
+    machineCancelled,
+    reportValid: reportResult?.reportValid ?? false,
+    reportErrors: reportResult?.reportErrors ?? [],
+    passedTests: reportResult?.passedTests ?? 0,
+    failedTests: reportResult?.failedTests ?? 0,
+    skippedTests: reportResult?.skippedTests ?? 0,
+    screenshots: collection.evidence,
+    failureKind,
+    error,
+    reportAvailable,
+  };
+  saveUatArtifacts(outputDir, commandLog, machine);
+  return machine;
 }

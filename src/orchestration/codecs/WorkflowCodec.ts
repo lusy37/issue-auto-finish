@@ -40,7 +40,7 @@ const workflowStorageSchema = z.object({
     z.string(),
     z.object({
       phase: z.enum([...PHASE_IDS, 'deliver']),
-      outcome: z.enum(['completed', 'retried-from', 'gate-approved', 'gate-rejected']),
+      outcome: z.enum(['completed', 'retried-from', 'retried-current', 'gate-approved', 'gate-rejected']),
       next: z.enum([...PHASE_IDS, 'deliver', '__end__']),
       sessionId: z.string().optional(),
       report: z.string().optional(),

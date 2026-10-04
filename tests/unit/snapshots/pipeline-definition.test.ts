@@ -33,12 +33,8 @@ vi.mock('../../../src/phases/PhaseFactory.js', () => ({
 
 import {
   PLAN_MODE_PIPELINE,
-  resolvePipelineMode,
-  getPipelineDef,
-  getRegisteredModes,
   getPhaseLabel,
   getPlanFileLabel,
-  _resetPipelineRegistry,
 } from '../../../src/pipeline/PipelineMetadata.js';
 
 describe('Pipeline Definitions', () => {
@@ -61,32 +57,6 @@ describe('Pipeline Definitions', () => {
       .filter(p => p.artifacts && p.artifacts.length > 0)
       .map(p => ({ name: p.name, artifacts: p.artifacts }));
     expect(artifacts).toMatchSnapshot();
-  });
-
-  it('resolvePipelineMode defaults to plan-mode', () => {
-    expect(resolvePipelineMode()).toMatchSnapshot();
-  });
-
-  it('resolvePipelineMode with explicit plan-mode', () => {
-    expect(resolvePipelineMode('plan-mode')).toMatchSnapshot();
-  });
-
-  it('resolvePipelineMode with unknown explicit mode falls back', () => {
-    expect(resolvePipelineMode('nonexistent')).toMatchSnapshot();
-  });
-
-  it('getPipelineDef returns plan-mode def', () => {
-    expect(getPipelineDef('plan-mode')).toMatchSnapshot();
-  });
-
-  it('getPipelineDef throws for unknown mode', () => {
-    expect(() => getPipelineDef('nonexistent')).toThrowErrorMatchingSnapshot();
-  });
-
-  it('getRegisteredModes includes plan-mode', () => {
-    const modes = getRegisteredModes();
-    expect(modes).toContain('plan-mode');
-    expect(modes).toMatchSnapshot();
   });
 
   it('getPhaseLabel returns localized labels', () => {

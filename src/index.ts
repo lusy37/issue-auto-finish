@@ -1,5 +1,4 @@
 import { configuredCallPolicy } from './ai-runner/CallPolicy.js';
-import { validateDraftStorage } from './demand/DraftService.js';
 import path from 'node:path';
 import { loadConfig } from './config.js';
 import { setLocale } from './i18n/index.js';
@@ -8,10 +7,11 @@ import { logger } from './logger.js';
 import { GitHubClient } from './clients/GitHubClient.js';
 import { GitOperations } from './git/GitOperations.js';
 import { createAIRunner } from './ai-runner/index.js';
+import type { AIRunner } from './ai-runner/AIRunner.js';
 import { IssueTracker } from './tracker/IssueTracker.js';
 import { SupplementStore } from './supplement/SupplementStore.js';
 import { IssueService } from './orchestrator/IssueService.js';
-import { buildPlanModePipeline, registerPipeline } from './pipeline/PipelineMetadata.js';
+import { buildPlanModePipeline } from './pipeline/PipelineMetadata.js';
 import { IssuePoller } from './poller/IssuePoller.js';
 import { WebServer } from './web/WebServer.js';
 import { AgentLogStore } from './web/AgentLogStore.js';
@@ -31,7 +31,10 @@ import { WorktreeReaper } from './workspace/WorktreeReaper.js';
 import { acquireInstanceLock } from './utils/InstanceLock.js';
 
 /** 单进程装配：一套任务状态、平台客户端和执行器。 */
-export async function main(options: { backgroundScheduling?: boolean } = {}): Promise<void> {
+export async function main(options: {
+  backgroundScheduling?: boolean;
+  aiRunner?: AIRunner;
+} = {}): Promise<void> {
   // 启动基础环境：配置、语言、数据目录和单实例锁。
   const config = loadConfig();
   setLocale(config.locale);
@@ -41,13 +44,11 @@ export async function main(options: { backgroundScheduling?: boolean } = {}): Pr
     // 注册 Issue 阶段流水线，并创建状态跟踪器。
     loadKnowledge(config.knowledge.path);
     const pipeline = buildPlanModePipeline({ e2eEnabled: config.e2e.enabled });
-    registerPipeline(pipeline);
-    const tracker = new IssueTracker(dataDir, new Map([[pipeline.mode, pipeline]]));
-    validateDraftStorage(path.join(dataDir, 'drafts'));
+    const tracker = new IssueTracker(dataDir, pipeline);
 
     // 创建外部平台、Git、AI 和 Issue 编排服务。
     const github = new GitHubClient(config.github);
-    const aiRunner = createAIRunner(config.ai);
+    const aiRunner = options.aiRunner ?? createAIRunner(config.ai);
     const mainGit = new GitOperations(config.project.gitRootDir);
     const supplementStore = new SupplementStore(dataDir);
     const orchestrator = new IssueService(

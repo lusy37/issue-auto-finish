@@ -56,7 +56,7 @@ const platform: { issues: GitHubIssue[]; prs: unknown[]; notes: Record<string, u
   ? JSON.parse(fs.readFileSync(platformFile, 'utf8'))
   : { issues: [], prs: [], notes: {}, failedBranches: [] };
 const pipeline = buildPlanModePipeline({ e2eEnabled: true });
-const tracker = new IssueTracker(dataDir, new Map([[pipeline.mode, pipeline]]));
+const tracker = new IssueTracker(dataDir, pipeline);
 
 for (const scenario of scenarios) {
   const issue: GitHubIssue = {
@@ -148,9 +148,14 @@ const uatRunId = '00000000-0000-4000-8000-000000000304';
 const uatSummaryFile = path.join(dataDir, 'uat', uatRunId, 'summary.json');
 if (!fs.existsSync(uatSummaryFile)) {
   const sample: UatResult = {
-    runId: uatRunId, issueIid: 304, startedAt: now, finishedAt: now,
-    passed: false, passedTests: 0, failedTests: 1, skippedTests: 0,
-    reportAvailable: false, error: '仅供界面展示的模拟失败记录，不是实际 Playwright 运行或验收证据。',
+    format: 'iaf-mini/uat/v1', status: 'completed', runId: uatRunId, issueIid: 304,
+    startedAt: now, finishedAt: now, machineFinishedAt: now,
+    machinePassed: false, passed: false, passedTests: 0, failedTests: 1, skippedTests: 0,
+    evidence: [], reportAvailable: false,
+    visualReview: { status: 'not-run', summary: '机器验收失败', issues: [], selectedScreenshots: [], checkedScreenshots: [], unreviewedScreenshots: [], coverageGaps: [], reasonCode: 'machine-failed' },
+    policy: { visualReviewEnabled: false, maxImages: 12, timeoutMs: 180000 },
+    execution: { candidateCommit: 'showcase', planRevision: 1, planDigest: 'showcase', buildGeneration: 1, dispatchId: 'showcase', phaseAttemptNo: 1 },
+    error: '仅供界面展示的模拟失败记录，不是实际 Playwright 运行或验收证据。',
   };
   writeJsonAtomicSync(uatSummaryFile, sample);
 }

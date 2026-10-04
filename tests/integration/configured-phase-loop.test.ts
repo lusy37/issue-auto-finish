@@ -4,6 +4,7 @@ import { AsyncMutex } from '../../src/utils/AsyncMutex.js';
 import { graphFixture, git as realGit } from '../helpers/dag-repository.js';
 import { GitOperations } from '../../src/git/GitOperations.js';
 import { structuredPlanOutput } from '../helpers/structured-plan.js';
+import { verifyAgentOutput } from '../helpers/verify-result.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,6 +16,9 @@ import { resetKnowledgeCache } from '../../src/knowledge/KnowledgeLoader.js';
 import { createMockOrchestratorDeps, createTestConfig, createTestIssue } from '../helpers/mock-factories.js';
 import type { AIRunner, RunOptions } from '../../src/ai-runner/AIRunner.js';
 import type { IssueProcessingContext } from '../../src/orchestrator/IssueProcessingContext.js';
+import { UatResultStore } from '../../src/e2e/UatResultStore.js';
+import type { UatResult } from '../../src/shared/workbench.js';
+import { randomUUID } from 'node:crypto';
 
 const uatBehavior = vi.hoisted(() => ({ fail: false }));
 
@@ -24,7 +28,31 @@ vi.mock('../../src/phases/PhaseFactory.js', async importOriginal => {
   return {
     ...original,
     createPhase: (...args: Parameters<typeof original.createPhase>) => args[0] === 'uat'
-      ? { run: async () => { if (uatBehavior.fail) return { kind: 'requestRetryFrom', targetPhaseId: 'build', reason: 'uat-assertion-failed', context: { rawReport: '浏览器断言失败，需要修复' } }; args[3].writeFile('uat-run.json', JSON.stringify({ runId: 'simulated-uat' })); return { kind: 'completed', output: '模拟验收通过' }; }, getResultFiles: () => [] }
+      ? { run: async () => {
+          if (uatBehavior.fail) return { kind: 'requestRetryFrom', targetPhaseId: 'build', reason: 'uat-assertion-failed', context: { rawReport: '浏览器断言失败，需要修复' } };
+          const tracker = args[5]!;
+          const run = tracker.get(1)!.run!;
+          const now = new Date().toISOString();
+          const summary: UatResult = {
+            format: 'iaf-mini/uat/v1', status: 'completed', runId: randomUUID(), issueIid: 1,
+            machinePassed: true, passed: true, passedTests: 1, failedTests: 0, skippedTests: 0,
+            evidence: [], reportAvailable: false, startedAt: now, machineFinishedAt: now, finishedAt: now,
+            visualReview: { status: 'not-run', summary: '视觉复核未启用', issues: [], selectedScreenshots: [], checkedScreenshots: [], unreviewedScreenshots: [], coverageGaps: [], reasonCode: 'disabled' },
+            policy: { visualReviewEnabled: false, maxImages: 12, timeoutMs: 180000 },
+            execution: { candidateCommit: run.candidateCommit!, planRevision: run.planRevision, planDigest: run.planDigest!, buildGeneration: run.buildGeneration, dispatchId: run.dispatchId!, phaseAttemptNo: run.phaseExecutions.uat ?? 1 },
+          };
+          summary.summaryDigest = UatResultStore.digest(summary);
+          const store = new UatResultStore(args[3].dataDirectory);
+          store.writeSummary(summary);
+          tracker.transaction(1, (record) => {
+            record.run!.uatExecution = {
+              runId: summary.runId, status: summary.status, startedAt: now,
+              execution: summary.execution, policy: summary.policy,
+            };
+          });
+          // 故意不生成展示副本：阶段必须从聚合状态读取本轮运行。
+          return { kind: 'completed', output: '模拟验收通过' };
+        }, getResultFiles: () => [] }
       : original.createPhase(...args),
   };
 });
@@ -61,7 +89,7 @@ function fixture(options: { e2e?: boolean; review?: boolean; label?: boolean; ma
   config.verifyFixLoop.enabled = options.loop ?? true;
   config.verifyFixLoop.maxIterations = options.max ?? 3;
   const pipelineDef = buildPlanModePipeline({ e2eEnabled: config.e2e.enabled });
-  const managers = new Map([[pipelineDef.mode, pipelineDef]]);
+  const managers = pipelineDef;
   const tracker = new IssueTracker(dir, managers);
   const demand = {
     demandId: 'gh-1', sourceRef: { source: 'github-issue' as const, externalId: '1', displayId: '1' },
@@ -76,10 +104,14 @@ function fixture(options: { e2e?: boolean; review?: boolean; label?: boolean; ma
     killAll() {}, killByWorkDir() { return 0; },
     async run(opts) {
       calls.push(opts);
-      if (opts.phaseName === 'verify') plan.writeFile('02-verify-report.md',
-        `# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: ${options.failVerify ? '失败' : '通过'}\n\n## 总结\n${options.failVerify ? '失败：测试不符合要求，需要修复。' : '所有检查通过，待办全部完成。'}\n`);
       if (opts.phaseName === 'build') fs.writeFileSync(path.join(opts.workDir, 'result.txt'), String(calls.length));
-      return { success: true, exitCode: 0, output: opts.phaseName === 'verify' ? plan.readFile('02-verify-report.md')! : structuredPlanOutput('目标是验证审核和自动修复配置真正进入阶段执行逻辑。') };
+      return {
+        success: true,
+        exitCode: 0,
+        output: opts.phaseName === 'verify'
+          ? verifyAgentOutput({ test: options.failVerify ? 'failed' : 'passed' })
+          : structuredPlanOutput('目标是验证审核和自动修复配置真正进入阶段执行逻辑。'),
+      };
     },
   };
   const git = new GitOperations(repository.integration);

@@ -4,12 +4,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { chromium } from "@playwright/test";
 import { envSchema, transformEnvToConfig } from "../../src/config-schema.js";
 import { IssueTracker } from "../../src/tracker/IssueTracker.js";
 import {
   buildPlanModePipeline,
-  registerPipeline,
 } from "../../src/pipeline/PipelineMetadata.js";
 import { IssueService } from "../../src/orchestrator/IssueService.js";
 import { GitOperations } from "../../src/git/GitOperations.js";
@@ -24,6 +22,8 @@ import { summarizeTasks } from "../../src/analytics/TaskAnalytics.js";
 import { DiaryCollector } from "../../src/distill/DiaryCollector.js";
 import { DiaryStore } from "../../src/distill/DiaryStore.js";
 import { PlanPersistence } from "../../src/persistence/PlanPersistence.js";
+import { verifyAgentOutput } from '../helpers/verify-result.js';
+import { resolveTestBrowserChannel } from '../helpers/playwright-browser.js';
 
 const base = path.resolve(".iaf-mini/test-workflow");
 let dir: string, previous: string | undefined;
@@ -47,12 +47,8 @@ afterEach(() => {
 });
 
 describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
-  it.each(['verify', 'uat'] as const)("驳回重做 → %s 失败修复 → Chromium 验收 → 交付恢复", async failurePhase => {
-    if (!process.env.IAF_TEST_BROWSER_CHANNEL && !fs.existsSync(chromium.executablePath())) {
-      throw new Error(
-        '缺少 Playwright Chromium，请先运行 npm run e2e:install，或设置 IAF_TEST_BROWSER_CHANNEL=msedge',
-      );
-    }
+  it.each(['verify', 'uat'] as const)("驳回重做 → %s 失败修复 → 浏览器验收 → 交付恢复", async failurePhase => {
+    const browserChannel = resolveTestBrowserChannel();
     const origin = path.join(dir, "origin.git"),
       repo = path.join(dir, "repo");
     fs.mkdirSync(repo);
@@ -96,14 +92,16 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
         PREVIEW_FRONTEND_COMMAND:
           '"' + process.execPath + '" server.mjs {port}',
         E2E_UI_ENABLED: "true",
+        PLAYWRIGHT_CHANNEL: browserChannel ?? 'chromium',
+        // 本组验证机器验收与交付恢复；视觉模型契约由视觉复核测试覆盖。
+        E2E_VISUAL_REVIEW_ENABLED: "false",
       }),
       path.resolve("src"),
     );
     const pipeline = buildPlanModePipeline({ e2eEnabled: true });
-    registerPipeline(pipeline);
     const tracker = new IssueTracker(
       process.env.DATA_DIR!,
-      new Map([[pipeline.mode, pipeline]]),
+      pipeline,
     );
     const issue: GitHubIssue = {
       id: 101,
@@ -157,7 +155,7 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
       },
       async run(options) {
         calls.push(options);
-        if (options.mode === "plan")
+        if (options.phaseName === "plan")
           return {
             success: true,
             output:
@@ -174,9 +172,12 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
         }
         if (options.phaseName === "verify") {
           verifies++;
-          return { success: true, output: failurePhase === 'verify' && verifies === 1
-              ? "# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: 失败\n\n## 失败原因\n标题不符合验收标准，需要修复页面。\n"
-              : "# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: 通过\n\n## 总结\n所有检查通过，页面标题符合要求。\n", exitCode: 0 };
+          return { success: true, output: verifyAgentOutput({
+            test: failurePhase === 'verify' && verifies === 1 ? 'failed' : 'passed',
+            reportMarkdown: failurePhase === 'verify' && verifies === 1
+              ? '# 验证报告\n\nTest 执行失败：标题不符合验收标准，需要回到 build 修复页面后重新验证。'
+              : '# 验证报告\n\nLint、Build、Test 均已执行并通过，页面标题符合要求，可以进入后续浏览器验收。',
+          }), exitCode: 0 };
         }
         throw new Error("意外 AI 调用：" + options.phaseName);
       },
@@ -243,7 +244,7 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
       ).toHaveLength(1);
       const reloaded = new IssueTracker(
         process.env.DATA_DIR!,
-        new Map([[pipeline.mode, pipeline]]),
+        pipeline,
       );
       expect(summarizeTasks(reloaded.getAll(), "all")).toEqual(
         summarizeTasks(tracker.getAll(), "all"),

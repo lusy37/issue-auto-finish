@@ -26,6 +26,10 @@ exports[`裁剪版配置 > 只有公开执行器及当前模块 1`] = `
     "enabled": true,
     "frontendPortBase": 9000,
     "timeoutMs": 300000,
+    "visualReviewEnabled": true,
+    "visualReviewMaxImages": 12,
+    "visualReviewMaxRetries": 2,
+    "visualReviewTimeoutMs": 180000,
   },
   "github": {
     "apiUrl": "https://platform.example.test",

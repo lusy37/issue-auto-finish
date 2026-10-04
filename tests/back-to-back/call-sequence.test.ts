@@ -23,7 +23,7 @@ import {
 
 function createMinimalHarness() {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'b2b-'));
-  const tracker = new IssueTracker(dataDir, new Map([['plan-mode', PLAN_MODE_PIPELINE]]));
+  const tracker = new IssueTracker(dataDir, PLAN_MODE_PIPELINE);
 
   const callLog: Array<{ method: string; args: unknown[] }> = [];
 

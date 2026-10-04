@@ -5,7 +5,6 @@ import { createApiRouter, type ApiRouterDeps } from './routes/api.js';
 import { createSetupRouter } from './routes/setup.js';
 import { createKnowledgeRouter } from './routes/knowledge.js';
 import { createDistillRouter } from './routes/distill.js';
-import { createDraftRouter } from './routes/drafts.js';
 import { createAnalyticsRouter } from './routes/analytics.js';
 import { createUatRouter } from './routes/uat.js';
 import type { AIRunner } from '../ai-runner/AIRunner.js';
@@ -29,9 +28,8 @@ export class WebServer {
         diaryStore: deps.diaryStore,
         distillScheduler: deps.distillScheduler,
       }),
-      createDraftRouter(deps.aiRunner, deps.github, deps.config),
       createAnalyticsRouter(deps.tracker, deps.config),
-      createUatRouter(),
+      createUatRouter(deps.tracker.store.dataDir),
     ]);
   }
   start(): Promise<void> {

@@ -20,9 +20,36 @@ describe('持久化停止与继续', () => {
   });
   it('暂停后显式继续保持原计划版本和重试预算', async () => { f.tracker.transaction(42, record => { record.run!.retryUsed.build = 2; }); await f.orchestrator.abortIssue(42); expect(f.tracker.get(42)!.run!.stopIntent!.kind).toBe('pause'); f.orchestrator.continueIssue(42); expect(f.tracker.get(42)!.run!.stopIntent).toBeUndefined(); expect(f.tracker.get(42)!.run!.retryUsed.build).toBe(2); });
   it('非暂停状态不能继续', () => { expect(() => f.orchestrator.continueIssue(42)).toThrow(); });
+  it('中止等待进程退出竞态后成功完成', async () => {
+    vi.useFakeTimers();
+    try {
+      f.tracker.transaction(42, record => {
+        record.run!.calls.delayed = {
+          identity: { issueNumber: 42, planRevision: 1, buildGeneration: 0, dispatchId: 'old', taskId: '$phase:plan', attemptNo: 1, callId: 'delayed' },
+          workDir: f.directory,
+          status: 'running',
+          pid: process.pid,
+        };
+      });
+      const pending = f.orchestrator.abortIssue(42);
+      setTimeout(() => f.tracker.transaction(42, record => { record.run!.calls.delayed.status = 'exited'; }), 100);
+      await vi.advanceTimersByTimeAsync(100);
+      await pending;
+      expect(f.tracker.get(42)!.lifecycle).toEqual({ kind: 'paused', phase: 'review' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it('旧调用仍活着时保存停止意图但拒绝继续与清理', async () => {
-    f.tracker.transaction(42, record => { record.run!.calls.alive = { identity: { issueNumber: 42, planRevision: 1, buildGeneration: 0, dispatchId: 'old', taskId: '$phase:plan', attemptNo: 1, callId: 'alive' }, workDir: f.directory, status: 'running', pid: process.pid }; });
-    await expect(f.orchestrator.abortIssue(42)).rejects.toThrow('尚未退出'); expect(f.tracker.get(42)!.run!.stopIntent!.kind).toBe('pause'); expect(() => f.orchestrator.continueIssue(42)).toThrow('尚未退出');
+    vi.useFakeTimers();
+    try {
+      f.tracker.transaction(42, record => { record.run!.calls.alive = { identity: { issueNumber: 42, planRevision: 1, buildGeneration: 0, dispatchId: 'old', taskId: '$phase:plan', attemptNo: 1, callId: 'alive' }, workDir: f.directory, status: 'running', pid: process.pid }; });
+      const rejection = expect(f.orchestrator.abortIssue(42)).rejects.toThrow('尚未退出');
+      await vi.advanceTimersByTimeAsync(5000);
+      await rejection; expect(f.tracker.get(42)!.run!.stopIntent!.kind).toBe('pause'); expect(() => f.orchestrator.continueIssue(42)).toThrow('尚未退出');
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it('单次重做先等待停止，且保留构建重试预算', async () => { f.tracker.transaction(42, record => { record.lifecycle = { kind: 'running', phase: 'build' }; record.run.retryUsed.build = 1; }); await f.orchestrator.redoPhase(42); expect(f.tracker.get(42)!.run.retryUsed.build).toBe(1); expect(f.tracker.get(42)!.run.stopIntent).toBeUndefined(); });
 });

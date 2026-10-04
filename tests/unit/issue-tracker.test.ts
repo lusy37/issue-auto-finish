@@ -8,7 +8,7 @@ import { getIssueNumber } from '../../src/tracker/IssueRecordHelper.js';
 import { retryAttempts } from '../../src/tracker/IssueRecord.js';
 import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 
-const definitions = () => new Map([['plan-mode', PLAN_MODE_PIPELINE]]);
+const definitions = () => PLAN_MODE_PIPELINE;
 
 describe('IssueTracker', () => {
   let directory: string;

@@ -45,7 +45,7 @@ export async function executeSetup(
   }, deps.signal);
 
   // 3. 首次 setup 固化本轮阶段定义，并初始化展示进度。
-  if (!record.run!.workflow.definition || !record.phaseProgress) {
+  if (!record.run.workflow.definition || !record.phaseProgress) {
     deps.tracker.initPhaseProgress(issue.number, pipelineDef);
   }
 

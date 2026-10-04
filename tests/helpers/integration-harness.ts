@@ -46,9 +46,7 @@ export function createHarness(configOverrides?: TestConfigOverrides): Integratio
   const aiRunner = createMockAIRunner();
   const git = createMockGitOperations();
 
-  const lifecycleManagers = new Map([['plan-mode', PLAN_MODE_PIPELINE]]);
-
-  const tracker = new IssueTracker(dataDir, lifecycleManagers);
+  const tracker = new IssueTracker(dataDir, PLAN_MODE_PIPELINE);
 
   return {
     dataDir,
@@ -191,9 +189,7 @@ export function createScriptedHarness(
   const aiRunner = new ScriptedAIRunner(scripts);
   const git = createMockGitOperations();
 
-  const lifecycleManagers = new Map([['plan-mode', PLAN_MODE_PIPELINE]]);
-
-  const tracker = new IssueTracker(dataDir, lifecycleManagers);
+  const tracker = new IssueTracker(dataDir, PLAN_MODE_PIPELINE);
 
   return {
     dataDir,

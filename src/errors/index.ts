@@ -14,5 +14,4 @@ export {
   PhaseNotRegisteredError,
   RunnerNotRegisteredError,
   PipelineNotFoundError,
-  UnregisteredPhasesError,
 } from './RegistryError.js';

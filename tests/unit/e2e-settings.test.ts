@@ -13,13 +13,12 @@ afterEach(() => { fs.rmSync(directory, { recursive: true, force: true }); });
 it.each([false, true])('验收要求 %s 跨重启保持，完整重做才采用新配置', enabled => {
   const config = createTestConfig(); config.e2e.enabled = enabled;
   const pipeline = buildPlanModePipeline({ e2eEnabled: enabled });
-  const managers = new Map([[pipeline.mode, pipeline]]);
-  const tracker = new IssueTracker(directory, managers);
+  const tracker = new IssueTracker(directory, pipeline);
   tracker.create({ lifecycle: { kind: 'pending' }, branchName: 'feat/issue-1', demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' }, title: '需求', description: '验证开关', createdAt: new Date().toISOString() } });
   expect(isE2eEnabledForIssue(1, tracker, config)).toBe(enabled);
   tracker.initPhaseProgress(1, pipeline);
   config.e2e.enabled = !enabled;
-  const restored = new IssueTracker(directory, managers);
+  const restored = new IssueTracker(directory, pipeline);
   expect(isE2eEnabledForIssue(1, restored, config)).toBe(enabled);
   expect(restored.get(1)!.run!.workflow.definition?.phaseIds.includes('uat')).toBe(enabled);
   expect(Object.hasOwn(restored.get(1)!.phaseProgress!, 'uat')).toBe(enabled);
@@ -29,7 +28,7 @@ it.each([false, true])('验收要求 %s 跨重启保持，完整重做才采用�
 it('本轮阶段包含 UAT 时，全局关闭不会绕过验收', () => {
   const config = createTestConfig(); config.e2e.enabled = false;
   const pipeline = buildPlanModePipeline({ e2eEnabled: true });
-  const tracker = new IssueTracker(directory, new Map([[pipeline.mode, pipeline]]));
+  const tracker = new IssueTracker(directory, pipeline);
   tracker.create({ lifecycle: { kind: 'running', phase: 'uat' }, branchName: 'feat/issue-1', demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' }, title: '已有验收', description: '保持原要求', createdAt: new Date().toISOString() } });
   tracker.initPhaseProgress(1, pipeline);
   expect(isE2eEnabledForIssue(1, tracker, config)).toBe(true);
@@ -39,7 +38,7 @@ it('阶段定义固化后，展示进度和全局配置都不能改写本轮 UAT
   const config = createTestConfig(); config.e2e.enabled = true;
   const disabled = buildPlanModePipeline({ e2eEnabled: false });
   const enabled = buildPlanModePipeline({ e2eEnabled: true });
-  const tracker = new IssueTracker(directory, new Map([[disabled.mode, disabled]]));
+  const tracker = new IssueTracker(directory, disabled);
   tracker.create({ lifecycle: { kind: 'pending' }, branchName: 'feat/issue-1', demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' }, title: '不可变流程', description: '校验阶段定义', createdAt: new Date().toISOString() } });
   tracker.initPhaseProgress(1, disabled);
   tracker.transaction(1, record => { record.phaseProgress!.uat = { status: 'in_progress' }; });
@@ -51,7 +50,7 @@ it('阶段定义固化后，展示进度和全局配置都不能改写本轮 UAT
 it('尚未初始化阶段定义时不从 phaseProgress 推断 UAT 配置', () => {
   const config = createTestConfig(); config.e2e.enabled = false;
   const pipeline = buildPlanModePipeline({ e2eEnabled: true });
-  const tracker = new IssueTracker(directory, new Map([[pipeline.mode, pipeline]]));
+  const tracker = new IssueTracker(directory, pipeline);
   tracker.create({ lifecycle: { kind: 'pending' }, branchName: 'feat/issue-1', demandSpec: { demandId: 'gh-1', sourceRef: { source: 'github-issue', externalId: '1', displayId: '1' }, title: '未初始化任务', description: '忽略展示残留', createdAt: new Date().toISOString() } });
   tracker.transaction(1, record => { record.phaseProgress = { uat: { status: 'pending' } }; });
 

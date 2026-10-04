@@ -7,6 +7,7 @@ import { GitOperations } from '../git/GitOperations.js';
 import { applyIssueLifecycleEvent } from '../tracker/IssueLifecycle.js';
 import type { GitHubPullRequest } from '../clients/GitHubClient.js';
 import type { DeliveryIdentity } from './contracts.js';
+import { UatResultStore } from '../e2e/UatResultStore.js';
 
 export function validatePullRequest(pr: GitHubPullRequest, identity: DeliveryIdentity): void {
   if (
@@ -28,7 +29,7 @@ export async function deliverIssue(
 ): Promise<string> {
   const number = ctx.issue.number;
   const git = new GitOperations(ctx.wtCtx.gitRootDir, deps.signal);
-  const state = () => deps.tracker.get(number)!.run!;
+  const state = () => deps.tracker.get(number)!.run;
   const e2eEnabled = isE2eEnabledForIssue(number, deps.tracker, deps.config);
   const acceptance = e2eEnabled ? '验证与浏览器验收通过' : '代码验证通过，浏览器验收未启用';
 
@@ -47,11 +48,18 @@ export async function deliverIssue(
       !Object.keys(run.tasks).length
     )
       throw new Error('交付缺少当前候选提交的完整验收凭证');
-    if (
-      e2eEnabled &&
-      (run.uat?.passed !== true || !run.uat.runId || run.uat.commit !== run.candidateCommit)
-    )
-      throw new Error('交付缺少当前候选提交的浏览器验收凭证');
+    if (e2eEnabled) {
+      if (!run.uat?.runId)
+        throw new Error('交付缺少当前候选提交的浏览器验收凭证');
+      new UatResultStore(deps.tracker.store.dataDir).assertCurrentReceipt(run.uat.runId, {
+        candidateCommit: run.candidateCommit,
+        planRevision: run.planRevision,
+        planDigest: run.planDigest!,
+        buildGeneration: run.buildGeneration,
+        summaryDigest: run.uat.uatEvidence.summaryDigest,
+        visualReviewEnabled: run.uat.uatEvidence.policy.visualReviewEnabled,
+      });
+    }
     if ((await git.head()) !== run.candidateCommit || (await git.hasChanges()))
       throw new Error('验收后的 HEAD 或工作目录已改变，禁止交付');
   };
@@ -68,7 +76,7 @@ export async function deliverIssue(
   const commit = state().candidateCommit!;
   if (!state().delivery)
     deps.tracker.transaction(number, (record) => {
-      record.run!.delivery = {
+      record.run.delivery = {
         repository: deps.config.github.repository,
         issueNumber: number,
         sourceBranch: ctx.branchName,
@@ -101,7 +109,7 @@ export async function deliverIssue(
       pr = await deps.github.getPullRequestDetail(matches[0].number);
       validatePullRequest(pr, identity);
       deps.tracker.transaction(number, (record) => {
-        Object.assign(record.run!.delivery!, {
+        Object.assign(record.run.delivery!, {
           prNumber: pr!.number,
           prUrl: pr!.html_url,
           creation: 'confirmed',
@@ -120,22 +128,22 @@ export async function deliverIssue(
     throw new Error('远端分支存在未记录更新，请人工核对，禁止覆盖');
   if (remote !== commit) {
     deps.tracker.transaction(number, (record) => {
-      record.run!.delivery!.pushIntent = { commit, lease: remote };
+      record.run.delivery!.pushIntent = { commit, lease: remote };
     });
     await check();
     await git.pushAccepted(identity.sourceBranch, commit, remote);
   }
   deps.tracker.transaction(number, (record) => {
-    record.run!.delivery!.remoteCommit = commit;
-    record.run!.delivery!.pushedCommit = commit;
-    record.run!.delivery!.pushIntent = undefined;
+    record.run.delivery!.remoteCommit = commit;
+    record.run.delivery!.pushedCommit = commit;
+    record.run.delivery!.pushIntent = undefined;
   });
 
   // 步骤 5：如果还没有 PR，就创建一个，并把结果写入 tracker，确保后续恢复可继续追踪。
   if (!pr) {
     await check();
     deps.tracker.transaction(number, (record) => {
-      record.run!.delivery!.creation = 'unknown';
+      record.run.delivery!.creation = 'unknown';
     });
     pr = await deps.github.createPullRequest({
       sourceBranch: identity.sourceBranch,
@@ -145,7 +153,7 @@ export async function deliverIssue(
     });
     validatePullRequest(pr, identity);
     deps.tracker.transaction(number, (record) => {
-      Object.assign(record.run!.delivery!, {
+      Object.assign(record.run.delivery!, {
         prNumber: pr!.number,
         prUrl: pr!.html_url,
         creation: 'confirmed',
@@ -165,7 +173,7 @@ export async function deliverIssue(
       if (state().delivery!.issueWriteIntent?.commit === commit)
         throw new Error('Issue 回写结果仍未知，不能重复发送');
       deps.tracker.transaction(number, (record) => {
-        record.run!.delivery!.issueWriteIntent = {
+        record.run.delivery!.issueWriteIntent = {
           commit,
           marker,
           requestedAt: new Date().toISOString(),
@@ -177,8 +185,8 @@ export async function deliverIssue(
       );
     }
     deps.tracker.transaction(number, (record) => {
-      record.run!.delivery!.issueWrittenCommit = commit;
-      record.run!.delivery!.issueWriteIntent = undefined;
+      record.run.delivery!.issueWrittenCommit = commit;
+      record.run.delivery!.issueWriteIntent = undefined;
       record.deliveryNoteWritten = true;
     });
   }

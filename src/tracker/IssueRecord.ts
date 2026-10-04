@@ -4,7 +4,7 @@ import type { PhaseHistoryEntry } from '../orchestration/PhaseHistory.js';
 import type { PhaseId } from '../orchestration/WorkflowState.js';
 import type { IssueLifecycle } from './IssueLifecycle.js';
 
-export type PipelineMode = string;
+export type PipelineMode = 'plan-mode';
 export type PhaseStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'gate_waiting';
 
 export interface PortPairRecord {
@@ -52,8 +52,6 @@ export interface IssueRecord {
   prUrl?: string;
   /** 交付动作尚未完成，但需要后续恢复处理。 */
   deliveryPending?: boolean;
-  /** 最近一次 UAT 执行的唯一 ID。 */
-  uatRunId?: string;
   /** 是否已经向 GitHub Issue 写入交付结果评论。 */
   deliveryNoteWritten?: boolean;
   /** 被归档的阶段历史，通常用于重做或重启后保留诊断信息。 */

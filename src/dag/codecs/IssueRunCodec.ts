@@ -2,6 +2,13 @@ import { MAX_CONFLICT_REPAIR_CALLS } from '../limits.js';
 import { z } from 'zod';
 import { assertWorkflowStorageShape } from '../../orchestration/codecs/WorkflowCodec.js';
 import type { IssueRun } from '../contracts.js';
+import { visualRepairDecisionSchema } from '../../e2e/VisualReviewContract.js';
+import {
+  uatEvidenceSchema,
+  uatExecutionSchema as uatIdentitySchema,
+  uatPolicySchema,
+  visualRepairGapSchema,
+} from '../../e2e/UatSchemas.js';
 
 const counter = z.number().int().nonnegative();
 const text = z.string().min(1);
@@ -57,6 +64,20 @@ const receiptSchema = z.object({
   reportPath: text,
   runId: text.optional(),
 });
+const uatReceiptSchema = receiptSchema
+  .extend({ runId: text, uatEvidence: uatEvidenceSchema })
+  .strict();
+const uatExecutionStateSchema = z.object({
+  runId: text,
+  status: z.enum(['running', 'completed', 'cancelled', 'interrupted']),
+  startedAt: text,
+  execution: uatIdentitySchema,
+  policy: uatPolicySchema,
+}).strict();
+const visualRepairContextSchema = z.object({
+  sourceRunId: text, candidateCommit: text, planRevision: counter, planDigest: text,
+  buildGeneration: counter, gap: visualRepairGapSchema, report: z.string(),
+}).strict();
 const runSchema = z
   .object({
     workflow: z.unknown(),
@@ -97,6 +118,7 @@ const runSchema = z
           retryUsed: z.record(z.string(), counter),
           phaseExecutions: z.record(z.string(), counter),
           repairRounds: counter,
+          uatReviewRounds: counter,
         }),
       )
       .optional(),
@@ -117,6 +139,7 @@ const runSchema = z
     phaseExecutions: z.record(z.string(), counter),
     buildEntry: z.enum(['execute-graph', 'repair-integration']),
     repairRounds: counter,
+    uatReviewRounds: counter,
     repairs: z.array(
       z.object({
         round: counter,
@@ -125,13 +148,15 @@ const runSchema = z
         before: text.optional(),
         after: text.optional(),
         identity: identitySchema.optional(),
+        visual: visualRepairContextSchema.optional(),
+        visualDecision: visualRepairDecisionSchema.optional(),
       }),
     ),
     integrationBase: text.optional(),
     integrationHead: text.optional(),
     candidateCommit: text.optional(),
     verify: receiptSchema.optional(),
-    uat: receiptSchema.optional(),
+    uat: uatReceiptSchema.optional(),
     delivery: z
       .object({
         repository: text,
@@ -162,12 +187,25 @@ const runSchema = z
       )
       .optional(),
     temporaryFiles: z.array(text).optional(),
+    temporaryDirectories: z.array(z.object({
+      kind: z.literal('visual-review'),
+      runId: text,
+      directory: text,
+      dispatchId: text,
+      createdAt: text,
+    }).strict()).optional(),
+    uatExecution: uatExecutionStateSchema.optional(),
     recoveryRequired: z.boolean().optional(),
   })
-  .passthrough();
+  .strict();
 
-/** 聚合文件边界只验证字段形状；跨字段与父子身份规则由 invariant 层处理。 */
-export function assertIssueRunShape(value: unknown): asserts value is IssueRun {
+/** 聚合文件边界返回规范化结果；跨字段与父子身份规则由 invariant 层处理。 */
+export function decodeIssueRun(value: unknown): IssueRun {
   const run = runSchema.parse(value);
   assertWorkflowStorageShape(run.workflow);
+  return run as IssueRun;
+}
+
+export function assertIssueRunShape(value: unknown): asserts value is IssueRun {
+  decodeIssueRun(value);
 }

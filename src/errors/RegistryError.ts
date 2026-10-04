@@ -33,16 +33,3 @@ export class PipelineNotFoundError extends AppError {
     this.pipelineMode = pipelineMode;
   }
 }
-
-export class UnregisteredPhasesError extends AppError {
-  public readonly missingPhases: string[];
-  public readonly registeredPhases: string[];
-  constructor(missingPhases: string[], registeredPhases: string[]) {
-    super(
-      'UNREGISTERED_PHASES',
-      `Pipeline defines unregistered phases: ${missingPhases.join(', ')}. Registered: ${registeredPhases.join(', ')}`,
-    );
-    this.missingPhases = missingPhases;
-    this.registeredPhases = registeredPhases;
-  }
-}

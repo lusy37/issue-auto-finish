@@ -4,6 +4,7 @@ import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
 import { randomUUID } from 'node:crypto';
 import { assertOwnedDirectory, isInside } from '../dag/TaskGraphExecutor.js';
 import { cancelUat } from '../e2e/PlaywrightRunner.js';
+import { UatResultStore } from '../e2e/UatResultStore.js';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
@@ -21,10 +22,7 @@ import type { WorktreeContext } from '../git/WorktreeContext.js';
 import { getLocalIP } from '../utils/network.js';
 import type { PhaseContext } from '../phases/BasePhase.js';
 import {
-  resolvePipelineMode,
-  getPipelineDef,
   buildPlanModePipeline,
-  registerPipeline,
   PipelineDef,
 } from '../pipeline/PipelineMetadata.js';
 import { isRetryablePhase } from '../pipeline/PipelineProjection.js';
@@ -61,6 +59,11 @@ export interface WorktreeStatus {
 }
 
 const logger = rootLogger.child('IssueService');
+
+// Windows 进程树终止是异步的。收到 AbortSignal 后，SDK worker 及其子进程可能还需要一小段时间
+// 才能完成退出；中止接口在这段时间内等待一次，避免把正常的退出竞态误报为“旧进程仍在运行”。
+const STOP_CALLS_WAIT_TIMEOUT_MS = 5000;
+const STOP_CALLS_POLL_INTERVAL_MS = 50;
 
 export class IssueService {
   private config: Config;
@@ -111,14 +114,7 @@ export class IssueService {
     this.mainGitMutex = mainGitMutex ?? new AsyncMutex();
     this.eventBus = eventBusInstance ?? defaultEventBus;
 
-    const mode = resolvePipelineMode(
-      config.pipeline?.mode === 'auto' ? undefined : config.pipeline?.mode,
-    );
-    this.pipelineDef =
-      mode === 'plan-mode'
-        ? buildPlanModePipeline({ e2eEnabled: config.e2e.enabled })
-        : getPipelineDef(mode);
-    registerPipeline(this.pipelineDef);
+    this.pipelineDef = buildPlanModePipeline({ e2eEnabled: config.e2e.enabled });
     logger.info('Pipeline mode resolved', { mode: this.pipelineDef.mode, aiMode: config.ai.mode });
 
     this.portAllocator = new PortAllocator({
@@ -133,7 +129,7 @@ export class IssueService {
       onProcessStarted: (number, pid, workDir) => {
         const callId = randomUUID();
         this.tracker.transaction(number, (record) => {
-          const run = record.run!;
+          const run = record.run;
           if (run.stopIntent) throw new Error('已停止的 Issue 不能启动预览');
           run.calls[callId] = {
             identity: {
@@ -155,7 +151,7 @@ export class IssueService {
       },
       onProcessExited: (number, callId) =>
         this.tracker.transaction(number, (record) => {
-          const call = record.run!.calls[callId];
+          const call = record.run.calls[callId];
           if (call) {
             call.status = 'exited';
             call.exitedAt = new Date().toISOString();
@@ -248,7 +244,7 @@ export class IssueService {
     await this.executions.get(number);
     const record = this.tracker.get(number);
     if (!record) throw new IssueNotFoundError(number);
-    if (planRevision === undefined || planRevision !== record.run!.planRevision)
+    if (planRevision === undefined || planRevision !== record.run.planRevision)
       throw new GateActionError('审核计划版本已过期，请刷新页面', 'invalid-state');
     if (action.action === 'supplement')
       throw new GateActionError('请通过补充需求入口更新计划', 'invalid-state');
@@ -258,6 +254,7 @@ export class IssueService {
       events: this.eventBus,
       maxRetries: this.config.poll.maxRetries,
       maxRepairs: this.config.verifyFixLoop.maxIterations,
+      maxVisualRetries: this.config.e2e.visualReviewMaxRetries,
       context: {
         issueIid: number,
         demand: record.demandSpec!,
@@ -284,7 +281,7 @@ export class IssueService {
         current,
         number,
         action.feedback,
-        current.run!.reviewHistory?.length ?? 1,
+        current.run.reviewHistory?.length ?? 1,
       );
     }
 
@@ -361,8 +358,8 @@ export class IssueService {
     const record = this.tracker.get(wtCtx.issueIid);
     if (
       this.executions.has(wtCtx.issueIid) ||
-      record?.run?.recoveryRequired ||
-      Object.values(record?.run?.calls ?? {}).some((call) => call.status !== 'exited')
+      record?.run.recoveryRequired ||
+      Object.values(record?.run.calls ?? {}).some((call) => call.status !== 'exited')
     )
       throw new Error('目录仍有执行或恢复引用，不能清理');
     assertOwnedDirectory(this.config.project.worktreeBaseDir, wtCtx.gitRootDir);
@@ -407,7 +404,7 @@ export class IssueService {
 
   private async stopIssue(issueIid: number, kind: 'pause' | 'cancel' | 'redo'): Promise<void> {
     this.tracker.transaction(issueIid, (record) => {
-      record.run!.stopIntent = { kind, requestedAt: new Date().toISOString() };
+      record.run.stopIntent = { kind, requestedAt: new Date().toISOString() };
       const lifecycle = record.lifecycle;
       const phase =
         lifecycle.kind === 'running' || lifecycle.kind === 'waiting' || lifecycle.kind === 'paused'
@@ -428,14 +425,42 @@ export class IssueService {
     cancelUat(issueIid);
     await this.executions.get(issueIid)?.catch(() => {});
     await this.stopPreviewServers(issueIid);
+    await this.waitForCallsToExit(issueIid);
     this.confirmStoppedCalls(issueIid);
+  }
+
+  /**
+   * 等待已经收到停止信号的调用完成进程退出。
+   *
+   * 这里不能只等待 executions：服务重启恢复、轮询竞态或旧执行已经从内存登记表移除时，
+   * 仍可能有持久化调用正在退出。最终确认仍由 confirmStoppedCalls 执行，超时不会放宽安全检查。
+   */
+  private async waitForCallsToExit(issueIid: number): Promise<void> {
+    const deadline = Date.now() + STOP_CALLS_WAIT_TIMEOUT_MS;
+    while (this.hasPendingCallProcesses(issueIid) && Date.now() < deadline)
+      await new Promise<void>((resolve) => setTimeout(resolve, STOP_CALLS_POLL_INTERVAL_MS));
+  }
+
+  private hasPendingCallProcesses(issueIid: number): boolean {
+    const calls = Object.values(this.tracker.get(issueIid)?.run.calls ?? {});
+    return calls.some((call) => {
+      if (call.status === 'exited' || (call.status === 'queued' && !call.pid)) return false;
+      if (!call.pid) return true;
+      try {
+        process.kill(call.pid, 0);
+        return true;
+      } catch (error) {
+        // ESRCH 表示目标已经退出；EPERM 等其他错误仍按“可能存活”处理，交给最终确认阶段决定。
+        return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+      }
+    });
   }
 
   private async recoverExecution(issueIid: number): Promise<void> {
     const record = this.tracker.get(issueIid)!;
-    if (record.run!.stopIntent || ['paused', 'cancelled', 'failed'].includes(record.lifecycle.kind))
+    if (record.run.stopIntent || ['paused', 'cancelled', 'failed'].includes(record.lifecycle.kind))
       throw new Error('停止或人工处理状态不自动恢复');
-    for (const call of Object.values(record.run!.calls)) {
+    for (const call of Object.values(record.run.calls)) {
       if (call.status === 'exited') continue;
       if (call.pid) {
         try {
@@ -446,14 +471,32 @@ export class IssueService {
         }
       }
     }
-    for (const file of record.run!.temporaryFiles ?? []) {
+    for (const file of record.run.temporaryFiles ?? []) {
       assertOwnedDirectory(this.config.project.worktreeBaseDir, file);
       if (!/^\.iaf-uat-[a-f0-9-]+\.config\.ts$/.test(path.basename(file)))
         throw new Error('临时文件登记无效，请人工核对');
       fsSync.rmSync(file, { force: true });
     }
+    const visualTempRoot = path.join(this.tracker.store.dataDir, 'visual-review-tmp');
+    for (const entry of record.run.temporaryDirectories ?? []) {
+      if (
+        entry.kind !== 'visual-review'
+        || !entry.directory.startsWith(path.resolve(visualTempRoot) + path.sep)
+        || !entry.directory.includes(`${path.sep}${entry.runId}${path.sep}`)
+      )
+        throw new Error('视觉临时目录登记越界，请人工核对');
+      assertOwnedDirectory(visualTempRoot, entry.directory);
+      if (fsSync.existsSync(entry.directory)) {
+        fsSync.rmSync(entry.directory, { recursive: true, force: true, maxRetries: 3 });
+      }
+    }
+    if (record.run.uatExecution?.status === 'running') {
+      new UatResultStore(this.tracker.store.dataDir).markInterrupted(
+        record.run.uatExecution.runId,
+      );
+    }
     this.tracker.transaction(issueIid, (current) => {
-      const run = current.run!;
+      const run = current.run;
       const uncertain =
         Object.values(run.tasks).some((task) => task.status === 'running' && !task.success) ||
         Object.values(run.calls).some(
@@ -476,6 +519,8 @@ export class IssueService {
       for (const task of Object.values(run.tasks))
         if (task.status === 'running' && !task.success) task.status = 'uncertain';
       run.temporaryFiles = [];
+      if (run.uatExecution?.status === 'running') run.uatExecution.status = 'interrupted';
+      run.temporaryDirectories = [];
       run.recoveryRequired = false;
     });
   }
@@ -483,7 +528,7 @@ export class IssueService {
   /** 显式继续允许核对已退出的孤儿调用，但绝不抢占仍存活或身份不明的进程。 */
   private confirmStoppedCalls(issueIid: number): void {
     const record = this.tracker.get(issueIid)!;
-    for (const call of Object.values(record.run!.calls)) {
+    for (const call of Object.values(record.run.calls)) {
       if (call.status === 'exited') continue;
       if (call.status !== 'queued' && !call.pid)
         throw new Error('调用缺少进程凭证，目录保持隔离，请人工核对');
@@ -497,20 +542,20 @@ export class IssueService {
       }
     }
     this.tracker.transaction(issueIid, (current) => {
-      for (const call of Object.values(current.run!.calls))
+      for (const call of Object.values(current.run.calls))
         if (call.status !== 'exited') {
           call.status = 'exited';
           call.exitedAt = new Date().toISOString();
         }
-      current.run!.recoveryRequired = false;
+      current.run.recoveryRequired = false;
     });
   }
 
   async restartIssue(issueIid: number): Promise<void> {
     const record = this.tracker.get(issueIid);
     if (!record) throw new IssueNotFoundError(issueIid);
-    if (record.run!.delivery?.prNumber) {
-      const pr = await this.github.getPullRequestDetail(record.run!.delivery.prNumber);
+    if (record.run.delivery?.prNumber) {
+      const pr = await this.github.getPullRequestDetail(record.run.delivery.prNumber);
       if (pr.state === 'merged') throw new Error('原 PR 已合并，请为后续需求创建新 Issue');
       if (pr.state === 'closed') throw new Error('请先在 GitHub 重开原 PR，再完整重做');
     }
@@ -571,7 +616,7 @@ export class IssueService {
     const record = this.tracker.get(issueIid);
     if (!record) throw new IssueNotFoundError(issueIid);
 
-    if (phase === 'plan' && Object.values(record.run!.tasks).some((task) => task.attemptNo > 0))
+    if (phase === 'plan' && Object.values(record.run.tasks).some((task) => task.attemptNo > 0))
       throw new Error('已有合并结果，请使用完整重做来重新规划');
     const issueDef = this.getIssueSpecificPipelineDef(issueIid);
     if (!isRetryablePhase(issueDef, phase)) {
@@ -611,7 +656,7 @@ export class IssueService {
     const record = this.tracker.get(issueIid);
     if (!record) throw new IssueNotFoundError(issueIid);
     const phase = lifecyclePhase(record.lifecycle) ?? 'plan';
-    if (phase === 'plan' && Object.values(record.run!.tasks).some((task) => task.attemptNo > 0))
+    if (phase === 'plan' && Object.values(record.run.tasks).some((task) => task.attemptNo > 0))
       throw new Error('任务图已执行，请使用完整重做重新规划');
     await this.stopIssue(issueIid, 'pause');
     this.tracker.resetToPhase(issueIid, phase, this.getIssueSpecificPipelineDef(issueIid));
@@ -647,7 +692,7 @@ export class IssueService {
           processStarted: (pid, workDir) => {
             const callId = randomUUID();
             this.tracker.transaction(issue.number, (record) => {
-              const run = record.run!;
+              const run = record.run;
               if (run.stopIntent) throw new Error('停止后不再启动命令');
               const phase = lifecyclePhase(record.lifecycle) ?? 'setup';
               run.calls[callId] = {
@@ -670,7 +715,7 @@ export class IssueService {
           },
           processExited: (callId) => {
             this.tracker.transaction(issue.number, (record) => {
-              const call = record.run!.calls[callId];
+              const call = record.run.calls[callId];
               if (call) {
                 call.status = 'exited';
                 call.exitedAt = new Date().toISOString();
@@ -737,7 +782,7 @@ export class IssueService {
     const supplement = this.supplementStore?.get(issue.number);
     const existingDemand = this.tracker.get(issue.number);
     const approvedDemand =
-      existingDemand?.run?.review?.decision === 'approved'
+      existingDemand?.run.review?.decision === 'approved'
         ? this.tracker.store.readPlan(
             issue.number,
             existingDemand.run.planRevision,
@@ -746,7 +791,7 @@ export class IssueService {
         : undefined;
     const demand =
       approvedDemand ??
-      (existingDemand?.run?.review?.decision !== 'rejected' &&
+      (existingDemand?.run.review?.decision !== 'rejected' &&
       existingDemand &&
       existingDemand.lifecycle.kind !== 'pending'
         ? existingDemand.demandSpec
@@ -772,7 +817,7 @@ export class IssueService {
       record.pipelineMode = this.pipelineDef.mode;
     }
 
-    if (record.run!.recoveryRequired) {
+    if (record.run.recoveryRequired) {
       try {
         await this.recoverExecution(issue.number);
       } catch (error) {
@@ -784,11 +829,11 @@ export class IssueService {
     // 先把 failed(auto) 转成 ready，成功 setup 后工作流才能从正确入口继续；
     // 失败则由 FailureHandler 再次写回 failed 并消耗本次预算。
     record = this.tracker.transaction(issue.number, (current) => {
-      if (current.run!.stopIntent) throw new Error('任务已停止');
+      if (current.run.stopIntent) throw new Error('任务已停止');
       if (current.lifecycle.kind === 'failed' && current.lifecycle.retry === 'auto') {
         applyIssueLifecycleEvent(current, { type: 'retry-requested' });
       }
-      current.run!.dispatchId = randomUUID();
+      current.run.dispatchId = randomUUID();
       current.demandSpec = demand;
     });
     const issuePipelineDef = this.getIssueSpecificPipelineDef(issue.number);
@@ -827,7 +872,7 @@ export class IssueService {
       }
       await runWorkflow(ctx, deps, wtGit, wtPlan);
     } catch (err) {
-      if (this.tracker.get(issue.number)?.run?.stopIntent) return;
+      if (this.tracker.get(issue.number)?.run.stopIntent) return;
 
       if (isShuttingDown()) return;
       if (this.tracker.store.isBlocked(issue.number)) throw err;
@@ -934,18 +979,18 @@ export class IssueService {
   async cleanupExpiredTaskWorkspaces(retentionMs: number): Promise<void> {
     for (const record of this.tracker.getAll()) {
       const number = getIssueNumber(record);
-      for (const workspace of record.run?.workspaces ?? []) {
+      for (const workspace of record.run.workspaces ?? []) {
         if (workspace.cleanedAt || Date.now() - Date.parse(workspace.createdAt) < retentionMs)
           continue;
         await this.mainGitMutex.runExclusive(async () => {
           const current = this.tracker.get(number)!;
           if (
-            current.run!.recoveryRequired ||
+            current.run.recoveryRequired ||
             current.lifecycle.kind === 'paused' ||
-            Object.values(current.run!.tasks).some(
+            Object.values(current.run.tasks).some(
               (task) => task.workDir === workspace.directory,
             ) ||
-            Object.values(current.run!.calls).some(
+            Object.values(current.run.calls).some(
               (call) =>
                 call.status !== 'exited' &&
                 (call.workDir === workspace.directory ||
@@ -959,7 +1004,7 @@ export class IssueService {
           if (await this.mainGit.branchExists(workspace.branch))
             await this.mainGit.deleteBranch(workspace.branch);
           this.tracker.transaction(number, (latest) => {
-            const saved = latest.run!.workspaces!.find(
+            const saved = latest.run.workspaces!.find(
               (entry) => entry.directory === workspace.directory,
             );
             if (saved) saved.cleanedAt = new Date().toISOString();
@@ -980,7 +1025,7 @@ export class IssueService {
       Object.values(record.run.calls).some((call) => call.status !== 'exited')
     )
       throw new Error('任务仍需要工作目录，不能清理');
-    for (const workspace of record.run?.workspaces ?? []) {
+    for (const workspace of record.run.workspaces ?? []) {
       if (workspace.cleanedAt) continue;
       assertOwnedDirectory(this.config.project.worktreeBaseDir, workspace.directory);
       await this.mainGitMutex.runExclusive(async () => {
@@ -990,7 +1035,7 @@ export class IssueService {
           await this.mainGit.deleteBranch(workspace.branch);
       });
       this.tracker.transaction(issueIid, (current) => {
-        const target = current.run!.workspaces!.find((w) => w.directory === workspace.directory);
+        const target = current.run.workspaces!.find((w) => w.directory === workspace.directory);
         if (target) target.cleanedAt = new Date().toISOString();
       });
     }
@@ -1107,19 +1152,19 @@ export class IssueService {
   async resolveConflict(issueIid: number): Promise<void> {
     if (this.executions.has(issueIid)) throw new Error('任务仍在执行');
     const record = this.tracker.get(issueIid);
-    if (!record?.run?.delivery?.prNumber) throw new Error('任务尚未关联工作台 PR');
+    if (!record?.run.delivery?.prNumber) throw new Error('任务尚未关联工作台 PR');
     const pr = await this.github.getPullRequestDetail(record.run.delivery.prNumber);
     if (pr.state !== 'open') throw new Error('只有开放的原 PR 可以修复冲突');
     if (record.run.repairRounds >= this.config.verifyFixLoop.maxIterations)
       throw new Error('集成自动修复额度已用完');
     await this.mainGitMutex.runExclusive(() => this.mainGit.fetch());
     this.tracker.transaction(issueIid, (current) => {
-      const run = current.run!;
+      const run = current.run;
       if (
         this.executions.has(issueIid) ||
         run.stopIntent ||
-        run.workflow.generation !== record.run!.workflow.generation ||
-        run.buildGeneration !== record.run!.buildGeneration
+        run.workflow.generation !== record.run.workflow.generation ||
+        run.buildGeneration !== record.run.buildGeneration
       )
         throw new Error('任务执行状态已改变，请重新确认冲突修复');
       if (run.repairRounds >= this.config.verifyFixLoop.maxIterations)
@@ -1133,11 +1178,12 @@ export class IssueService {
       });
       run.verify = undefined;
       run.uat = undefined;
+      run.uatExecution = undefined;
+      run.temporaryDirectories = [];
       run.workflow.generation++;
       run.workflow.entry = 'build';
       current.deliveryPending = false;
       current.completedAt = undefined;
-      current.uatRunId = undefined;
       applyIssueLifecycleEvent(current, { type: 'conflict-repair-started' });
     });
   }

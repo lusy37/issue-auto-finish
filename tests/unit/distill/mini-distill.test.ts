@@ -132,7 +132,7 @@ it("非法蒸馏不消费日记；手动重试、规则启用、版本及执行�
         return "实现任务";
       }
     }
-    const tracker = new IssueTracker(dir, new Map([["plan-mode", PLAN_MODE_PIPELINE]]));
+    const tracker = new IssueTracker(dir, PLAN_MODE_PIPELINE);
     tracker.create({
       lifecycle: { kind: "pending" },
       pipelineMode: "plan-mode",

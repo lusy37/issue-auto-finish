@@ -18,4 +18,8 @@ export const PREVIEW_DEFAULTS = {
 } as const;
 export const E2E_DEFAULTS = {
   browserChannel: 'msedge',
+  visualReviewEnabled: true,
+  visualReviewMaxImages: 12,
+  visualReviewMaxRetries: 2,
+  visualReviewTimeoutMs: 180_000,
 } as const;

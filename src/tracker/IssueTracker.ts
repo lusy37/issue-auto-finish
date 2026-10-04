@@ -1,6 +1,6 @@
 import { parsePhaseCallId } from '../orchestration/ExecutionIds.js';
 import type { IssueRecord, NewIssueRecord, PhaseProgress } from './IssueRecord.js';
-import { type PipelineDef } from '../pipeline/PipelineMetadata.js';
+import { PLAN_MODE_PIPELINE, type PipelineDef } from '../pipeline/PipelineMetadata.js';
 import { IssueRunStore } from '../dag/IssueRunStore.js';
 import { newIssueRun, sameIdentity, type ExecutionIdentity } from '../dag/contracts.js';
 import { type ExecutableTask, issueToExecutableTask } from './ExecutableTask.js';
@@ -18,11 +18,11 @@ const logger = rootLogger.child('IssueTracker');
 
 export class IssueTracker {
   readonly store: IssueRunStore;
-  private pipelineDefinitions: Map<string, PipelineDef>;
+  private readonly pipelineDefinition: PipelineDef;
 
-  constructor(dataDir: string, pipelineDefinitions: Map<string, PipelineDef>) {
+  constructor(dataDir: string, pipelineDefinition: PipelineDef = PLAN_MODE_PIPELINE) {
     this.store = new IssueRunStore(dataDir);
-    this.pipelineDefinitions = pipelineDefinitions;
+    this.pipelineDefinition = pipelineDefinition;
   }
 
   transaction(issueIid: number, update: (record: IssueRecord) => void): IssueRecord {
@@ -64,11 +64,10 @@ export class IssueTracker {
   }
 
   private pipelineFor(record: IssueRecord): PipelineDef {
-    // 尚未初始化的任务使用当前默认流程；显式指定的模式必须已注册。
-    const mode = record.pipelineMode ?? 'plan-mode';
-    const definition = this.pipelineDefinitions.get(mode);
-    if (!definition) throw new Error(`任务流水线未注册：${mode}`);
-    return definition;
+    if (record.pipelineMode && record.pipelineMode !== this.pipelineDefinition.mode) {
+      throw new Error(`任务流水线无效：${record.pipelineMode}`);
+    }
+    return this.pipelineDefinition;
   }
 
   get(issueIid: number): IssueRecord | undefined {
@@ -115,7 +114,7 @@ export class IssueTracker {
     if (!this.get(issueIid)) return;
     this.transaction(issueIid, (record) => {
       initializeWorkflowDefinition(
-        record.run!.workflow,
+        record.run.workflow,
         def.phases.map((spec) => spec.name),
       );
       if (!record.phaseProgress) {
@@ -173,7 +172,7 @@ export class IssueTracker {
     });
     if (isRetryable && reserveRetry) {
       const retryPhase = phase ?? 'setup';
-      record.run!.retryUsed[retryPhase] = (record.run!.retryUsed[retryPhase] ?? 0) + 1;
+      record.run.retryUsed[retryPhase] = (record.run.retryUsed[retryPhase] ?? 0) + 1;
     }
     record.updatedAt = new Date().toISOString();
     this.store.replace(record);
@@ -213,7 +212,7 @@ export class IssueTracker {
     if (record.deliveryPending) {
       applyIssueLifecycleEvent(record, { type: 'delivery-started' });
     }
-    record.run!.stopIntent = undefined;
+    record.run.stopIntent = undefined;
     record.updatedAt = new Date().toISOString();
     this.store.replace(record);
 
@@ -236,7 +235,7 @@ export class IssueTracker {
     const record = this.get(issueIid);
     if (!record) return false;
 
-    if (record.run!.stopIntent || this.store.isBlocked(issueIid)) return false;
+    if (record.run.stopIntent || this.store.isBlocked(issueIid)) return false;
     const existing = record.processingLock;
     if (existing) {
       const age = Date.now() - new Date(existing.ts).getTime();
@@ -307,7 +306,7 @@ export class IssueTracker {
     if (!record) return false;
     const lifecycle = record.lifecycle;
     if (lifecycle.kind !== 'failed' || lifecycle.retry !== 'auto') return false;
-    return (record.run!.retryUsed[lifecycle.phase ?? 'setup'] ?? 0) < maxRetries;
+    return (record.run.retryUsed[lifecycle.phase ?? 'setup'] ?? 0) < maxRetries;
   }
 
   isStalled(issueIid: number, thresholdMs: number = 5 * 60 * 1000): boolean {
@@ -323,12 +322,12 @@ export class IssueTracker {
 
   getDrivableIssues(maxRetries: number, stalledThresholdMs?: number): IssueRecord[] {
     return this.getAllRecords().filter((record) => {
-      if (record.run!.stopIntent || this.store.isBlocked(getIssueNumber(record))) return false;
+      if (record.run.stopIntent || this.store.isBlocked(getIssueNumber(record))) return false;
       const lifecycle = record.lifecycle;
       const retryPhase = lifecycle.kind === 'failed' ? (lifecycle.phase ?? 'setup') : 'setup';
-      const retryUsed = record.run!.retryUsed[retryPhase] ?? 0;
+      const retryUsed = record.run.retryUsed[retryPhase] ?? 0;
       // 已预留的最后一次重试仍必须可调度；否则 retryUsed 达到上限后会永久滞留在 Failed。
-      const phaseExecutions = record.run!.phaseExecutions[retryPhase] ?? 0;
+      const phaseExecutions = record.run.phaseExecutions[retryPhase] ?? 0;
       const reservedRetry =
         lifecycle.kind === 'failed' &&
         lifecycle.retry === 'auto' &&
@@ -340,7 +339,7 @@ export class IssueTracker {
         lifecycle.kind === 'ready' ||
         (lifecycle.kind === 'failed' && lifecycle.retry === 'auto' && retryUsed < maxRetries);
       const drivable =
-        record.run!.recoveryRequired ||
+        record.run.recoveryRequired ||
         reservedRetry ||
         drivableByLifecycle ||
         this.isStalled(getIssueNumber(record), stalledThresholdMs);
@@ -387,7 +386,7 @@ export class IssueTracker {
     record.phaseProgress = undefined;
     record.processingLock = undefined;
     record.resetGeneration = (record.resetGeneration ?? 0) + 1;
-    const previous = record.run!;
+    const previous = record.run;
     record.run = {
       ...newIssueRun(),
       version: previous.version,
@@ -403,13 +402,15 @@ export class IssueTracker {
           retryUsed: previous.retryUsed,
           phaseExecutions: previous.phaseExecutions,
           repairRounds: previous.repairRounds,
+          uatReviewRounds: previous.uatReviewRounds,
         },
       ],
     };
     record.run.planDigest = previous.planDigest;
+    record.run.uatExecution = undefined;
+    record.run.temporaryDirectories = [];
     record.deliveryPending = undefined;
     record.deliveryNoteWritten = undefined;
-    record.uatRunId = undefined;
     record.completedAt = undefined;
     record.archivedPhaseHistory = [...(record.archivedPhaseHistory ?? []), ...record.phaseHistory];
     record.updatedAt = new Date().toISOString();
@@ -427,12 +428,11 @@ export class IssueTracker {
     const phaseIdx = def.phases.findIndex((p) => p.name === phase);
     if (phaseIdx < 0) return false;
     // 显式回退开始新图执行轮次；暂停继续和失败重试则保留原检查点。
-    record.run!.workflow.generation++;
-    record.run!.workflow.entry = phase as PhaseId;
+    record.run.workflow.generation++;
+    record.run.workflow.entry = phase as PhaseId;
     applyIssueLifecycleEvent(record, { type: 'phase-redo-requested' });
-    record.run!.stopIntent = undefined;
+    record.run.stopIntent = undefined;
     record.deliveryPending = undefined;
-    record.uatRunId = undefined;
     record.completedAt = undefined;
     record.processingLock = undefined;
     // 重置目标阶段及后续阶段的 phaseProgress
@@ -467,7 +467,7 @@ export class IssueTracker {
     } else {
       applyIssueLifecycleEvent(record, { type: 'retry-requested' });
     }
-    record.run!.stopIntent = undefined;
+    record.run.stopIntent = undefined;
     record.processingLock = undefined;
     // 重置 failed 阶段的 phaseProgress
     if (record.phaseProgress && failedLifecycle.phase) {
@@ -498,14 +498,14 @@ export class IssueTracker {
     for (const record of this.getAllRecords()) {
       // 等待审核也在启动后核对一次图，覆盖生命周期发布与中断落盘之间的退出窗口。
       const lifecycle = record.lifecycle;
-      if (!['running', 'delivering', 'waiting'].includes(lifecycle.kind) && !record.run!.stopIntent)
+      if (!['running', 'delivering', 'waiting'].includes(lifecycle.kind) && !record.run.stopIntent)
         continue;
       this.transaction(getIssueNumber(record), (current) => {
-        current.run!.recoveryRequired = true;
+        current.run.recoveryRequired = true;
         current.processingLock = undefined;
-        if (current.run!.stopIntent) {
+        if (current.run.stopIntent) {
           const currentLifecycle = current.lifecycle;
-          if (current.run!.stopIntent.kind === 'cancel') {
+          if (current.run.stopIntent.kind === 'cancel') {
             if (currentLifecycle.kind !== 'cancelled') {
               applyIssueLifecycleEvent(current, { type: 'cancel-requested' });
             }

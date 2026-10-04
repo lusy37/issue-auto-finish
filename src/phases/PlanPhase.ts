@@ -6,7 +6,6 @@ import {
   demandToPromptContext,
   buildReviewFeedbackResumePrompt,
 } from '../prompts/templates.js';
-import { supportsPlanModeResume } from '../ai-runner/index.js';
 
 /** 计划与驳回重规划均返回结构化只读结果；SDK 会话恢复也显式携带完整上版计划与反馈。 */
 export class PlanPhase extends BasePhase {
@@ -38,9 +37,6 @@ export class PlanPhase extends BasePhase {
     const standard = super.resolveResumeInfo(issueIid);
     if (standard.resumable) return standard;
 
-    if (!supportsPlanModeResume(this.config.ai.mode)) {
-      return { resumable: false };
-    }
     const history = this.plan.readReviewHistory();
     if (history.length === 0) return { resumable: false };
     const latest = history[history.length - 1];

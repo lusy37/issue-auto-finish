@@ -5,7 +5,6 @@ import path from "node:path";
 import express from "express";
 import { runProcess } from "../src/utils/process.js";
 import type { AIRunner, RunOptions } from "../src/ai-runner/AIRunner.js";
-import { registerAIRunner } from "../src/ai-runner/AIRunnerRegistry.js";
 import type {
   GitHubIssue,
   GitHubPullRequest,
@@ -394,12 +393,6 @@ const runner: AIRunner = {
     return { success: true, output, exitCode: 0 };
   },
 };
-registerAIRunner("codex", {
-  factoryFn: () => runner,
-  defaultBinary: "",
-  binaryEnvKey: "CODEX_BINARY",
-  capabilities: { nativePlanMode: true },
-});
 const configFile = path.join(root, ".env");
 const saved = fs.existsSync(configFile) ? parseEnv(fs.readFileSync(configFile)) : {};
 // 演示重启保留流程开关；平台、仓库和执行器仍使用演示配置。
@@ -439,7 +432,10 @@ console.log(
   `本地演示工作台：http://127.0.0.1:${values.WEB_PORT}\n模拟 AI 与平台，真实 Git 和浏览器。`,
 );
 try {
-  await main({ backgroundScheduling: process.env.IAF_DEMO_SHOWCASE !== 'true' });
+  await main({
+    backgroundScheduling: process.env.IAF_DEMO_SHOWCASE !== 'true',
+    aiRunner: runner,
+  });
 } catch (error) {
   server.close();
   throw error;

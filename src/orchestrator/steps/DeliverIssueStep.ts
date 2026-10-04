@@ -17,7 +17,7 @@ export async function deliverIssueStep(
   const number = ctx.issue.number;
   const record = deps.tracker.get(number);
   if (!record) throw new Error('任务不存在');
-  const execution = record.run!;
+  const execution = record.run;
   const startedLifecycle = record.lifecycle;
   const assertActive = (current: IssueRecord | undefined) => {
     const run = current?.run;

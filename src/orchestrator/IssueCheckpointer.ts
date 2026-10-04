@@ -34,8 +34,8 @@ export class IssueCheckpointer extends BaseCheckpointSaver {
       !record ||
       workflowThreadId(
         this.number,
-        record.run!.buildGeneration,
-        record.run!.workflow.generation,
+        record.run.buildGeneration,
+        record.run.workflow.generation,
       ) !== this.threadId
     )
       throw new Error('流程执行轮次已失效');
@@ -83,7 +83,7 @@ export class IssueCheckpointer extends BaseCheckpointSaver {
     this.assertThread(config);
     const namespace = config.configurable?.checkpoint_ns ?? '';
     const id = config.configurable?.checkpoint_id;
-    const storage = this.store.get(this.number)!.run!.workflow;
+    const storage = this.store.get(this.number)!.run.workflow;
     const saved = storage.checkpoints
       .filter(
         (c) => c.threadId === this.threadId && c.namespace === namespace && (!id || c.id === id),
@@ -93,7 +93,7 @@ export class IssueCheckpointer extends BaseCheckpointSaver {
   }
   async *list(config: RunnableConfig, options: ListOptions = {}): AsyncGenerator<CheckpointTuple> {
     this.assertThread(config);
-    const storage = this.store.get(this.number)!.run!.workflow;
+    const storage = this.store.get(this.number)!.run.workflow;
     let remaining = options.limit ?? Infinity;
     for (const saved of storage.checkpoints
       .filter((c) => c.threadId === this.threadId)
@@ -141,7 +141,7 @@ export class IssueCheckpointer extends BaseCheckpointSaver {
     };
     this.assertThread(config);
     this.store.transaction(this.number, (record) => {
-      const checkpoints = record.run!.workflow.checkpoints;
+      const checkpoints = record.run.workflow.checkpoints;
       const index = checkpoints.findIndex(
         (c) =>
           c.threadId === saved.threadId && c.namespace === saved.namespace && c.id === saved.id,
@@ -170,7 +170,7 @@ export class IssueCheckpointer extends BaseCheckpointSaver {
     );
     this.assertThread(config);
     this.store.transaction(this.number, (record) => {
-      const stored = record.run!.workflow.writes;
+      const stored = record.run.workflow.writes;
       for (const write of encoded) {
         const index = stored.findIndex(
           (w) =>
@@ -188,7 +188,7 @@ export class IssueCheckpointer extends BaseCheckpointSaver {
   async deleteThread(threadId: string): Promise<void> {
     this.assertThread({ configurable: { thread_id: threadId } });
     this.store.transaction(this.number, (record) => {
-      const storage = record.run!.workflow;
+      const storage = record.run.workflow;
       storage.checkpoints = storage.checkpoints.filter((c) => c.threadId !== threadId);
       storage.writes = storage.writes.filter((w) => w.threadId !== threadId);
       for (const operation of Object.keys(storage.results))

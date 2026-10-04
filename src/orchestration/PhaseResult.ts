@@ -1,5 +1,23 @@
+import type { VisualRepairContext } from '../shared/workbench.js';
+
+/** 已由阶段生成的集成修复上下文。 */
+export interface RepairContext {
+  readonly rawReport?: string;
+  readonly verifyFailures?: readonly string[];
+  readonly visualRepair?: VisualRepairContext;
+}
+
+/** 当前 UAT 视觉复核关联的运行。 */
+export interface CurrentRetryContext {
+  readonly runId: string;
+}
+
 /** 阶段执行结果意图 */
-export type PhaseResult = CompletedIntent | FailedIntent | RequestRetryFromIntent;
+export type PhaseResult =
+  | CompletedIntent
+  | FailedIntent
+  | RequestRetryFromIntent
+  | RetryCurrentIntent;
 
 /** 阶段成功完成 */
 export interface CompletedIntent {
@@ -28,8 +46,17 @@ export interface RequestRetryFromIntent {
   /** 回退原因（用于日志和事件） */
   readonly reason: string;
   /** 携带的修复上下文（如 verify 失败的报告） */
-  readonly context?: Record<string, unknown>;
+  readonly context?: RepairContext;
   /** AI 会话 ID（即使请求回退也记录） */
+  readonly sessionId?: string;
+}
+
+/** 阶段请求在同一阶段重新执行；当前仅允许 UAT 视觉复核使用。 */
+export interface RetryCurrentIntent {
+  readonly kind: 'retryCurrent';
+  readonly phaseId: 'uat';
+  readonly reason: string;
+  readonly context?: CurrentRetryContext;
   readonly sessionId?: string;
 }
 

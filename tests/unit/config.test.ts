@@ -155,14 +155,12 @@ describe('Config', () => {
       expect(() => loadConfig()).toThrow(ConfigValidationError);
     });
 
-    it('accepts custom PIPELINE_MODE as string', async () => {
+    it('拒绝未支持的流水线配置', async () => {
       setRequiredEnv();
       process.env.PIPELINE_MODE = 'custom-mode';
 
-      const { loadConfig } = await loadConfigFresh();
-
-      const config = loadConfig();
-      expect(config.pipeline.mode).toBe('custom-mode');
+      const { loadConfig, ConfigValidationError } = await loadConfigFresh();
+      expect(() => loadConfig()).toThrow(ConfigValidationError);
     });
 
     it('拒绝未支持的执行器配置', async () => {

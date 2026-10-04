@@ -12,6 +12,7 @@ import { GitHubClient, type GitHubPullRequest } from '../../src/clients/GitHubCl
 import { createTestIssue } from '../helpers/mock-factories.js';
 import type { AIRunner } from '../../src/ai-runner/AIRunner.js';
 import * as browser from '../../src/e2e/PlaywrightRunner.js';
+import { verifyAgentOutput } from '../helpers/verify-result.js';
 
 let directory: string;
 beforeEach(() => { const base = path.resolve('.iaf-mini/test-e2e-disabled'); fs.mkdirSync(base, { recursive: true }); directory = fs.mkdtempSync(path.join(base, 'repository-')); vi.stubEnv('DATA_DIR', path.join(directory, 'runtime')); });
@@ -34,7 +35,7 @@ it('无浏览器配置的仓库关闭 E2E 后，经审核重启仍可完成 veri
   await git(repo, 'remote', 'add', 'origin', origin); await git(repo, 'push', '-u', 'origin', 'main');
   const config: Config = transformEnvToConfig(envSchema.parse({ GITHUB_TOKEN: 'mock', GITHUB_REPOSITORY: 'test/project', PROJECT_WORK_DIR: repo, BASE_BRANCH: 'main', WORKTREE_BASE_DIR: path.join(directory, 'worktrees'), E2E_UI_ENABLED: 'false', PREVIEW_ENABLED: 'false', ISSUE_NOTE_SYNC_ENABLED: 'false' }), directory);
   const definition = buildPlanModePipeline({ e2eEnabled: false });
-  const managers = new Map([[definition.mode, definition]]);
+  const managers = definition;
   const tracker = new IssueTracker(process.env.DATA_DIR!, managers);
   const platform = new GitHubClient(config.github);
   const issue = createTestIssue({ number: 1, title: '实现计算函数', labels: ['auto-finish'] });
@@ -52,17 +53,18 @@ it('无浏览器配置的仓库关闭 E2E 后，经审核重启仍可完成 veri
   const uat = vi.spyOn(browser, 'executeUat').mockRejectedValue(new Error('关闭时不应调用浏览器'));
   const calls: string[] = [];
   const plan = JSON.stringify({ title: '实现纯函数', description: '无需浏览器的需求', acceptanceCriteria: ['计算正确'], tasks: [{ id: 'calculation', title: '实现计算', instructions: '增加 counter.mjs 并覆盖计算行为', acceptanceCriteria: ['计算正确'], dependsOn: [] }] });
-  const report = '# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: 通过\n\n## 总结\n代码检查与关联测试全部通过，计算结果符合本次实施计划。\n';
   const runner: AIRunner = { killAll() {}, killByWorkDir() { return 0; }, async run(options) {
     calls.push(options.phaseName ?? 'plan');
-    if (options.mode === 'plan') return { success: true, exitCode: 0, output: plan };
+    if (options.phaseName === 'plan') return { success: true, exitCode: 0, output: plan };
 
     if (options.phaseName === 'build') {
       fs.writeFileSync(path.join(options.workDir, 'counter.mjs'), 'export const negate = value => -value;\n');
 
       return { success: true, exitCode: 0, output: '计算函数已实现' };
     }
-    if (options.phaseName === 'verify') {  return { success: true, exitCode: 0, output: report }; }
+    if (options.phaseName === 'verify') {
+      return { success: true, exitCode: 0, output: verifyAgentOutput({ reportMarkdown: '# 验证报告\n\n代码检查与关联测试全部通过，计算结果符合本次实施计划。' }) };
+    }
     throw new Error('不应出现的 AI 阶段：' + options.phaseName);
   } };
   const service = new IssueService(config, platform, new GitOperations(repo), runner, tracker);

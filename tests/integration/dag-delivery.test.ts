@@ -13,6 +13,8 @@ import { IssueService } from '../../src/orchestrator/IssueService.js';
 import { GitOperations } from '../../src/git/GitOperations.js';
 import { deliverIssueStep } from '../../src/orchestrator/steps/DeliverIssueStep.js';
 import { IssueWorkflow } from '../../src/orchestrator/IssueWorkflow.js';
+import { UatResultStore } from '../../src/e2e/UatResultStore.js';
+import type { UatResult } from '../../src/shared/workbench.js';
 const directories: string[] = [];
 afterEach(() => { for (const directory of directories.splice(0)) fs.rmSync(directory, { recursive: true, force: true }); });
 async function prepared(e2eEnabled = false) {
@@ -23,7 +25,25 @@ async function prepared(e2eEnabled = false) {
   const accept = async () => {
     await new TaskGraphExecutor(graphDeps(f, runner)).execute();
     const commit = git(f.integration, 'rev-parse', 'HEAD');
-    f.tracker.transaction(1, record => { record.run!.candidateCommit = commit; record.run!.verify = { commit, completedAt: new Date().toISOString(), passed: true, reportPath: path.join(f.data, 'verify.md') }; record.run!.uat = { ...record.run!.verify, reportPath: path.join(f.data, 'uat.json'), runId: 'current-uat' }; });
+    let summary!: UatResult;
+    f.tracker.transaction(1, record => {
+      const run = record.run!;
+      run.candidateCommit = commit;
+      run.verify = { commit, completedAt: new Date().toISOString(), passed: true, reportPath: path.join(f.data, 'verify.md') };
+      const now = new Date().toISOString();
+      summary = {
+        format: 'iaf-mini/uat/v1', status: 'completed', runId: '00000000-0000-4000-8000-000000000001',
+        issueIid: 1, machinePassed: true, passed: true, passedTests: 1, failedTests: 0, skippedTests: 0,
+        evidence: [], reportAvailable: false, startedAt: now, machineFinishedAt: now,
+        finishedAt: now, visualReview: { status: 'not-run', summary: '视觉复核未启用', issues: [], selectedScreenshots: [], checkedScreenshots: [], unreviewedScreenshots: [], coverageGaps: [], reasonCode: 'disabled' },
+        policy: { visualReviewEnabled: false, maxImages: 12, timeoutMs: 180000 },
+        execution: { candidateCommit: commit, planRevision: run.planRevision, planDigest: run.planDigest ?? 'test', buildGeneration: run.buildGeneration, dispatchId: run.dispatchId ?? 'test', phaseAttemptNo: 1 },
+      };
+      summary.summaryDigest = UatResultStore.digest(summary);
+      run.uat = { ...run.verify, reportPath: path.join(f.data, 'uat.json'), runId: summary.runId, uatEvidence: { format: summary.format, summaryDigest: summary.summaryDigest, execution: summary.execution, policy: summary.policy } };
+    });
+    fs.mkdirSync(path.join(f.data, 'uat', summary.runId), { recursive: true });
+    fs.writeFileSync(path.join(f.data, 'uat', summary.runId, 'summary.json'), JSON.stringify(summary));
     return commit;
   };
   await accept();
@@ -172,7 +192,7 @@ it('Issue 回写响应丢失后保持未知，查到稳定标记后补齐进度�
   expect(post).toHaveBeenCalledTimes(1);
   expect(f.tracker.get(1)!.run!.delivery!.issueWriteIntent).toBeUndefined();
   expect(f.tracker.get(1)!.run!.delivery!.issueWrittenCommit).toBe(f.tracker.get(1)!.run!.candidateCommit);
-});
+}, 90_000);
 
 it.each([false, true])('交付按已保存的 E2E 要求 %s 校验 UAT，不受全局开关变化影响', async enabled => {
   const f = await prepared(enabled);

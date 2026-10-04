@@ -39,7 +39,7 @@ export interface StoredWrite {
 }
 export interface PhaseResultSummary {
   phase: WorkflowNode;
-  outcome: 'completed' | 'retried-from' | 'gate-approved' | 'gate-rejected';
+  outcome: 'completed' | 'retried-from' | 'retried-current' | 'gate-approved' | 'gate-rejected';
   next: WorkflowNode | '__end__';
   sessionId?: string;
   report?: string;

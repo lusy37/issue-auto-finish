@@ -12,6 +12,17 @@ export interface PhaseHistoryEntry {
   readonly approvalSource?: 'manual' | 'label' | 'configuration';
   readonly fixIteration?: number;
   readonly retryFromContext?: RetryFromContext;
+  readonly visualRetry?: {
+    sourceRunId: string;
+    reviewRound: number;
+    maxReviewRounds: number;
+  };
+  readonly visualRepair?: {
+    sourceRunId: string;
+    gapIndex: number;
+    decision?: string;
+    testRefs?: string[];
+  };
 }
 
 export interface RetryFromContext {
@@ -26,6 +37,7 @@ export type PhaseHistoryOutcome =
   | 'gate-approved'
   | 'gate-rejected'
   | 'retried-from'
+  | 'retried-current'
   | 'paused';
 
 export type GateAction =

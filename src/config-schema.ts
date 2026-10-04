@@ -110,7 +110,7 @@ export const envSchema = z.object({
   PHASE_TIMEOUT_MAX_EXTENSIONS: z.coerce.number().int().min(0).optional().default(3),
 
   // --- Pipeline ---
-  PIPELINE_MODE: z.string().optional().default('auto'),
+  PIPELINE_MODE: z.enum(['auto', 'plan-mode']).optional().default('auto'),
 
   // --- Poll ---
   POLL_DISCOVERY_INTERVAL_MS: envMs('60000'),
@@ -147,6 +147,17 @@ export const envSchema = z.object({
   PLAYWRIGHT_CHANNEL: z.string().min(1).optional().default(E2E_DEFAULTS.browserChannel),
   UAT_CONFIG_FILE: z.string().default('playwright.config.ts'),
   UAT_TIMEOUT_MS: envMs('300000'),
+  E2E_VISUAL_REVIEW_ENABLED: featureToggle(),
+  E2E_VISUAL_REVIEW_MAX_IMAGES: envInt(
+    String(E2E_DEFAULTS.visualReviewMaxImages),
+    { min: 1, max: 12 },
+  ),
+  E2E_VISUAL_REVIEW_MAX_RETRIES: envInt(
+    String(E2E_DEFAULTS.visualReviewMaxRetries),
+    { min: 0, max: 10 },
+  ),
+  E2E_VISUAL_REVIEW_MODEL: z.string().optional().default(''),
+  E2E_VISUAL_REVIEW_TIMEOUT_MS: envMs(String(E2E_DEFAULTS.visualReviewTimeoutMs)),
   // --- Preview ---
   PREVIEW_STARTUP_TIMEOUT_MS: envMs(String(PREVIEW_DEFAULTS.startupTimeoutMs)),
   PREVIEW_READINESS_INTERVAL_MS: envInt(String(PREVIEW_DEFAULTS.readinessIntervalMs), { min: 10 }),
@@ -293,6 +304,11 @@ export function transformEnvToConfig(env: ParsedEnv, dirname: string) {
       baseUrl: env.E2E_BASE_URL,
       backendPortBase: env.E2E_BACKEND_PORT_BASE,
       frontendPortBase: env.E2E_FRONTEND_PORT_BASE,
+      visualReviewEnabled: env.E2E_VISUAL_REVIEW_ENABLED,
+      visualReviewMaxImages: env.E2E_VISUAL_REVIEW_MAX_IMAGES,
+      visualReviewMaxRetries: env.E2E_VISUAL_REVIEW_MAX_RETRIES,
+      visualReviewModel: env.E2E_VISUAL_REVIEW_MODEL || undefined,
+      visualReviewTimeoutMs: env.E2E_VISUAL_REVIEW_TIMEOUT_MS,
     },
     preview: {
       enabled: env.PREVIEW_ENABLED,
@@ -327,23 +343,15 @@ export function transformEnvToConfig(env: ParsedEnv, dirname: string) {
       enabled: env.VERIFY_FIX_LOOP_ENABLED,
       maxIterations: env.VERIFY_FIX_MAX_ITERATIONS,
     },
-  } as const;
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Config type (derived from transform)
 // ---------------------------------------------------------------------------
 
-// We use a widened version so the type is writable and compatible with existing
-// code that assigns to Config properties.
-type TransformResult = ReturnType<typeof transformEnvToConfig>;
-
-// Deeply writable version of the transform result
-type DeepWritable<T> = {
-  -readonly [K in keyof T]: T[K] extends object ? DeepWritable<T[K]> : T[K];
-};
-
-export type Config = DeepWritable<TransformResult>;
+/** 配置类型直接由已解析的配置对象推导。 */
+export type Config = ReturnType<typeof transformEnvToConfig>;
 
 // ---------------------------------------------------------------------------
 // Sub-type aliases for interface segregation
