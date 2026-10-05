@@ -1,0 +1,198 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Issue Auto-Finish · 核心流程",
+    "locale": "zh-CN",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    {
+      "id": "execution",
+      "label": "从需求到交付"
+    },
+    {
+      "id": "recovery",
+      "label": "反馈与经验",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "planning",
+    "approval",
+    "implementation",
+    "verification",
+    "acceptance",
+    "delivery"
+  ],
+  "nodes": [
+    {
+      "id": "planning",
+      "lane": "execution",
+      "col": 0,
+      "type": "backend",
+      "label": "规划 · plan",
+      "sublabel": "Issue / 需求草稿",
+      "tag": "只读规划"
+    },
+    {
+      "id": "approval",
+      "lane": "execution",
+      "col": 1,
+      "type": "security",
+      "label": "审核 · review",
+      "sublabel": "查看计划并批准",
+      "tag": "人工介入"
+    },
+    {
+      "id": "implementation",
+      "lane": "execution",
+      "col": 2,
+      "type": "backend",
+      "label": "实施 · build",
+      "sublabel": "独立 worktree",
+      "tag": "按 DAG 依赖执行"
+    },
+    {
+      "id": "verification",
+      "lane": "execution",
+      "col": 3,
+      "type": "security",
+      "label": "验证 · verify",
+      "sublabel": "构建与测试报告"
+    },
+    {
+      "id": "acceptance",
+      "lane": "execution",
+      "col": 4,
+      "type": "security",
+      "label": "验收 · uat",
+      "sublabel": "Playwright + 视觉证据",
+      "tag": "可关闭"
+    },
+    {
+      "id": "delivery",
+      "lane": "execution",
+      "col": 5,
+      "type": "external",
+      "label": "交付 PR",
+      "sublabel": "回写 Issue",
+      "tag": "不自动合并"
+    },
+    {
+      "id": "feedback",
+      "lane": "recovery",
+      "col": 1,
+      "type": "frontend",
+      "label": "审核反馈",
+      "sublabel": "上次计划 + 驳回原因"
+    },
+    {
+      "id": "repair",
+      "lane": "recovery",
+      "col": 3,
+      "type": "backend",
+      "label": "集成修复",
+      "sublabel": "共用修复次数上限"
+    },
+    {
+      "id": "experience",
+      "lane": "recovery",
+      "col": 5,
+      "type": "database",
+      "label": "经验采集",
+      "sublabel": "日记 → 手动蒸馏",
+      "tag": "Memory / Agent Rule"
+    }
+  ],
+  "edges": [
+    {
+      "from": "planning",
+      "to": "approval",
+      "role": "main",
+      "label": "保存完整计划"
+    },
+    {
+      "from": "approval",
+      "to": "implementation",
+      "role": "main",
+      "label": "通过"
+    },
+    {
+      "from": "implementation",
+      "to": "verification",
+      "role": "main"
+    },
+    {
+      "from": "verification",
+      "to": "acceptance",
+      "role": "main",
+      "label": "通过"
+    },
+    {
+      "from": "acceptance",
+      "to": "delivery",
+      "role": "main",
+      "label": "有效证据通过"
+    },
+    {
+      "from": "approval",
+      "to": "feedback",
+      "role": "branch",
+      "variant": "security",
+      "label": "驳回"
+    },
+    {
+      "from": "feedback",
+      "to": "planning",
+      "role": "return",
+      "variant": "dashed",
+      "label": "重新规划"
+    },
+    {
+      "from": "verification",
+      "to": "repair",
+      "role": "error",
+      "variant": "security",
+      "label": "失败"
+    },
+    {
+      "from": "acceptance",
+      "to": "repair",
+      "role": "error",
+      "variant": "security",
+      "label": "有效断言失败"
+    },
+    {
+      "from": "repair",
+      "to": "implementation",
+      "role": "return",
+      "variant": "dashed",
+      "label": "返回实施"
+    },
+    {
+      "from": "delivery",
+      "to": "experience",
+      "role": "async",
+      "label": "完成后采集"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "工作台与编排",
+      "items": [
+        "Vue 工作台通过 REST 操作、SSE 接收进度",
+        "LangGraph 管理审核中断、检查点恢复与阶段重试"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "执行与数据",
+      "items": [
+        "官方 Codex SDK；受管理 worker 共享 AI 额度",
+        "每 Issue 聚合事务 + 不可变计划，本地 .iaf-mini/ 持久化"
+      ]
+    }
+  ]
+}
