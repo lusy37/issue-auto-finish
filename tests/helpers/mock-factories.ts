@@ -25,6 +25,7 @@ export function createMockGitOperations() {
     checkout: vi.fn<(...args: Parameters<GitOperations['checkout']>) => Promise<void>>().mockResolvedValue(undefined),
     add: vi.fn<(...args: Parameters<GitOperations['add']>) => Promise<void>>().mockResolvedValue(undefined),
     commit: vi.fn<(...args: Parameters<GitOperations['commit']>) => Promise<void>>().mockResolvedValue(undefined),
+    forcePush: vi.fn<(...args: Parameters<GitOperations['forcePush']>) => Promise<void>>().mockResolvedValue(undefined),
     push: vi.fn<(...args: Parameters<GitOperations['push']>) => Promise<void>>().mockResolvedValue(undefined),
     branchExists: vi.fn<(...args: Parameters<GitOperations['branchExists']>) => Promise<boolean>>().mockResolvedValue(false),
     remoteBranchExists: vi.fn<(...args: Parameters<GitOperations['remoteBranchExists']>) => Promise<boolean>>().mockResolvedValue(false),

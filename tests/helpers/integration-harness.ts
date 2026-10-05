@@ -1,14 +1,9 @@
-import type { GitOperations } from '../../src/git/GitOperations.js';
-import type { GitHubClient } from '../../src/clients/GitHubClient.js';
-import type { RunOptions } from '../../src/ai-runner/AIRunner.js';
-import { createTestConfig, type TestConfigOverrides } from './mock-factories.js';
+import { createTestConfig, createMockGitOperations, createMockGitHubClient, createMockAIRunner as createBaseAIRunner, createTestIssue, type TestConfigOverrides } from './mock-factories.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { vi } from 'vitest';
 import type { Config } from '../../src/config.js';
 import type { GitHubIssue } from '../../src/clients/GitHubClient.js';
-import type { RunResult } from '../../src/ai-runner/index.js';
 import { IssueTracker } from '../../src/tracker/IssueTracker.js';
 import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 
@@ -65,90 +60,16 @@ export function createHarness(configOverrides?: TestConfigOverrides): Integratio
   };
 }
 
-// ── Mock factories (integration-specific, more complete than unit mocks) ──
-
-function createMockGitOperations() {
-  return {
-    fetch: vi.fn<(...args: Parameters<GitOperations['fetch']>) => Promise<void>>().mockResolvedValue(undefined),
-    fetchAndPull: vi.fn<(...args: Parameters<GitOperations['fetchAndPull']>) => Promise<void>>().mockResolvedValue(undefined),
-    createBranch: vi.fn<(...args: Parameters<GitOperations['createBranch']>) => Promise<void>>().mockResolvedValue(undefined),
-    checkout: vi.fn<(...args: Parameters<GitOperations['checkout']>) => Promise<void>>().mockResolvedValue(undefined),
-    add: vi.fn<(...args: Parameters<GitOperations['add']>) => Promise<void>>().mockResolvedValue(undefined),
-    commit: vi.fn<(...args: Parameters<GitOperations['commit']>) => Promise<void>>().mockResolvedValue(undefined),
-    push: vi.fn<(...args: Parameters<GitOperations['push']>) => Promise<void>>().mockResolvedValue(undefined),
-    forcePush: vi.fn<(...args: Parameters<GitOperations['forcePush']>) => Promise<void>>().mockResolvedValue(undefined),
-    branchExists: vi.fn<(...args: Parameters<GitOperations['branchExists']>) => Promise<boolean>>().mockResolvedValue(false),
-    remoteBranchExists: vi.fn<(...args: Parameters<GitOperations['remoteBranchExists']>) => Promise<boolean>>().mockResolvedValue(false),
-    getCurrentBranch: vi.fn<(...args: Parameters<GitOperations['getCurrentBranch']>) => Promise<string>>().mockResolvedValue('master'),
-    hasChanges: vi.fn<(...args: Parameters<GitOperations['hasChanges']>) => Promise<boolean>>().mockResolvedValue(false),
-    stash: vi.fn<(...args: Parameters<GitOperations['stash']>) => Promise<void>>().mockResolvedValue(undefined),
-    stashPop: vi.fn<(...args: Parameters<GitOperations['stashPop']>) => Promise<void>>().mockResolvedValue(undefined),
-    addAndCommit: vi.fn<(...args: Parameters<GitOperations['addAndCommit']>) => Promise<void>>().mockResolvedValue(undefined),
-    addCommitAndPush: vi.fn<(...args: Parameters<GitOperations['addCommitAndPush']>) => Promise<void>>().mockResolvedValue(undefined),
-    checkoutTrack: vi.fn<(...args: Parameters<GitOperations['checkoutTrack']>) => Promise<void>>().mockResolvedValue(undefined),
-    worktreeAdd: vi.fn<(...args: Parameters<GitOperations['worktreeAdd']>) => Promise<void>>().mockResolvedValue(undefined),
-    worktreeAddExisting: vi.fn<(...args: Parameters<GitOperations['worktreeAddExisting']>) => Promise<void>>().mockResolvedValue(undefined),
-    worktreeAddTracking: vi.fn<(...args: Parameters<GitOperations['worktreeAddTracking']>) => Promise<void>>().mockResolvedValue(undefined),
-    worktreeRemove: vi.fn<(...args: Parameters<GitOperations['worktreeRemove']>) => Promise<void>>().mockResolvedValue(undefined),
-    worktreeList: vi.fn<(...args: Parameters<GitOperations['worktreeList']>) => Promise<string[]>>().mockResolvedValue([]),
-    worktreePrune: vi.fn<(...args: Parameters<GitOperations['worktreePrune']>) => Promise<void>>().mockResolvedValue(undefined),
-    deleteBranch: vi.fn<(...args: Parameters<GitOperations['deleteBranch']>) => Promise<void>>().mockResolvedValue(undefined),
-    deleteRemoteBranch: vi.fn<(...args: Parameters<GitOperations['deleteRemoteBranch']>) => Promise<void>>().mockResolvedValue(undefined),
-    showFile: vi.fn<(...args: Parameters<GitOperations['showFile']>) => Promise<string | null>>().mockResolvedValue(null),
-    isRebaseInProgress: vi.fn<(...args: Parameters<GitOperations['isRebaseInProgress']>) => Promise<boolean>>().mockResolvedValue(false),
-    rebaseAbort: vi.fn<(...args: Parameters<GitOperations['rebaseAbort']>) => Promise<void>>().mockResolvedValue(undefined),
-    refExists: vi.fn<(...args: Parameters<GitOperations['refExists']>) => Promise<boolean>>().mockResolvedValue(true),
-  };
-}
-
-function createMockGitHubClient() {
-  return {
-    listIssues: vi.fn<(...args: Parameters<GitHubClient['listIssues']>) => Promise<GitHubIssue[]>>().mockResolvedValue([]),
-    listIssuesAdvanced: vi.fn().mockResolvedValue({ issues: [], total: 0 }),
-    getIssueDetail: vi.fn<(...args: Parameters<GitHubClient['getIssueDetail']>) => Promise<GitHubIssue>>(),
-    createIssueNote: vi.fn<(...args: Parameters<GitHubClient['createIssueNote']>) => Promise<void>>().mockResolvedValue(undefined),
-    updateIssueLabels: vi.fn<(...args: Parameters<GitHubClient['updateIssueLabels']>) => Promise<void>>().mockResolvedValue(undefined),
-    addLabel: vi.fn<(...args: Parameters<GitHubClient['addLabel']>) => Promise<void>>().mockResolvedValue(undefined),
-    createPullRequest: vi.fn().mockResolvedValue({
-      id: 1, number: 1, title: 'test PR',
-      html_url: 'https://github.example.com/pr/1', state: 'open',
-    }),
-    createPullRequestNote: vi.fn<(...args: Parameters<GitHubClient['createPullRequestNote']>) => Promise<void>>().mockResolvedValue(undefined),
-    uploadFile: vi.fn().mockResolvedValue({
-      alt: 'screenshot', url: '/uploads/hash/screenshot.png',
-      markdown: '![screenshot](/uploads/hash/screenshot.png)',
-    }),
-    findPullRequestByBranch: vi.fn().mockResolvedValue(null),
-    closePullRequest: vi.fn<(...args: Parameters<GitHubClient['closePullRequest']>) => Promise<void>>().mockResolvedValue(undefined),
-    deleteIssue: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    closeIssue: vi.fn<(...args: Parameters<GitHubClient['closeIssue']>) => Promise<void>>().mockResolvedValue(undefined),
-    createIssue: vi.fn().mockResolvedValue({
-      id: 200, number: 99, title: 'Created Issue', description: 'desc',
-      state: 'open', labels: ['auto-finish'],
-      created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z',
-      author: { username: 'testuser', name: 'Test User' },
-    }),
-    listIssueNotes: vi.fn().mockResolvedValue([]),
-    deleteIssueNote: vi.fn<(...args: Parameters<GitHubClient['deleteIssueNote']>) => Promise<void>>().mockResolvedValue(undefined),
-    cleanupAgentNotes: vi.fn<(...args: Parameters<GitHubClient['cleanupAgentNotes']>) => Promise<number>>().mockResolvedValue(0),
-    getCurrentUser: vi.fn().mockResolvedValue({ id: 1, username: 'bot-user', name: 'Bot User' }),
-    setIssueAssignee: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    clearIssueAssignee: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-  };
-}
-
+// 集成场景仅覆盖基础执行器的默认结果。
 function createMockAIRunner() {
-  const defaultResult: RunResult = {
+  const runner = createBaseAIRunner();
+  runner.run.mockResolvedValue({
     success: true,
     output: 'AI completed successfully.',
     sessionId: 'test-session-id',
     exitCode: 0,
-  };
-  return {
-    run: vi.fn<(options: RunOptions) => Promise<RunResult>>().mockResolvedValue(defaultResult),
-    killAll: vi.fn(),
-    killByWorkDir: vi.fn().mockReturnValue(0),
-  };
+  });
+  return runner;
 }
 
 // ── Config factory ──
@@ -211,16 +132,9 @@ export function createScriptedHarness(
 // ── Test issue factory ──
 
 export function createIntegrationTestIssue(overrides?: Partial<GitHubIssue>): GitHubIssue {
-  return {
-    id: 100,
-    number: 42,
+  return createTestIssue({
     title: '集成测试 Issue',
     description: '用于集成测试的 Issue 描述',
-    state: 'open',
-    labels: ['auto-finish'],
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-    author: { username: 'testuser', name: 'Test User' },
     ...overrides,
-  };
+  });
 }
