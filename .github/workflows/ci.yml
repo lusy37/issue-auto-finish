@@ -28,3 +28,14 @@ jobs:
           path: .iaf-mini/preview-tests/**/preview-logs/*.log
           if-no-files-found: ignore
           include-hidden-files: true
+      - name: 保存完整流程测试的验收诊断
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-workflow-uat-diagnostics
+          path: |
+            .iaf-mini/test-workflow/**/data/uat/**
+            .iaf-mini/test-workflow/**/data/preview-logs/*.log
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7

@@ -69,7 +69,8 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
     );
     fs.writeFileSync(
       path.join(repo, "playwright.config.ts"),
-      `export default { testDir: '.', testMatch: 'acceptance.spec.ts', timeout: 15000, use: {baseURL:process.env.UAT_BASE_URL,channel: process.env.IAF_TEST_BROWSER_CHANNEL || undefined} };`,
+      // Windows CI 首次启动浏览器和自动截图也占用用例预算，避免环境耗时触发额外构建修复。
+      `export default { testDir: '.', testMatch: 'acceptance.spec.ts', workers: 1, timeout: 60000, use: {baseURL:process.env.UAT_BASE_URL,channel: process.env.IAF_TEST_BROWSER_CHANNEL || undefined} };`,
     );
     fs.writeFileSync(
       path.join(repo, "acceptance.spec.ts"),
@@ -225,9 +226,10 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
         "模拟 PR 已创建但响应丢失",
       );
       expect(tracker.get(1)?.phaseProgress?.uat?.status).toBe("completed");
-      expect(builds).toBe(2);
-      expect(tracker.get(1)?.run?.repairs).toMatchObject([{ source: failurePhase }]);
       const accepted = tracker.get(1)!.run!;
+      // 保留严格的修复次数断言，失败时直接显示触发额外修复的验收报告。
+      expect(builds, "修复记录：\n" + JSON.stringify(accepted.repairs, null, 2)).toBe(2);
+      expect(accepted.repairs).toMatchObject([{ source: failurePhase }]);
       expect(accepted.uat?.commit).toBe(accepted.candidateCommit);
       expect(accepted.verify?.commit).toBe(accepted.candidateCommit);
       expect(tracker.get(1)?.deliveryPending).toBe(true);
