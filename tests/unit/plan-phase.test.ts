@@ -1,6 +1,10 @@
+import { DagPhaseRunner } from '../../src/orchestrator/DagPhaseRunner.js';
+import { IssueTracker } from '../../src/tracker/IssueTracker.js';
+import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
+import { renderPlan } from '../../src/dag/contracts.js';
 import { createReviewStore } from '../helpers/review-store.js';
 import { structuredPlanOutput } from '../helpers/structured-plan.js';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,6 +16,7 @@ import {
   createMockAIRunner,
   createMockGitOperations,
   createTestConfig,
+  createMockOrchestratorDeps,
 } from '../helpers/mock-factories.js';
 
 function createTestDemand(overrides?: Partial<DemandSpec>): DemandSpec {
@@ -239,7 +244,7 @@ describe('Phase artifact validation', () => {
     expect(intent.error.message).toMatch(/计划内容为空或不完整/);
   });
 
-  it('有效结构化输出由服务端生成计划产物', async () => {
+  it('有效结构化输出返回已校验内容，阶段不提前写盘', async () => {
 
     const phase = new PlanPhase(
       aiRunner,
@@ -248,9 +253,38 @@ describe('Phase artifact validation', () => {
       createTestConfig(),
     );
 
+    const write = vi.spyOn(plan, 'writePlan');
     aiRunner.run.mockResolvedValue({success:true,output:structuredPlanOutput('实施步骤及验收标准。'.repeat(10)),exitCode:0});
     const intent = await phase.run(ctx);
     expect(intent.kind).toBe('completed');
+    if (intent.kind !== 'completed') throw new Error('应返回成功计划');
+    expect(intent.planContent?.tasks.length).toBeGreaterThan(0);
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('编排器将本次计划 JSON 和展示产物各保存一次', async () => {
+    const dataDir = path.join(tmpDir, 'runtime');
+    const tracker = new IssueTracker(dataDir, PLAN_MODE_PIPELINE);
+    tracker.create({ lifecycle: { kind: 'running', phase: 'plan' }, demandSpec: ctx.demand, branchName: ctx.branchName });
+    tracker.initPhaseProgress(42, PLAN_MODE_PIPELINE);
+    tracker.transaction(42, record => { record.run.dispatchId = 'plan-test'; });
+    const persistence = new PlanPersistence(tmpDir, 42, dataDir, tracker);
+    const write = vi.spyOn(persistence, 'writePlan');
+    const save = vi.spyOn(tracker.store, 'savePlan');
+    aiRunner.run.mockResolvedValueOnce({ success: true, output: structuredPlanOutput('完整实施说明'), exitCode: 0 });
+    const runner = new DagPhaseRunner(
+      createMockOrchestratorDeps({ tracker, aiRunner }),
+      createMockGitOperations() as never, persistence,
+    );
+    const intent = await runner.run({ id: 'plan', label: '计划', kind: 'ai' }, {
+      issueIid: 42, demand: ctx.demand, branchName: ctx.branchName, workDir: tmpDir,
+    });
+    expect(intent.kind).toBe('completed');
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(write).toHaveBeenCalledTimes(1);
+    const saved = tracker.store.readPlan(42, 1);
+    expect(write).toHaveBeenCalledWith(renderPlan(saved));
+    expect(persistence.readFile('01-plan.md')).toBe(renderPlan(saved));
   });
 
 });

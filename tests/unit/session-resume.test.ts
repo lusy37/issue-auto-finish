@@ -1,5 +1,5 @@
 import { structuredPlanOutput } from '../helpers/structured-plan.js';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -117,6 +117,7 @@ describe('Session Resume — 聚合状态', () => {
 
   it('执行结果与流事件捕获的 session 均写回聚合状态', async () => {
     setPhaseProgress(tracker, 'plan', { status: 'in_progress' });
+    const save = vi.spyOn(tracker, 'updatePhaseProgress');
     aiRunner.run.mockImplementation(async options => {
       options.onStreamEvent?.({
         type: 'init',
@@ -137,6 +138,7 @@ describe('Session Resume — 聚合状态', () => {
     await phase.run(ctx);
 
     expect(tracker.getPhaseProgress(42, 'plan')?.sessionId).toBe('result-session');
+    expect(save).toHaveBeenCalledTimes(2);
   });
 
   it('VerifyPhase 使用相同的聚合状态恢复规则', async () => {
@@ -152,4 +154,16 @@ describe('Session Resume — 聚合状态', () => {
       continueSession: true,
     });
   });
+  it.each([true, false])('没有流会话时只保存返回的会话一次，成功=%s', async success => {
+    const save = vi.spyOn(tracker, 'updatePhaseProgress');
+    aiRunner.run.mockResolvedValueOnce({
+      success, output: success ? structuredPlanOutput('完整计划') : '',
+      sessionId: 'final-session', exitCode: success ? 0 : 1,
+    });
+    const phase = new PlanPhase(aiRunner, createMockGitOperations() as never, plan, createTestConfig(), tracker);
+    await phase.run(ctx);
+    expect(save).toHaveBeenCalledExactlyOnceWith(42, 'plan', { sessionId: 'final-session' });
+    expect(tracker.getPhaseProgress(42, 'plan')?.sessionId).toBe('final-session');
+  });
+
 });

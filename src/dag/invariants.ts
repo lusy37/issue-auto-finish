@@ -1,6 +1,5 @@
 import { assertWorkflowStorageInvariants } from '../orchestration/WorkflowState.js';
 import type { IssueRun, PlanContent } from './contracts.js';
-import { UAT_FORMAT } from '../shared/runtime/formats.js';
 
 /** 计划图的跨字段业务约束；字段形状由输入 Codec 负责。 */
 export function assertPlanInvariants(plan: PlanContent): void {
@@ -70,17 +69,8 @@ export function assertIssueRunInvariants(run: IssueRun, issueNumber: number): vo
   if (run.delivery && run.delivery.issueNumber !== issueNumber) {
     throw new Error('交付身份与父 Issue 不匹配');
   }
-  if (run.uat) {
-    if (!run.uat.runId || run.uat.uatEvidence.format !== UAT_FORMAT) {
-      throw new Error('浏览器验收凭证缺少新格式证据');
-    }
-  }
   if (run.uatExecution && run.uatExecution.runId === run.uat?.runId && run.uat) {
     throw new Error('已签发 UAT 凭证仍保留执行中状态');
-  }
-  for (const item of run.temporaryDirectories ?? []) {
-    if (item.kind !== 'visual-review' || item.runId.length === 0 || item.directory.length === 0)
-      throw new Error('视觉临时目录登记无效');
   }
   for (const repair of run.repairs) {
     if (!repair.visualDecision) continue;

@@ -4,6 +4,7 @@ import {
   VERIFY_AGENT_OUTPUT_SCHEMA,
   evaluateVerifyResult,
   parseVerifyAgentOutput,
+  type VerifyAgentResult,
 } from '../verify/VerifyResultCodec.js';
 import { ARTIFACTS } from '../shared/runtime/artifacts.js';
 import type { PhaseCallbacks } from './PhaseCallbacks.js';
@@ -20,12 +21,14 @@ import type { JsonSchema } from '../ai-runner/index.js';
  */
 export class VerifyPhase extends BasePhase {
   readonly phaseName = 'verify' as const;
+  private parsedOutput?: VerifyAgentResult;
 
   async run(ctx: PhaseContext, callbacks?: PhaseCallbacks): Promise<PhaseResult> {
+    this.parsedOutput = undefined;
     const intent = await super.run(ctx, callbacks);
     if (intent.kind !== 'completed') return intent;
 
-    const parsed = parseVerifyAgentOutput(intent.output);
+    const parsed = this.parsedOutput!;
     const evaluation = evaluateVerifyResult(parsed);
 
     this.logger.info('Verify report parsed', {
@@ -80,6 +83,7 @@ export class VerifyPhase extends BasePhase {
 
   protected prepareAgentOutput(output: string): void {
     const parsed = parseVerifyAgentOutput(output);
+    this.parsedOutput = parsed;
     this.plan.writeFile(ARTIFACTS.verifyReport.filename, parsed.reportMarkdown);
   }
 }

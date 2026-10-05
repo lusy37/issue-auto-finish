@@ -1,4 +1,5 @@
 import type { VisualRepairContext } from '../shared/workbench.js';
+import type { PlanContent } from '../dag/contracts.js';
 
 /** 已由阶段生成的集成修复上下文。 */
 export interface RepairContext {
@@ -24,6 +25,8 @@ export interface CompletedIntent {
   readonly kind: 'completed';
   /** 阶段输出摘要（用于评论/日志） */
   readonly output: string;
+  /** 计划阶段已校验的结构化内容，供编排器统一持久化。 */
+  readonly planContent?: PlanContent;
   /** AI 会话 ID（用于下次 resume） */
   readonly sessionId?: string;
   /** 阶段产出的产物文件引用列表 */

@@ -90,7 +90,7 @@ export class TaskGraphExecutor {
       current.dispatchId !== this.execution.dispatchId
     )
       throw new Error('任务图调度身份已失效');
-    if (this.state().stopIntent || this.deps.tracker.store.isBlocked(this.deps.number))
+    if (current.stopIntent || this.deps.tracker.store.isBlocked(this.deps.number))
       throw new Error('Issue 已停止或状态存储不可写');
   }
 

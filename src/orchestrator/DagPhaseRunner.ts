@@ -1,6 +1,5 @@
 import { phaseCallId } from '../orchestration/ExecutionIds.js';
 import { buildCallOptions, configuredCallPolicy } from '../ai-runner/CallPolicy.js';
-import { parseJsonOutput } from '../prompts/parseJsonOutput.js';
 import { integrationRepairPrompt, uatPreparationPrompt, visualRepairPrompt } from '../prompts/taskExecution.js';
 import { readVisualCasesManifest, visualCasesPath } from '../e2e/VisualEvidence.js';
 import {
@@ -24,7 +23,6 @@ import { createPhase } from '../phases/PhaseFactory.js';
 import { scopedRunner } from '../dag/ScopedRunner.js';
 import { TaskGraphExecutor } from '../dag/TaskGraphExecutor.js';
 import { renderPlan } from '../dag/contracts.js';
-import { decodePlanContent } from '../dag/codecs/TaskPlanCodec.js';
 import { UatResultStore } from '../e2e/UatResultStore.js';
 import { passedPlaywrightTests } from '../e2e/PlaywrightReportCodec.js';
 import type { StreamEvent } from '../ai-runner/AIRunner.js';
@@ -345,8 +343,8 @@ export class DagPhaseRunner {
 
       // 3.3 `plan` 阶段成功后，必须保存结构化 plan，并同步到持久化文件
       if (spec.id === 'plan' && intent.kind === 'completed') {
-        const content = decodePlanContent(parseJsonOutput(intent.output ?? ''));
-        const plan = tracker.store.savePlan(number, content, state().version);
+        if (!intent.planContent) throw new Error('计划阶段缺少已校验的结构化内容');
+        const plan = tracker.store.savePlan(number, intent.planContent, state().version);
         this.plan.writePlan(renderPlan(plan));
       }
 

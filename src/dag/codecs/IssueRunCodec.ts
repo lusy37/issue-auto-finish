@@ -205,7 +205,3 @@ export function decodeIssueRun(value: unknown): IssueRun {
   assertWorkflowStorageShape(run.workflow);
   return run as IssueRun;
 }
-
-export function assertIssueRunShape(value: unknown): asserts value is IssueRun {
-  decodeIssueRun(value);
-}

@@ -5,7 +5,7 @@
  * 不涉及编排器（IssueService），聚焦单阶段行为。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PlanPhase } from '../../src/phases/PlanPhase.js';
@@ -60,7 +60,7 @@ describe('Phase-AI Integration', () => {
 
   // ── Plan → success ──
 
-  it('PlanPhase: should write artifact via sideEffect and complete', async () => {
+  it('计划阶段返回已校验内容，由编排器统一落盘', async () => {
     const planContent = 'A'.repeat(100);
     const runner = new ScriptedAIRunner([
       successScript({ output: planContent }),
@@ -75,10 +75,12 @@ describe('Phase-AI Integration', () => {
 
     const intent = await phase.run(buildPhaseCtx());
     expect(intent.kind).toBe('completed');
+    if (intent.kind !== 'completed') throw new Error('应返回成功计划');
+    expect(intent.planContent?.description).toBe(planContent);
+    expect(intent.planContent?.tasks[0].instructions).toBe(planContent);
 
     const artifactPath = path.join(process.env.DATA_DIR!, 'issues', String(ISSUE_IID), 'artifacts', '01-plan.md');
-    expect(existsSync(artifactPath)).toBe(true);
-    expect(readFileSync(artifactPath, 'utf-8')).toContain(planContent);
+    expect(existsSync(artifactPath)).toBe(false);
 
     expect(runner.runCalls[0].mode).toBe('plan');
     expect(runner.runCalls[0].phaseName).toBe('plan');

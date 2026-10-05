@@ -1,3 +1,4 @@
+import * as codec from '../../../src/verify/VerifyResultCodec.js';
 import { resolveIssueArtifactsDir } from '../../../src/persistence/ArtifactPaths.js';
 /**
  * VerifyPhase 报告解析场景测试 — 使用 ScriptedAIRunner。
@@ -15,6 +16,8 @@ import {
   createTestConfig,
 } from '../../helpers/mock-factories.js';
 import type { PhaseContext } from '../../../src/phases/BasePhase.js';
+
+vi.mock('../../../src/verify/VerifyResultCodec.js', { spy: true });
 
 vi.mock('../../../src/knowledge/index.js', () => ({
   getProjectKnowledge: vi.fn().mockReturnValue(null),
@@ -52,6 +55,7 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
 
   afterEach(() => {
     rmSync(dataDir, { recursive: true, force: true });
+    vi.clearAllMocks();
   });
 
   function createPhase(runner: ScriptedAIRunner, configOverrides?: Record<string, unknown>) {
@@ -159,4 +163,24 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
     expect(intent.error.retryable).toBe('hard-no-auto');
     expect(intent.error.message).toContain('JSON');
   });
+  it('每次调用只解析一次，复用阶段实例也不采用上次报告', async () => {
+    const runner = new ScriptedAIRunner([
+      successScript({ output: PASSING_OUTPUT }),
+      successScript({ output: FAILING_OUTPUT }),
+      successScript({ output: '无效 JSON' }),
+      successScript({ output: PASSING_OUTPUT }),
+    ]);
+    const phase = createPhase(runner);
+    const parse = vi.mocked(codec.parseVerifyAgentOutput);
+    expect((await phase.run(buildPhaseCtx())).kind).toBe('completed');
+    expect(parse).toHaveBeenCalledTimes(1);
+    const failed = await phase.run(buildPhaseCtx());
+    expect(failed).toMatchObject({ kind: 'requestRetryFrom', context: { rawReport: FAILING_REPORT } });
+    expect(parse).toHaveBeenCalledTimes(2);
+    expect((await phase.run(buildPhaseCtx())).kind).toBe('failed');
+    expect(parse).toHaveBeenCalledTimes(3);
+    expect((await phase.run(buildPhaseCtx())).kind).toBe('completed');
+    expect(parse).toHaveBeenCalledTimes(4);
+  });
+
 });

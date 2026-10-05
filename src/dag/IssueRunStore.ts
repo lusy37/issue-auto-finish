@@ -154,7 +154,9 @@ export class IssueRunStore {
   savePlan(number: number, content: PlanContent, expectedVersion: number): TaskPlan {
     const record = this.get(number)!;
     if (record.run.version !== expectedVersion) throw new Error('生成计划期间状态已改变');
-    const revision = record.run.planRevision + 1;
+    // 单实例同步创建，不覆盖崩溃遗留版本；下一次显式重新规划仍保持版本单调。
+    let revision = record.run.planRevision + 1;
+    while (fs.existsSync(this.planFile(number, revision))) revision++;
     const base = {
       ...decodePlanContent(content),
       format: PLAN_FORMAT,
@@ -166,13 +168,7 @@ export class IssueRunStore {
     const plan: TaskPlan = { ...base, digest: planDigest(base) };
     const file = this.planFile(number, revision);
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    // 单实例同步创建，不覆盖崩溃遗留版本；下一次显式重新规划仍保持版本单调。
-    let nextRevision = revision;
-    while (fs.existsSync(this.planFile(number, nextRevision))) nextRevision++;
-    plan.revision = nextRevision;
-    const { digest: _digest, ...unsigned } = plan;
-    plan.digest = planDigest(unsigned);
-    this.write(this.planFile(number, nextRevision), plan);
+    this.write(file, plan);
     this.transaction(number, (current) => {
       if (current.run.version !== expectedVersion || current.run.stopIntent)
         throw new Error('生成计划期间执行身份已失效');

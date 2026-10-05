@@ -2,7 +2,7 @@ import { buildCallOptions, configuredCallPolicy } from '../ai-runner/CallPolicy.
 import { parseJsonOutput } from '../prompts/parseJsonOutput.js';
 import { resolvePromptRules } from '../knowledge/PromptRules.js';
 import { getPhaseArtifacts } from '../shared/runtime/artifacts.js';
-import { renderPlan } from '../dag/contracts.js';
+import { renderPlan, type PlanContent } from '../dag/contracts.js';
 import { decodePlanContent } from '../dag/codecs/TaskPlanCodec.js';
 import type { AIRunner, JsonSchema, RunResult, StreamEvent } from '../ai-runner/index.js';
 
@@ -63,7 +63,6 @@ export abstract class BasePhase {
   protected logger: Logger;
   private lastStreamSummary?: {
     eventTypeCounts: Map<string, number>;
-    toolCallKeyCounts: Map<string, number>;
   };
 
   abstract readonly phaseName: string;
@@ -99,7 +98,6 @@ export abstract class BasePhase {
 
     this.lastStreamSummary = {
       eventTypeCounts: new Map(),
-      toolCallKeyCounts: new Map(),
     };
 
     let prompt = this.buildPrompt(ctx);
@@ -126,12 +124,11 @@ export abstract class BasePhase {
     }
 
     if (!result.success) {
-      this.persistSessionId(displayId, result.sessionId);
       const error = this.classifyFailure(result);
       return { kind: 'failed', error, sessionId: result.sessionId };
     }
 
-    this.persistSessionId(displayId, result.sessionId);
+    let planContent: PlanContent | undefined;
     if (this.phaseName === 'plan') {
       if (result.output.trim().length < BasePhase.MIN_ARTIFACT_BYTES)
         return {
@@ -139,7 +136,7 @@ export abstract class BasePhase {
           error: { message: '计划内容为空或不完整', retryable: 'hard-no-auto' },
         };
       try {
-        this.plan.writePlan(renderPlan(decodePlanContent(parseJsonOutput(result.output))));
+        planContent = decodePlanContent(parseJsonOutput(result.output));
       } catch (error) {
         return {
           kind: 'failed',
@@ -150,7 +147,13 @@ export abstract class BasePhase {
     try {
       // 阶段可以在这里把结构化 Agent 结果转换为展示产物；状态判断仍由阶段自身完成。
       this.prepareAgentOutput(result.output);
-      await this.validatePhaseOutput(ctx, displayId, expectedResultFiles);
+      if (planContent) {
+        // 计划展示产物由编排器统一落盘，阶段只校验本次内容，不依赖旧文件。
+        if (Buffer.byteLength(renderPlan(planContent), 'utf-8') < BasePhase.MIN_ARTIFACT_BYTES)
+          throw new Error('计划内容为空或不完整');
+      } else {
+        await this.validatePhaseOutput(ctx, displayId, expectedResultFiles);
+      }
     } catch (err) {
       const message = (err as Error).message;
       return {
@@ -163,6 +166,7 @@ export abstract class BasePhase {
     return {
       kind: 'completed',
       output: result.output,
+      ...(planContent ? { planContent } : {}),
       sessionId: result.sessionId,
       artifacts: this.toArtifactRefs(expectedResultFiles),
     };
@@ -296,23 +300,12 @@ export abstract class BasePhase {
     if (!summary) return;
     const type = event.type;
     summary.eventTypeCounts.set(type, (summary.eventTypeCounts.get(type) ?? 0) + 1);
-    if (type !== 'tool_call') return;
-    const content = event.content as Record<string, unknown> | undefined;
-    const toolCall = content?.tool_call as Record<string, unknown> | undefined;
-    if (!toolCall) return;
-    for (const key of Object.keys(toolCall)) {
-      summary.toolCallKeyCounts.set(key, (summary.toolCallKeyCounts.get(key) ?? 0) + 1);
-    }
   }
 
   private formatStreamSummaryHint(): string | undefined {
     const summary = this.lastStreamSummary;
     if (!summary) return undefined;
-    const parts: string[] = [];
     const events = formatCountsByDesc(summary.eventTypeCounts);
-    if (events) parts.push(`流式事件: ${events}`);
-    const tools = formatCountsByDesc(summary.toolCallKeyCounts);
-    if (tools) parts.push(`工具调用: ${tools}`);
-    return parts.length > 0 ? parts.join(' | ') : undefined;
+    return events ? `流式事件: ${events}` : undefined;
   }
 }
