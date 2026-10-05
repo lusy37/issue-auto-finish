@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { booleanSettingSchema } from '../RequestContracts.js';
 import { z } from 'zod';
+import type { KnowledgeEntry } from '../../shared/knowledge.js';
 import type { KnowledgeStore } from '../../knowledge/KnowledgeStore.js';
 import { VersionStore } from '../../distill/VersionStore.js';
 import path from 'node:path';
@@ -23,7 +24,7 @@ const ruleContentSchema = z.object({
   deprecated: z.boolean(),
 });
 
-function toApiEntry(entry: ReturnType<KnowledgeStore['get']>) {
+function toApiEntry(entry: ReturnType<KnowledgeStore['get']>): KnowledgeEntry | null {
   if (!entry || (entry.type !== 'memory' && entry.type !== 'agent-rule')) return entry;
   if (entry.type === 'memory') {
     const parsed = memoryContentSchema.parse(JSON.parse(entry.content));

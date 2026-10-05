@@ -1,11 +1,7 @@
-import type { IssueRecord as StoredIssueRecord } from '../../../../shared/workbench';
-export type { IssueLifecycle, PhaseProgress } from '../../../../shared/workbench';
+import type { IssueRecord as StoredIssueRecord, PhaseStatus as StoredPhaseStatus } from '../../../../shared/workbench';
+export type { IssueLifecycle, PhaseProgress, ExecutableTask, UnifiedTaskStatus } from '../../../../shared/workbench';
 
 export type PipelineMode = string;
-
-import type {
-  IssueLifecycle, PhaseStatus as StoredPhaseStatus,
-} from '../../../../shared/workbench';
 
 /** 暂停由生命周期派生，属于前端展示状态。 */
 export type PhaseStatus = StoredPhaseStatus | 'paused';
@@ -21,13 +17,6 @@ export interface IssueRecord extends StoredIssueRecord {
 
 export const getIssueIid = (r: IssueRecord): number => Number(r.demandSpec.sourceRef.displayId);
 export const getIssueTitle = (r: IssueRecord): string => r.demandSpec.title;
-export const getReviewApprovalSource = (r: IssueRecord) =>
-  r.phaseHistory
-    .slice()
-    .reverse()
-    .find((entry) => entry.phaseId === 'review' && entry.outcome === 'gate-approved')
-    ?.approvalSource;
-
 export interface AgentLogEntry {
   identity?: import('../../../../shared/workbench').ExecutionIdentity;
   type: string;
@@ -77,16 +66,6 @@ export interface SystemStatus {
   } | null;
 }
 
-export interface GitHubIssue {
-  id: number;
-  number: number;
-  title: string;
-  description?: string;
-  labels: string[];
-  author?: { name?: string; username?: string };
-  created_at: string;
-}
-
 export interface SupplementInfo {
   requirements: string;
   acceptanceCriteria: string;
@@ -96,139 +75,7 @@ export interface SupplementInfo {
   freeText: string;
 }
 
-export interface ReviewRound {
-  round: number;
-  feedback: string;
-  timestamp: string;
-}
-
-export interface PhaseSpec {
-  name: string;
-  label: string;
-}
-
 export interface PlanFileSpec {
   file: string;
   label: string;
-}
-
-// Knowledge types
-export type KnowledgeEntryType = 'project-meta' | 'custom' | 'memory' | 'agent-rule';
-
-export interface KnowledgeEntryMeta {
-  id: string;
-  type: KnowledgeEntryType;
-  title: string;
-  tags: string[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface KnowledgeEntry extends KnowledgeEntryMeta {
-  content: string;
-}
-
-export interface KnowledgeStats {
-  total: number;
-  byType: Record<KnowledgeEntryType, number>;
-  lastAnalyzedAt?: string;
-}
-
-// Pipeline Meta types (from GET /api/pipeline-meta)
-
-export interface PipelineModeMeta {
-  phases: { name: string; label: string; kind: 'ai' | 'gate' }[];
-  artifacts: { filename: string; label: string; editable: boolean }[];
-  retryablePhases: string[];
-}
-
-export interface PipelineMeta {
-  modes: Record<PipelineMode, PipelineModeMeta>;
-}
-
-// ── 统一任务模型 ──
-
-export type UnifiedTaskStatus =
-  | 'idle'
-  | 'preparing'
-  | 'running'
-  | 'waiting'
-  | 'merging'
-  | 'completed'
-  | 'failed';
-
-export type TaskKind = 'issue';
-
-export interface ExecutableTask {
-  kind: TaskKind;
-  taskId: string;
-  title: string;
-  status: UnifiedTaskStatus;
-  attempts: number;
-  lastError?: string;
-  createdAt: string;
-  updatedAt: string;
-  branchName?: string;
-  lifecycle: IssueLifecycle;
-  stateCategory?: string;
-  displayLabel?: string;
-  phaseProgress?: {
-    name: string;
-    label: string;
-    status: PhaseStatus;
-    startedAt?: string;
-    completedAt?: string;
-  }[];
-}
-
-// ── Distill (知识蒸馏) ──
-
-export interface DiaryPhaseTiming {
-  phase: string;
-  durationMs: number;
-  retries: number;
-}
-
-export interface DiaryTiming {
-  totalDurationMs: number;
-  phaseTimings: DiaryPhaseTiming[];
-  startedAt: string;
-  finishedAt: string;
-}
-
-export interface DiaryFailure {
-  failedAtPhase: string;
-  error: string;
-  attempts: number;
-}
-
-export interface DiaryHumanIntervention {
-  type: 'review-approve' | 'review-reject' | 'retry' | 'supplement';
-  detail: string;
-  timestamp: string;
-}
-
-export interface DiaryEntry {
-  id: string;
-  issueIid: number;
-  issueTitle: string;
-  branchName: string;
-  pipelineMode: string;
-  outcome: 'completed' | 'failed';
-  prUrl?: string;
-  timing: DiaryTiming;
-  failure?: DiaryFailure;
-  humanInterventions: DiaryHumanIntervention[];
-  artifactSummary?: string;
-  distilled: boolean;
-  createdAt: string;
-}
-
-export interface DistillStatus {
-  enabled: boolean;
-  lastRunAt?: string;
-  diaryCount: number;
-  undistilledDiaryCount: number;
-  memoryCount: number;
-  ruleCount: number;
 }

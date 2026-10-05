@@ -48,6 +48,14 @@ describe('issueStateToUnified', () => {
 
 describe('issueToExecutableTask', () => {
   it.each([
+    [{ kind: 'ready' }, '分支已创建'],
+    [{ kind: 'running', phase: 'uat' }, 'UAT验证中'],
+    [{ kind: 'delivering' }, '正在交付'],
+    [{ kind: 'cancelled' }, '已取消'],
+  ] as const)('保留列表文案与响应字段 %#', (lifecycle, displayLabel) => {
+    expect(issueToExecutableTask(makeIssueRecord(lifecycle), PLAN_MODE_PIPELINE).displayLabel).toBe(displayLabel);
+  });
+  it.each([
     [{ kind: 'pending' }, 'idle', 'active'],
     [{ kind: 'running', phase: 'plan' }, 'running', 'active'],
     [{ kind: 'completed' }, 'completed', 'completed'],

@@ -23,7 +23,6 @@ export const reviewSchema = z.object({
   feedback: z.string().trim().min(1).optional(),
 }).strict();
 export const phaseSchema = z.object({ phase: z.string().min(1) }).strict();
-export const contentSchema = z.object({ content: z.string() }).strict();
 export const noteSyncSchema = z.object({ enabled: z.boolean().nullable() }).strict();
 export const booleanSettingSchema = z.object({ enabled: z.boolean() }).strict();
 export const browseQuerySchema = z.object({

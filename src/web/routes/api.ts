@@ -2,10 +2,6 @@ import { ISSUE_LABELS } from '../../clients/IssueLabels.js';
 import { inspectWorkflow, GraphSnapshotChangedError } from '../../orchestrator/inspectWorkflow.js';
 import { ARTIFACTS } from '../../shared/runtime/artifacts.js';
 import { renderPlan } from '../../dag/contracts.js';
-import {
-  resolveIssueArtifactsDir,
-  resolveIssueArtifactPath,
-} from '../../persistence/ArtifactPaths.js';
 import { PlanPersistence } from '../../persistence/PlanPersistence.js';
 import { githubIssueToDemandSpec } from '../../demand/adapters/GitHubAdapter.js';
 import express, { type Request, type Response } from 'express';
@@ -14,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { renderMarkdown } from '../renderMarkdown.js';
-import { issueNumberSchema, supplementSchema, startIssueSchema, reviewSchema, phaseSchema, contentSchema, noteSyncSchema, booleanSettingSchema, browseQuerySchema, logQuerySchema } from '../RequestContracts.js';
+import { issueNumberSchema, supplementSchema, startIssueSchema, reviewSchema, phaseSchema, noteSyncSchema, booleanSettingSchema, browseQuerySchema, logQuerySchema } from '../RequestContracts.js';
 import { createPatch } from 'diff';
 import { IssueTracker } from '../../tracker/IssueTracker.js';
 import { issueStateCategory } from '../../tracker/ExecutableTask.js';
@@ -23,7 +19,6 @@ import { getIssueNumber, getTitle } from '../../tracker/IssueRecordHelper.js';
 import { Config } from '../../config.js';
 import { AgentLogStore } from '../AgentLogStore.js';
 import { IssueService } from '../../orchestrator/IssueService.js';
-import { GitOperations } from '../../git/GitOperations.js';
 import { GitHubClient } from '../../clients/GitHubClient.js';
 import { SupplementStore } from '../../supplement/SupplementStore.js';
 import {
@@ -40,12 +35,9 @@ import { GateActionError, type GateAction } from '../../orchestration/index.js';
 import { getNoteSyncEnabled, setNoteSyncOverride } from '../../notesync/NoteSyncSettings.js';
 import { getE2eEnabled, isE2eEnabledForIssue } from '../../e2e/E2eSettings.js';
 
-import type { WorkspaceConfig } from '../../workspace/WorkspaceConfig.js';
 import { logger as rootLogger } from '../../logger.js';
 import { t } from '../../i18n/index.js';
 import type { IssuePoller } from '../../poller/IssuePoller.js';
-import type { DistillScheduler } from '../../distill/DistillScheduler.js';
-import type { DiaryCollector } from '../../distill/DiaryCollector.js';
 import type { PreviewReaper } from '../../preview/PreviewReaper.js';
 import type { WorktreeReaper } from '../../workspace/WorktreeReaper.js';
 
@@ -90,11 +82,7 @@ export interface ApiRouterDeps {
   orchestrator: IssueService;
   github: GitHubClient;
   supplementStore: SupplementStore;
-  mainGit?: GitOperations;
   poller?: IssuePoller;
-  distillScheduler?: DistillScheduler;
-  diaryCollector?: DiaryCollector;
-  wsConfig?: WorkspaceConfig;
   previewReaper?: PreviewReaper;
   worktreeReaper?: WorktreeReaper;
 }
@@ -133,11 +121,9 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   const startingIssues = new Set<number>();
 
   router.get('/api/pipeline-meta', (_req: Request, res: Response) => {
-    const allDefs = [orch.getPipelineDef()];
-
-    const modes: Record<string, unknown> = {};
-    for (const def of allDefs) {
-      modes[def.mode] = {
+    const def = orch.getPipelineDef();
+    const modes = {
+      [def.mode]: {
         phases: def.phases.map((p) => ({ name: p.name, label: p.label, kind: p.kind })),
         artifacts: collectPipelineArtifacts(def).map((a) => ({
           filename: a.filename,
@@ -145,8 +131,8 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
           editable: a.editable,
         })),
         retryablePhases: getRetryablePhases(def),
-      };
-    }
+      },
+    };
 
     res.json({ modes });
   });
@@ -389,30 +375,12 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
   });
 
   router.put('/api/issues/:number/plans/:filename', (req: Request, res: Response) => {
-    const number = Number(req.params.number);
     const filename = req.params.filename;
     if (filename === ARTIFACTS.plan.filename) {
       res.status(403).json({ error: '计划由结构化版本生成，只能通过审核反馈重新规划' });
       return;
     }
-    const def = getIssuePipelineDef(number);
-    const editableFiles = collectPipelineArtifacts(def)
-      .filter((f) => f.editable)
-      .map((f) => f.filename);
-    if (!editableFiles.includes(filename)) {
-      res.status(400).json({ error: `File not editable. Allowed: ${editableFiles.join(', ')}` });
-      return;
-    }
-    const { content } = contentSchema.parse(req.body);
-    const planDir = resolveIssueArtifactsDir(number, tracker.store.dataDir);
-    const filePath = resolveIssueArtifactPath(number, filename, tracker.store.dataDir);
-    if (!fs.existsSync(planDir)) {
-      res.status(404).json({ error: 'Issue 产物目录不存在' });
-      return;
-    }
-    fs.writeFileSync(filePath, content, 'utf-8');
-    logger.info('Plan file updated', { number, filename });
-    res.json({ success: true, message: `Plan file ${filename} saved` });
+    res.status(400).json({ error: 'File not editable. Allowed: ' });
   });
 
   router.get('/api/issues/:number/graphs', async (req: Request, res: Response) => {
@@ -641,7 +609,7 @@ export function createApiRouter(deps: ApiRouterDeps): ReturnType<typeof Router> 
       res.status(404).json({ error: 'Issue not found' });
       return;
     }
-    res.json(loadReviewHistory(number, tracker));
+    res.json(record.run.reviewHistory ?? []);
   });
 
   /**
@@ -1007,11 +975,6 @@ function escapeHtml(text: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-/** 审核历史与工作目录是否存在无关，仅以聚合状态为准。 */
-function loadReviewHistory(number: number, tracker: IssueTracker) {
-  return tracker.get(number)?.run.reviewHistory ?? [];
 }
 
 async function readPlanFile(

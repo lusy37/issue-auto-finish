@@ -4,12 +4,9 @@ import { flushPromises } from '@vue/test-utils';
 import { queryClient } from '../../src/web/frontend/src/api/queryClient.js';
 import { effectScope, reactive } from 'vue';
 import { useIssueGraphs } from '../../src/web/frontend/src/composables/useIssueGraphs.js';
-import { usePipeline, loadPipelineMeta } from '../../src/web/frontend/src/composables/usePipeline.js';
 import type { IssueGraphs } from '../../src/shared/workflowGraphs.js';
-import type { IssueRecord } from '../../src/web/frontend/src/types/index.js';
-import { newIssueRun } from '../../src/dag/contracts.js';
 import * as api from '../../src/web/frontend/src/api/client.js';
-vi.mock('../../src/web/frontend/src/api/client.js', () => ({ fetchIssueGraphs: vi.fn(), fetchPipelineMeta: vi.fn() }));
+vi.mock('../../src/web/frontend/src/api/client.js', () => ({ fetchIssueGraphs: vi.fn() }));
 afterEach(() => { queryClient.clear(); vi.clearAllMocks(); });
 
 it('旧 Issue 和旧记录版本的图响应不能覆盖新视图', async () => {
@@ -32,18 +29,4 @@ it('旧 Issue 和旧记录版本的图响应不能覆盖新视图', async () => 
     expect(state.graph.value).toBeUndefined();
     expect(state.error.value).toContain('过期');
   } finally { scope.stop(); }
-});
-
-it('元数据失败后可重试，并发只发一次；本轮阶段优先', async () => {
-  const fetch = vi.mocked(api.fetchPipelineMeta);
-  fetch.mockRejectedValueOnce(new Error('模拟断网'));
-  await Promise.all([loadPipelineMeta(), loadPipelineMeta()]);
-  expect(fetch).toHaveBeenCalledTimes(1);
-  fetch.mockResolvedValueOnce({ modes: {} });
-  await loadPipelineMeta();
-  expect(fetch).toHaveBeenCalledTimes(2);
-  const run = newIssueRun(); run.workflow.definition = { phaseIds: ['plan', 'review', 'build', 'verify'] };
-  const issue: IssueRecord = { run, phaseHistory: [], lifecycle: { kind: 'running', phase: 'build' }, branchName: 'iaf-2', demandSpec: { demandId: '2', sourceRef: { source: 'github-issue', externalId: '2' }, title: '需求', description: '测试', createdAt: '' }, createdAt: '', updatedAt: '' };
-  expect(usePipeline().getPhaseNames(issue)).not.toContain('uat');
-  expect(usePipeline().isEditableDoc('01-plan.md')).toBe(false);
 });

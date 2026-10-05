@@ -9,11 +9,13 @@ import { createAnalyticsRouter } from './routes/analytics.js';
 import { createUatRouter } from './routes/uat.js';
 import type { AIRunner } from '../ai-runner/AIRunner.js';
 import type { KnowledgeStore } from '../knowledge/KnowledgeStore.js';
+import type { DistillScheduler } from '../distill/DistillScheduler.js';
 import type { DiaryStore } from '../distill/DiaryStore.js';
 export interface WebServerDeps extends ApiRouterDeps {
   aiRunner: AIRunner;
   knowledgeStore: KnowledgeStore;
   diaryStore: DiaryStore;
+  distillScheduler?: DistillScheduler;
 }
 export class WebServer {
   private app: express.Express;

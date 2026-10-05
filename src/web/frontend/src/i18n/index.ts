@@ -37,7 +37,3 @@ export const i18nPlugin = {
     app.config.globalProperties.$t = t;
   },
 };
-
-export function useI18n() {
-  return { t, locale, setLocale, getLocale };
-}

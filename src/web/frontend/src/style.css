@@ -66,12 +66,6 @@ select:focus-visible {
   padding: 19px 22px 16px;
   border-bottom: 1px solid var(--app-line);
 }
-.execution-eyebrow {
-  margin-bottom: 5px;
-  color: #537b80;
-  font-size: 10px;
-  letter-spacing: 0.15em;
-}
 .execution-head h3 {
   margin: 0;
   color: var(--app-text);
@@ -688,9 +682,6 @@ select:focus-visible {
 .prototype-search-input {
   width: 270px;
 }
-.prototype-kind-select {
-  width: 135px;
-}
 .prototype-table-result {
   margin-left: auto;
   font-size: 10px;
@@ -882,11 +873,6 @@ select:focus-visible {
   color: #778d96;
   font-size: 12px;
   line-height: 1.9;
-}
-.prototype-card-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 .prototype-empty-card {
   min-height: 360px;
@@ -1331,7 +1317,6 @@ select:focus-visible {
 }
 .prototype-detail-primary > .n-card,
 .prototype-detail-aside > .n-card,
-.prototype-detail-task-list,
 .prototype-log-surface,
 .prototype-verification-surface {
   border: 1px solid #dfe8eb;
@@ -1518,20 +1503,11 @@ select:focus-visible {
   gap: 9px;
   margin-top: 16px;
 }
-.prototype-detail-task-list {
-  margin-top: 20px;
-  padding: 18px 22px;
-}
 .prototype-detail-task-list > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
-}
-.prototype-detail-task-list h2 {
-  margin: 0;
-  color: #29444e;
-  font-size: 14px;
 }
 .prototype-detail-task-list header span {
   color: #8a9da4;
@@ -1647,10 +1623,6 @@ select:focus-visible {
 }
 .prototype-dependency-note svg {
   color: #6d9e97;
-}
-.prototype-action-list {
-  display: grid;
-  gap: 9px;
 }
 .prototype-log-surface,
 .prototype-verification-surface {
@@ -2191,8 +2163,7 @@ select:focus-visible {
   .prototype-table-search-row {
     flex-wrap: wrap;
   }
-  .prototype-search-input,
-  .prototype-kind-select {
+  .prototype-search-input {
     width: 100%;
   }
   .prototype-table-result {

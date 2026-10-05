@@ -7,7 +7,7 @@ import express from 'express';
 import { createApp } from '../../src/web/createApp.js';
 import http from 'node:http';
 import { createApiRouter } from '../../src/web/routes/api.js';
-import { createMockIssueTracker, createMockGitOperations, createTestConfig } from '../helpers/mock-factories.js';
+import { createMockIssueTracker, createTestConfig } from '../helpers/mock-factories.js';
 import { PLAN_MODE_PIPELINE } from '../../src/pipeline/PipelineMetadata.js';
 import { newIssueRun } from '../../src/dag/contracts.js';
 import type { IssueRecord } from '../../src/tracker/IssueRecord.js';
@@ -329,13 +329,13 @@ describe('API Routes', () => {
       expect((res.body as Record<string, unknown>).error).toContain('not editable');
     });
 
-    it('returns 400 when content field is missing', async () => {
+    it('计划文件始终拒绝编辑，包括缺少正文时', async () => {
       const res = await req('PUT', '/api/issues/42/plans/01-plan.md', { foo: 'bar' });
       expect(res.status).toBe(403);
       expect((res.body as Record<string, unknown>).error).toContain('重新规划');
     });
 
-    it('returns 404 when plan directory does not exist', async () => {
+    it('计划目录不存在时仍返回只读拒绝', async () => {
       const res = await req('PUT', '/api/issues/42/plans/01-plan.md', { content: 'test' });
       expect(res.status).toBe(403);
     });
@@ -345,7 +345,6 @@ describe('API Routes', () => {
 describe('API Routes — 聚合状态与数据目录中的展示内容', () => {
   const fbTracker = createMockIssueTracker();
   const fbConfig = createTestConfig();
-  const fbMockGit = createMockGitOperations();
   const fbMockAgentLogStore = { getLogs: vi.fn().mockReturnValue([]), startListening: vi.fn() };
   const fbMockPortAllocator = {
     getPortsForIssue: vi.fn().mockReturnValue(undefined),
@@ -372,7 +371,7 @@ describe('API Routes — 聚合状态与数据目录中的展示内容', () => {
 
   const fbApp = express();
   fbApp.use(express.json());
-  fbApp.use(createApiRouter({tracker: fbTracker as never,config: fbConfig,agentLogStore: fbMockAgentLogStore as never,orchestrator: fbMockOrchestrator as never,mainGit: fbMockGit as never} as never));
+  fbApp.use(createApiRouter({tracker: fbTracker as never,config: fbConfig,agentLogStore: fbMockAgentLogStore as never,orchestrator: fbMockOrchestrator as never} as never));
 
   let fbServer: http.Server;
   let fbBaseUrl: string;
@@ -396,7 +395,6 @@ describe('API Routes — 聚合状态与数据目录中的展示内容', () => {
   });
 
   beforeEach(() => {
-    fbMockGit.showFile.mockReset().mockResolvedValue(null);
     fbTracker.get.mockReset().mockReturnValue(undefined);
   });
 
@@ -427,19 +425,15 @@ describe('API Routes — 聚合状态与数据目录中的展示内容', () => {
     const record = createTestRecord({ branchName: 'feat/issue-42' });
     fbTracker.get.mockReturnValue(record);
     fbTracker.store.savePlan(42, JSON.parse(structuredPlanOutput('Plan Result：完整实施需求')));
-    fbMockGit.showFile.mockResolvedValue('伪造的旧副本');
 
     const res = await fbReq('GET', '/api/issues/42/plans/01-plan.md');
 
     expect(res.status).toBe(200);
     expect(res.body).toContain('Plan Result');
-    expect(fbMockGit.showFile).not.toHaveBeenCalled();
   });
 
   it('验证报告只从数据目录读取', async () => {
     fbTracker.get.mockReturnValue(createTestRecord());
-    fbMockGit.showFile.mockImplementation(async (_branch, filename) =>
-      filename.endsWith('/02-verify-report.md') ? '# 当前验证报告' : null);
     const reportDir = path.join(process.env.DATA_DIR!, 'issues', '42', 'artifacts');
     fs.mkdirSync(reportDir, { recursive: true });
     fs.writeFileSync(path.join(reportDir, '02-verify-report.md'), '# 当前验证报告');
@@ -448,10 +442,8 @@ describe('API Routes — 聚合状态与数据目录中的展示内容', () => {
     expect(res.body).toContain('当前验证报告');
   });
 
-  it('只有旧名称报告时，当前验证报告保持未生成状态', async () => {
+  it('当前验证报告未生成时返回 404', async () => {
     fbTracker.get.mockReturnValue(createTestRecord());
-    fbMockGit.showFile.mockImplementation(async (_branch, filename) =>
-      filename.endsWith('/04-verify-report.md') ? '# 其他报告' : null);
     const res = await fbReq('GET', '/api/issues/42/plans/02-verify-report.md');
     expect(res.status).toBe(404);
   });
@@ -461,9 +453,8 @@ describe('API Routes — 聚合状态与数据目录中的展示内容', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 404 when both worktree and git have no plan file', async () => {
+  it('Issue 不存在时返回 404', async () => {
     fbTracker.get.mockReturnValue(undefined);
-    fbMockGit.showFile.mockResolvedValue(null);
 
     const res = await fbReq('GET', '/api/issues/999/plans/01-plan.md');
 

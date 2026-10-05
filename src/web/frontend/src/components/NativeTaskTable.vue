@@ -4,10 +4,9 @@ import { NButton } from 'naive-ui/es/button';
 import { NDataTable, type DataTableColumns } from 'naive-ui/es/data-table';
 import { NEmpty } from 'naive-ui/es/empty';
 import { NInput } from 'naive-ui/es/input';
-import { NSelect } from 'naive-ui/es/select';
 import { NTab, NTabs } from 'naive-ui/es/tabs';
 import { NTag } from 'naive-ui/es/tag';
-import { ArrowUpRight, ListFilter, Search, X } from '@lucide/vue';
+import { ArrowUpRight, Search, X } from '@lucide/vue';
 import type { ExecutableTask, PhaseStatus } from '@/types';
 import { getTaskFilterOptions } from '@/composables/useTasks';
 import { isReviewWaiting } from '@/adapters/issueflowViewModel';
@@ -18,42 +17,30 @@ const props = defineProps<{ tasks: ExecutableTask[]; loading?: boolean; error?: 
 const emit = defineEmits<{ select: [number] }>();
 const filter = ref('all');
 const search = ref('');
-const kind = ref<string | null>(null);
 const page = ref(1);
 const pageSize = 8;
 const { stateLabel } = usePipeline();
-const kindOptions = [{ label: 'Issue', value: 'issue' }];
+
+function matchesTaskFilter(task: ExecutableTask, value: string): boolean {
+  if (value === 'all') return true;
+  if (value === 'review') return isReviewWaiting(task.lifecycle);
+  return value === task.stateCategory || value === task.lifecycle.kind;
+}
 
 const filters = computed(() =>
   getTaskFilterOptions().map((item) => ({
     ...item,
-    count:
-      item.value === 'all'
-        ? props.tasks.length
-        : props.tasks.filter(
-            (task) =>
-              item.value === 'review'
-                ? isReviewWaiting(task.lifecycle)
-                : item.value === task.stateCategory || item.value === task.lifecycle.kind,
-          ).length,
+    count: props.tasks.filter((task) => matchesTaskFilter(task, item.value)).length,
   })),
 );
+const searchText = computed(() => search.value.trim().toLowerCase());
 const rows = computed(() =>
-  props.tasks.filter((task) => {
-    const text = `${task.taskId} ${task.title} ${task.branchName ?? ''}`.toLowerCase();
-    const matchesFilter =
-      filter.value === 'all' ||
-      (filter.value === 'review'
-        ? isReviewWaiting(task.lifecycle)
-        : task.stateCategory === filter.value || task.lifecycle.kind === filter.value);
-    return (
-      matchesFilter &&
-      (!kind.value || task.kind === kind.value) &&
-      text.includes(search.value.trim().toLowerCase())
-    );
-  }),
+  props.tasks.filter((task) =>
+    matchesTaskFilter(task, filter.value) &&
+    `${task.taskId} ${task.title} ${task.branchName ?? ''}`.toLowerCase().includes(searchText.value),
+  ),
 );
-watch([filter, search, kind], () => {
+watch([filter, search], () => {
   page.value = 1;
 });
 
@@ -190,24 +177,13 @@ const columns: DataTableColumns<ExecutableTask> = [
       >
         <template #prefix><Search :size="16" /></template>
       </NInput>
-      <NSelect
-        v-model:value="kind"
-        :options="kindOptions"
-        clearable
-        placeholder="全部类型"
-        aria-label="任务类型"
-        class="prototype-kind-select"
-      >
-        <template #arrow><ListFilter :size="15" /></template>
-      </NSelect>
       <NButton
-        v-if="search || kind || filter !== 'all'"
+        v-if="search || filter !== 'all'"
         quaternary
         size="small"
         @click="
           filter = 'all';
           search = '';
-          kind = null;
         "
       >
         <template #icon><X :size="14" /></template>
@@ -254,7 +230,6 @@ const columns: DataTableColumns<ExecutableTask> = [
                 @click="
                   filter = 'all';
                   search = '';
-                  kind = null;
                 "
               >
                 清除筛选

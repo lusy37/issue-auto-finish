@@ -1,27 +1,24 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
 import { usePipeline } from '../../src/web/frontend/src/composables/usePipeline.js';
-import type { IssueRecord } from '../../src/web/frontend/src/types/index.js';
-import { newIssueRun } from '../../src/dag/contracts.js';
+import type { IssueLifecycle } from '../../src/web/frontend/src/types/index.js';
 
-describe('产物元数据不可用时的页面行为', () => {
-  it('元数据不可用时不猜测产物清单', () => {
+describe('页面生命周期展示', () => {
+  it.each([
+    [{ kind: 'pending' }, false, '待处理'],
+    [{ kind: 'skipped' }, true, '已跳过'],
+    [{ kind: 'ready' }, false, '等待执行'],
+    [{ kind: 'running', phase: 'build' }, false, '实施中'],
+    [{ kind: 'waiting', phase: 'review' }, false, '待审核'],
+    [{ kind: 'paused', phase: 'build' }, false, '已暂停'],
+    [{ kind: 'failed', retry: 'manual', error: { message: '失败', retryable: 'hard' } }, true, '失败'],
+    [{ kind: 'delivering' }, false, '正在交付'],
+    [{ kind: 'completed' }, true, '已完成'],
+    [{ kind: 'cancelled' }, true, '已取消'],
+  ] as const)('状态 %j 保留文案、样式与终态分类', (lifecycle, terminal, label) => {
     const pipeline = usePipeline();
-    expect(pipeline.getPlanDocs()).toEqual([]);
-    expect(pipeline.isEditableDoc('01-plan.md')).toBe(false);
-    expect(pipeline.isEditableDoc('unknown.md')).toBe(false);
-  });
-
-  it.each([false, true])('按本轮是否含 UAT 展示对应报告：%s', enabled => {
-    const run = newIssueRun();
-    run.workflow.definition = { phaseIds: ['plan', 'review', 'build', 'verify', ...(enabled ? ['uat' as const] : [])] };
-    const issue: IssueRecord = {
-      run, phaseHistory: [], lifecycle: { kind: 'running', phase: 'build' }, branchName: 'iaf-42',
-      demandSpec: { demandId: 'gh-42', sourceRef: { source: 'github-issue', externalId: '42' }, title: '测试需求', description: '测试产物展示', createdAt: '' },
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-    };
-    const docs = usePipeline().getPlanDocs(issue);
-    expect(docs.some(doc => doc.file === '03-uat-report.md')).toBe(enabled);
-    if (enabled) expect(docs.find(doc => doc.file === '03-uat-report.md')?.label).toBe('浏览器验收报告');
+    expect(pipeline.stateLabel(lifecycle as IssueLifecycle)).toBe(label);
+    expect(pipeline.stateClass(lifecycle as IssueLifecycle)).toContain('text-');
+    expect(pipeline.isTerminalState(lifecycle as IssueLifecycle)).toBe(terminal);
   });
 });

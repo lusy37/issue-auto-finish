@@ -1,18 +1,6 @@
 import { json } from './http';
-
-export type KnowledgeEntryType = 'project-meta' | 'custom' | 'diary' | 'memory' | 'agent-rule';
-
-export interface KnowledgeEntry {
-  id: string;
-  type: KnowledgeEntryType;
-  title: string;
-  content: string;
-  tags: string[];
-  createdAt: string;
-  updatedAt: string;
-  memory?: { confidence: number; evidence: string[] };
-  deprecated?: boolean;
-}
+import type { KnowledgeEntryType, KnowledgeEntry, ProjectProfile, DistillStatus, DiaryEntry } from '../../../../shared/knowledge.js';
+export type { KnowledgeEntryType, KnowledgeEntry, ProjectProfile, DistillStatus, DiaryEntry } from '../../../../shared/knowledge.js';
 
 export const knowledgeLabels: Record<KnowledgeEntryType, string> = {
   'project-meta': '项目分析',
@@ -21,46 +9,6 @@ export const knowledgeLabels: Record<KnowledgeEntryType, string> = {
   memory: '经验记忆',
   'agent-rule': 'Agent 规则',
 };
-
-export interface ProjectProfile {
-  description: string;
-  language: string;
-  frameworks: string[];
-  installCommand: string;
-  lintCommand: string;
-  buildCommand: string;
-  testCommand: string;
-  rules: string;
-}
-
-export interface DistillStatus {
-  enabled: boolean;
-  running: boolean;
-  diaryCount: number;
-  undistilledDiaryCount: number;
-  memoryCount: number;
-  ruleCount: number;
-  runs: Array<{
-    id: string;
-    startedAt: string;
-    finishedAt?: string;
-    status: 'running' | 'completed' | 'failed';
-    error?: string;
-  }>;
-}
-
-export interface DiaryEntry {
-  id: string;
-  issueIid: number;
-  issueTitle: string;
-  outcome: 'completed' | 'failed';
-  prUrl?: string;
-  artifactSummary?: string;
-  humanInterventions: Array<{ type: string; detail: string; timestamp: string }>;
-  distilled: boolean;
-  createdAt: string;
-  failure?: { failedAtPhase: string; error: string; attempts: number };
-}
 
 export async function fetchKnowledge(): Promise<KnowledgeEntry[]> {
   const result = await json<{ entries: KnowledgeEntry[] }>('/api/knowledge');

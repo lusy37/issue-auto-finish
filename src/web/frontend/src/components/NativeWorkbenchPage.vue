@@ -39,7 +39,7 @@ const systemStatus = ref<SystemStatus | null>(null);
 const route = ref(location.hash || '#/workbench');
 const mobileMenu = ref(false);
 const refreshBusy = ref(false);
-const { tasks, loading, error, refresh } = useTasks('issue');
+const { tasks, loading, error, refresh } = useTasks();
 const connectedState = useSSE(() => {});
 const connected = connectedState.connected;
 const page = computed(() => {

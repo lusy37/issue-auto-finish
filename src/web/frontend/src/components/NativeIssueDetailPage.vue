@@ -115,16 +115,7 @@ function setTab(value: string) {
     activeTab.value = value;
 }
 function issueAction(action: AllowedAction) {
-  const number = props.issueNumber;
-  if (action === 'start') return detail.doStartIssue(number, refreshIssues);
-  if (action === 'retry') return detail.doRetryIssue(number, refreshIssues);
-  if (action === 'abort') return detail.doAbortIssue(number, refreshIssues);
-  if (action === 'continue') return detail.doContinueIssue(number, refreshIssues);
-  if (action === 'redo-phase') return detail.doRedoPhase(number, refreshIssues);
-  if (action === 'stop-preview') return detail.doStopPreview(number, refreshIssues);
-  if (action === 'restart-preview') return detail.doRestartPreview(number, refreshIssues);
-  if (action === 'restart') return detail.doRestartIssue(number, refreshIssues);
-  return detail.doCancelIssue(number, refreshIssues);
+  return detail.executeAction(action, props.issueNumber, refreshIssues);
 }
 const { connected } = useSSE(() => {});
 watch(() => props.issueNumber, selectIssue, { immediate: true });
@@ -302,7 +293,6 @@ onUnmounted(() => logs.clear());
             :review-submitting="detail.reviewSubmitting.value"
             @approve="runAction(() => detail.doApprovePlan(props.issueNumber, refreshIssues))"
             @reject="submitPlanReject"
-            @skip="runAction(() => detail.doSkipReview(props.issueNumber, refreshIssues))"
           />
           <NativeLogPanel
             v-else-if="activeTab === 'logs'"

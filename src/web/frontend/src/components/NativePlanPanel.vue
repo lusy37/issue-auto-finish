@@ -18,7 +18,7 @@ const props = defineProps<{
   stateVersion?: number;
   reviewSubmitting: boolean;
 }>();
-const emit = defineEmits<{ approve: []; reject: [feedback: string]; skip: [] }>();
+const emit = defineEmits<{ approve: []; reject: [feedback: string] }>();
 const { graph, loading, error, refresh } = useIssueGraphs(props);
 const checked = ref(false);
 const showFeedback = ref(false);

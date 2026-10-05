@@ -1,3 +1,4 @@
+import { formatLifecycleLabel } from '../shared/runtime/lifecycle.js';
 import { t } from '../i18n/index.js';
 import type { IssueLifecycle } from '../tracker/IssueLifecycle.js';
 import type { PhaseStatus } from '../tracker/IssueRecord.js';
@@ -63,35 +64,12 @@ export function projectLifecycleAction(lifecycle: IssueLifecycle): DisplayAction
 }
 
 export function projectLifecycleLabel(lifecycle: IssueLifecycle): string {
-  if ('phase' in lifecycle && lifecycle.phase) {
-    const label = t(`pipeline.phase.${lifecycle.phase}`);
-    switch (lifecycle.kind) {
-      case 'running':
-        return t('state.phaseDoing', { label });
-      case 'waiting':
-        return t('state.phaseWaiting', { label });
-      case 'paused':
-        return t('state.paused');
-      case 'failed':
-        return t('state.failed');
-    }
-  }
-  switch (lifecycle.kind) {
-    case 'pending':
-      return t('state.pending');
-    case 'skipped':
-      return t('state.skipped');
-    case 'ready':
-      return t('state.branchCreated');
-    case 'delivering':
-      return '正在交付';
-    case 'completed':
-      return t('state.completed');
-    case 'cancelled':
-      return '已取消';
-    case 'failed':
-      return t('state.failed');
-  }
+  return formatLifecycleLabel(lifecycle, (key, params) => {
+    // 列表保留现有文案，语言选择仍由服务端控制。
+    if (key === 'state.delivering') return '正在交付';
+    if (key === 'state.cancelled') return '已取消';
+    return t(key === 'state.ready' ? 'state.branchCreated' : key, params);
+  }, 'pipeline.phase');
 }
 
 function allPending(def: PipelineDef): Record<string, PhaseStatus> {
