@@ -136,7 +136,7 @@ export class IssuePoller {
     try {
       logger.debug('Discovering new issues...');
       const issues = await this.github.listIssues('open', AUTO_FINISH_LABEL);
-      const newIssues = await this.filterNewIssues(issues);
+      const newIssues = issues.filter((issue) => this.passesBasicFilter(issue));
 
       // listIssues + 过滤成功才算「首次发现完成」：存量 issue 已被看到，标志可安全消耗。
       // 必须在用 isFirstDiscovery 计算 initialState 之后再置位。
@@ -258,12 +258,6 @@ export class IssuePoller {
   private async autoApproveByLabels(records: IssueRecord[], autoLabels: string[]): Promise<void> {
     for (const record of records) {
       try {
-        // 标签自动审核只作用于 review 阶段。
-        const lifecycle = record.lifecycle;
-        if (lifecycle.kind !== 'waiting' || lifecycle.phase !== 'review') {
-          continue;
-        }
-
         const issue = await this.github.getIssueDetail(getIssueNumber(record));
         const matched = issue.labels.filter((l) => autoLabels.includes(l));
         if (matched.length === 0) continue;
@@ -325,10 +319,6 @@ export class IssuePoller {
     } catch {
       return null;
     }
-  }
-
-  private async filterNewIssues(issues: GitHubIssue[]): Promise<GitHubIssue[]> {
-    return issues.filter((issue) => this.passesBasicFilter(issue));
   }
 
   private passesBasicFilter(issue: GitHubIssue): boolean {

@@ -4,26 +4,21 @@ import path from 'node:path';
 import fs from 'node:fs';
 import {
   resolveDataDir,
-  resolveLogsDir,
   ensureDir,
   getGlobalDir,
 } from '../../src/paths.js';
 
 describe('paths', () => {
   const originalDataDir = process.env.DATA_DIR;
-  const originalLogsDir = process.env.LOGS_DIR;
 
   beforeEach(() => {
     delete process.env.DATA_DIR;
-    delete process.env.LOGS_DIR;
   });
 
   afterEach(() => {
     // Restore
     if (originalDataDir !== undefined) process.env.DATA_DIR = originalDataDir;
     else delete process.env.DATA_DIR;
-    if (originalLogsDir !== undefined) process.env.LOGS_DIR = originalLogsDir;
-    else delete process.env.LOGS_DIR;
   });
 
   describe('resolveDataDir', () => {
@@ -43,20 +38,6 @@ describe('paths', () => {
 
         const result = resolveDataDir();
         expect(result).toMatch(/data$/);
-
-    });
-  });
-
-  describe('resolveLogsDir', () => {
-    it('respects LOGS_DIR environment variable', () => {
-      process.env.LOGS_DIR = '/tmp/custom-logs';
-      expect(resolveLogsDir()).toBe(path.resolve('/tmp/custom-logs'));
-    });
-
-    it('returns a path ending with /logs in source-code mode', () => {
-
-        const result = resolveLogsDir();
-        expect(result).toMatch(/logs$/);
 
     });
   });

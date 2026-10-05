@@ -231,11 +231,6 @@ export function extractEnvSubset(
 
 export type AIRunnerMode = string;
 
-function resolveAIBinary(_mode: AIRunnerMode, env: ParsedEnv): string {
-  // 配置层只解析当前执行器字段，不加载 SDK 或执行器实例。
-  return env.CODEX_BINARY || '';
-}
-
 // ---------------------------------------------------------------------------
 // Transform parsed env → nested Config
 // ---------------------------------------------------------------------------
@@ -263,7 +258,7 @@ export function transformEnvToConfig(env: ParsedEnv, dirname: string) {
     ai: {
       maxConcurrency: env.AI_MAX_CONCURRENCY,
       mode: aiMode,
-      binary: resolveAIBinary(aiMode, env),
+      binary: env.CODEX_BINARY || '',
       phaseTimeoutMs: env.AI_PHASE_TIMEOUT_MS,
       idleTimeoutMs: env.AI_IDLE_TIMEOUT_MS || undefined,
       timeoutGraceMs: env.PHASE_TIMEOUT_GRACE_MS,

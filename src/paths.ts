@@ -9,9 +9,6 @@ export function getGlobalDir(): string {
 export function resolveDataDir(): string {
   return path.resolve(process.env.DATA_DIR || path.join(getGlobalDir(), 'data'));
 }
-export function resolveLogsDir(): string {
-  return path.resolve(process.env.LOGS_DIR || path.join(getGlobalDir(), 'logs'));
-}
 export function ensureDir(dir: string): string {
   fs.mkdirSync(dir, { recursive: true });
   return dir;

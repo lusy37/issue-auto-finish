@@ -33,8 +33,6 @@ vi.mock('../../../src/phases/PhaseFactory.js', () => ({
 
 import {
   PLAN_MODE_PIPELINE,
-  getPhaseLabel,
-  getPlanFileLabel,
 } from '../../../src/pipeline/PipelineMetadata.js';
 
 describe('Pipeline Definitions', () => {
@@ -59,25 +57,4 @@ describe('Pipeline Definitions', () => {
     expect(artifacts).toMatchSnapshot();
   });
 
-  it('getPhaseLabel returns localized labels', () => {
-    const labels = PLAN_MODE_PIPELINE.phases.map(p => ({
-      name: p.name,
-      label: getPhaseLabel(p.name),
-    }));
-    expect(labels).toMatchSnapshot();
-  });
-
-  it('getPlanFileLabel returns localized labels', () => {
-    const filenames = [
-      '01-plan.md',
-      '02-verify-report.md',
-      'review-feedback.md',
-      'review-history.json',
-    ];
-    const labels = filenames.map(f => ({
-      filename: f,
-      label: getPlanFileLabel(f),
-    }));
-    expect(labels).toMatchSnapshot();
-  });
 });

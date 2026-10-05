@@ -6,7 +6,7 @@ import { MemoryDistiller } from '../../../src/distill/MemoryDistiller.js';
 import { DiaryStore } from '../../../src/distill/DiaryStore.js';
 import { VersionStore } from '../../../src/distill/VersionStore.js';
 import { KnowledgeStore } from '../../../src/knowledge/KnowledgeStore.js';
-import type { DiaryEntry } from '../../../src/distill/types.js';
+import type { DiaryEntry, MemoryEntry } from '../../../src/distill/types.js';
 import type { AIRunner } from '../../../src/ai-runner/AIRunner.js';
 
 function makeDiary(id: string, outcome: 'completed' | 'failed' = 'completed'): DiaryEntry {
@@ -145,6 +145,39 @@ describe('MemoryDistiller', () => {
     });
 
     await expect(distiller.distill()).rejects.toThrow('Memory distillation AI call failed');
+  });
+
+  it.each([true, false])('替代记忆保留关联、置信度与版本历史，旧条目存在=%s', async exists => {
+    const old: MemoryEntry = {
+      id: 'old-memory', theme: 'failure-pattern', title: '旧记忆', content: '旧经验',
+      evidence: ['old-diary'], confidence: 0.2, version: 3, promotedToRule: false,
+      createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+    };
+    if (exists) knowledgeStore.create({ id: old.id, type: 'memory', title: old.title, content: JSON.stringify(old) });
+    diaryStore.create(makeDiary('d1'));
+    const diaryIds = ['d1', 'd2', 'd3', 'd4', 'd5', 'd6'];
+    const distiller = new MemoryDistiller({
+      aiRunner: makeMockAIRunner(JSON.stringify({ actions: [{
+        type: 'SUPERSEDE', oldMemoryId: old.id, theme: 'failure-pattern',
+        title: '新记忆', content: '修订经验', diaryIds,
+      }] })),
+      diaryStore, knowledgeStore, versionStore, workDir: tmpDir,
+      aiPolicy: { timeoutMs: 10000 }, minDiariesForDistill: 1,
+    });
+    expect(await distiller.distill()).toEqual({ processedDiaries: 1, actions: 1 });
+    const created = knowledgeStore.getAllEntries().find(entry => entry.id !== old.id)!;
+    expect(JSON.parse(created.content)).toMatchObject({
+      supersedes: old.id, evidence: diaryIds, confidence: 1, version: 1,
+      promotedToRule: false, content: '修订经验',
+    });
+    expect(created.tags).toEqual(['failure-pattern', 'supersedes:old-memory']);
+    expect(versionStore.getByEntryId(created.id)).toEqual([expect.objectContaining({
+      version: 1, action: 'created', content: '修订经验', reason: 'Supersedes old-memory',
+    })]);
+    expect(versionStore.getByEntryId(old.id)).toEqual(exists ? [expect.objectContaining({
+      version: 3, action: 'superseded', content: '旧经验',
+    })] : []);
+    expect(knowledgeStore.get(old.id)?.content).toBe(exists ? JSON.stringify(old) : undefined);
   });
 
   it('marks diaries as distilled even with no actions', async () => {

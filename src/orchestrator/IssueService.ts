@@ -892,15 +892,7 @@ export class IssueService {
   ): Promise<PortPair | null> {
     try {
       this.emitProgress(issue.number, 'deploy', t('orchestrator.deployProgress'));
-      const ports = await this.portAllocator.allocate(issue.number);
-      wtCtx.ports = ports;
-
-      this.tracker.transaction(issue.number, (current) => {
-        current.ports = ports;
-        current.previewStartedAt = new Date().toISOString();
-      });
-
-      await this.devServerManager.startServers(wtCtx, ports, getIssueContext()?.signal);
+      const ports = await this.startPreviewWithResources(issue.number, wtCtx);
 
       const previewUrl = this.buildPreviewUrl(issue.number);
       if (previewUrl) {
@@ -931,7 +923,6 @@ export class IssueService {
         number: issue.number,
         error: (err as Error).message,
       });
-      this.portAllocator.release(issue.number);
       try {
         await this.github.createIssueNote(
           issue.number,
@@ -941,6 +932,30 @@ export class IssueService {
         /* ignore */
       }
       return null;
+    }
+  }
+
+  private async startPreviewWithResources(
+    issueIid: number,
+    wtCtx: WorktreeContext,
+  ): Promise<PortPair> {
+    try {
+      const ports = await this.portAllocator.allocate(issueIid);
+      wtCtx.ports = ports;
+      this.tracker.transaction(issueIid, (current) => {
+        current.ports = ports;
+        current.previewStartedAt = new Date().toISOString();
+      });
+      await this.devServerManager.startServers(wtCtx, ports, getIssueContext()?.signal);
+      return ports;
+    } catch (err) {
+      this.portAllocator.release(issueIid);
+      wtCtx.ports = undefined;
+      this.tracker.transaction(issueIid, (current) => {
+        current.ports = undefined;
+        current.previewStartedAt = undefined;
+      });
+      throw err;
     }
   }
 
@@ -1064,23 +1079,7 @@ export class IssueService {
 
     await this.stopPreviewServers(issueIid);
 
-    const ports = await this.portAllocator.allocate(issueIid);
-    wtCtx.ports = ports;
-
-    try {
-      this.tracker.transaction(issueIid, (current) => {
-        current.ports = ports;
-        current.previewStartedAt = new Date().toISOString();
-      });
-      await this.devServerManager.startServers(wtCtx, ports, getIssueContext()?.signal);
-    } catch (err) {
-      this.portAllocator.release(issueIid);
-      this.tracker.transaction(issueIid, (current) => {
-        current.ports = undefined;
-        current.previewStartedAt = undefined;
-      });
-      throw err;
-    }
+    await this.startPreviewWithResources(issueIid, wtCtx);
 
     const url = this.buildPreviewUrl(issueIid)!;
     logger.info('Preview restarted', { number: issueIid, url });

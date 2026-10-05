@@ -59,10 +59,6 @@ export class IssueTracker {
       throw new Error('任务尝试身份已失效');
   }
 
-  private getAllRecords(): IssueRecord[] {
-    return this.store.all();
-  }
-
   private pipelineFor(record: IssueRecord): PipelineDef {
     if (record.pipelineMode && record.pipelineMode !== this.pipelineDefinition.mode) {
       throw new Error(`任务流水线无效：${record.pipelineMode}`);
@@ -321,7 +317,7 @@ export class IssueTracker {
   }
 
   getDrivableIssues(maxRetries: number, stalledThresholdMs?: number): IssueRecord[] {
-    return this.getAllRecords().filter((record) => {
+    return this.store.all().filter((record) => {
       if (record.run.stopIntent || this.store.isBlocked(getIssueNumber(record))) return false;
       const lifecycle = record.lifecycle;
       const retryPhase = lifecycle.kind === 'failed' ? (lifecycle.phase ?? 'setup') : 'setup';
@@ -359,13 +355,13 @@ export class IssueTracker {
   }
 
   getAllActive(): IssueRecord[] {
-    return this.getAllRecords().filter(
+    return this.store.all().filter(
       (r) => !['completed', 'cancelled', 'skipped'].includes(r.lifecycle.kind),
     );
   }
 
   getAll(): IssueRecord[] {
-    return this.getAllRecords();
+    return this.store.all();
   }
 
   startSkipped(issueIid: number): boolean {
@@ -495,7 +491,7 @@ export class IssueTracker {
 
   recoverInterruptedIssues(): number {
     let count = 0;
-    for (const record of this.getAllRecords()) {
+    for (const record of this.store.all()) {
       // 等待审核也在启动后核对一次图，覆盖生命周期发布与中断落盘之间的退出窗口。
       const lifecycle = record.lifecycle;
       if (!['running', 'delivering', 'waiting'].includes(lifecycle.kind) && !record.run.stopIntent)
@@ -523,7 +519,7 @@ export class IssueTracker {
 
   /** 将所有 IssueRecord 投影为 ExecutableTask[] */
   toExecutableTasks(): ExecutableTask[] {
-    return this.getAllRecords().map((record) => {
+    return this.store.all().map((record) => {
       return issueToExecutableTask(record, this.pipelineFor(record));
     });
   }

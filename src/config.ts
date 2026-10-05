@@ -62,18 +62,3 @@ export function loadConfig() {
 export function resetDotenvCache(): void {
   _dotenvLoaded = false;
 }
-
-/**
- * Reload config from .env file.
- * Clears dotenv cache, removes stale IAF env vars from process.env,
- * then re-reads and re-parses everything.
- */
-export function reloadConfig() {
-  resetDotenvCache();
-  // Clear process.env of IAF-related keys so dotenv can overwrite them
-  const iafKeys = extractEnvSubset(process.env);
-  for (const key of Object.keys(iafKeys)) {
-    delete process.env[key];
-  }
-  return loadConfig();
-}

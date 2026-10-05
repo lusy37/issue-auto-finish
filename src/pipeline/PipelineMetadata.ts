@@ -1,4 +1,3 @@
-import { t } from '../i18n/index.js';
 import {
   getPlanModePhases,
   type PhaseSpec as ExecutionPhaseSpec,
@@ -29,11 +28,3 @@ export function buildPlanModePipeline(opts: { e2eEnabled: boolean }): PipelineDe
 }
 
 export const PLAN_MODE_PIPELINE = buildPlanModePipeline({ e2eEnabled: false });
-
-export function getPhaseLabel(phaseName: string): string {
-  return t(`pipeline.phase.${phaseName}`);
-}
-
-export function getPlanFileLabel(filename: string): string {
-  return t(`planFile.${filename}`);
-}

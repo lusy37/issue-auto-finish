@@ -109,11 +109,9 @@ export class MemoryDistiller {
     }
 
     // 执行 actions
-    let actionCount = 0;
     for (const action of actions) {
       try {
         this.executeAction(action, existingMemories);
-        actionCount++;
       } catch (err) {
         logger.warn('Failed to execute distill action', {
           action: action.type,
@@ -128,10 +126,10 @@ export class MemoryDistiller {
 
     logger.info('Memory distillation complete', {
       processedDiaries: undistilled.length,
-      actions: actionCount,
+      actions: actions.length,
     });
 
-    return { processedDiaries: undistilled.length, actions: actionCount };
+    return { processedDiaries: undistilled.length, actions: actions.length };
   }
 
   /** 从 KnowledgeStore 加载现有 memory 条目 */
@@ -167,13 +165,14 @@ export class MemoryDistiller {
       case 'SUPERSEDE':
         this.supersedeMemory(action, existingMemories);
         break;
-      default:
-        throw new Error('不支持的蒸馏操作类型');
     }
   }
 
   /** 创建新 memory */
-  private createMemory(action: Extract<MemoryDistillAction, { type: 'CREATE' }>): void {
+  private createMemory(
+    action: Extract<MemoryDistillAction, { type: 'CREATE' | 'SUPERSEDE' }>,
+    supersedes?: string,
+  ): MemoryEntry {
     const memoryEntry: MemoryEntry = {
       id: randomUUID(),
       theme: action.theme,
@@ -182,6 +181,7 @@ export class MemoryDistiller {
       evidence: action.diaryIds,
       confidence: Math.min(1, action.diaryIds.length * 0.2),
       version: 1,
+      ...(supersedes ? { supersedes } : {}),
       promotedToRule: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -192,7 +192,7 @@ export class MemoryDistiller {
       type: 'memory',
       title: action.title,
       content: JSON.stringify(memoryEntry),
-      tags: [action.theme],
+      tags: supersedes ? [action.theme, 'supersedes:' + supersedes] : [action.theme],
     });
 
     this.versionStore.append({
@@ -200,14 +200,18 @@ export class MemoryDistiller {
       version: 1,
       content: action.content,
       action: 'created',
+      ...(supersedes ? { reason: `Supersedes ${supersedes}` } : {}),
       timestamp: new Date().toISOString(),
     });
 
-    logger.info('Created new memory', {
-      id: memoryEntry.id,
-      theme: action.theme,
-      title: action.title,
-    });
+    if (!supersedes) {
+      logger.info('Created new memory', {
+        id: memoryEntry.id,
+        theme: action.theme,
+        title: action.title,
+      });
+    }
+    return memoryEntry;
   }
 
   /** 合并新证据到已有 memory */
@@ -264,36 +268,7 @@ export class MemoryDistiller {
     }
 
     // 创建新 memory
-    const newMemory: MemoryEntry = {
-      id: randomUUID(),
-      theme: action.theme,
-      title: action.title,
-      content: action.content,
-      evidence: action.diaryIds,
-      confidence: Math.min(1, action.diaryIds.length * 0.2),
-      version: 1,
-      supersedes: action.oldMemoryId,
-      promotedToRule: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    this.knowledgeStore.create({
-      id: newMemory.id,
-      type: 'memory',
-      title: action.title,
-      content: JSON.stringify(newMemory),
-      tags: [action.theme, 'supersedes:' + action.oldMemoryId],
-    });
-
-    this.versionStore.append({
-      entryId: newMemory.id,
-      version: 1,
-      content: action.content,
-      action: 'created',
-      reason: `Supersedes ${action.oldMemoryId}`,
-      timestamp: new Date().toISOString(),
-    });
+    const newMemory = this.createMemory(action, action.oldMemoryId);
 
     logger.info('Superseded memory', {
       oldId: action.oldMemoryId,

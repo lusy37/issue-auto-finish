@@ -101,15 +101,13 @@ export function loadKnowledge(explicitPath?: string): ProjectKnowledge | null {
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
     const parsed = knowledgeSchema.parse(JSON.parse(raw)) as ProjectKnowledge;
-    if (parsed.version !== 1) throw new Error('不支持的项目知识格式，只支持当前 version=1');
-    const merged = parsed;
     activeSource = source;
-    _cachedKnowledge = merged;
+    _cachedKnowledge = parsed;
     logger.info('Knowledge loaded', {
       path: filePath,
-      version: merged.version,
+      version: parsed.version,
     });
-    return merged;
+    return parsed;
   } catch (err) {
     if (
       (err as NodeJS.ErrnoException).code === 'ENOENT' &&

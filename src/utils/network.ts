@@ -11,11 +11,3 @@ export function getLocalIP(): string {
   }
   return 'localhost';
 }
-
-/** 将 0.0.0.0 / 127.0.0.1 / localhost 替换为真实 IP，用于面向用户展示的 URL */
-export function resolveDisplayHost(host: string): string {
-  if (host === '0.0.0.0' || host === '127.0.0.1' || host === 'localhost') {
-    return getLocalIP();
-  }
-  return host;
-}

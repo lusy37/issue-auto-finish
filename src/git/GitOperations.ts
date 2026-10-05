@@ -162,12 +162,7 @@ export class GitOperations {
   }
 
   async branchExists(name: string): Promise<boolean> {
-    try {
-      await this.exec(['rev-parse', '--verify', name]);
-      return true;
-    } catch {
-      return false;
-    }
+    return this.refExists(name);
   }
 
   async refExists(ref: string): Promise<boolean> {
@@ -295,28 +290,22 @@ export class GitOperations {
   }
 
   async rebase(targetRef: string): Promise<{ success: boolean; conflictFiles: string[] }> {
+    return this.executeRebase(['rebase', targetRef]);
+  }
+
+  async rebaseContinue(): Promise<{ done: boolean; conflictFiles: string[] }> {
+    const { success, conflictFiles } = await this.executeRebase(['-c', 'core.editor=true', 'rebase', '--continue']);
+    return { done: success, conflictFiles };
+  }
+
+  private async executeRebase(args: string[]): Promise<{ success: boolean; conflictFiles: string[] }> {
     try {
-      await this.exec(['rebase', targetRef]);
+      await this.exec(args);
       return { success: true, conflictFiles: [] };
     } catch (err) {
       const msg = (err as Error).message || '';
       if (msg.includes('CONFLICT') || msg.includes('could not apply')) {
-        const conflictFiles = await this.getConflictFiles();
-        return { success: false, conflictFiles };
-      }
-      throw err;
-    }
-  }
-
-  async rebaseContinue(): Promise<{ done: boolean; conflictFiles: string[] }> {
-    try {
-      await this.exec(['-c', 'core.editor=true', 'rebase', '--continue']);
-      return { done: true, conflictFiles: [] };
-    } catch (err) {
-      const msg = (err as Error).message || '';
-      if (msg.includes('CONFLICT') || msg.includes('could not apply')) {
-        const conflictFiles = await this.getConflictFiles();
-        return { done: false, conflictFiles };
+        return { success: false, conflictFiles: await this.getConflictFiles() };
       }
       throw err;
     }

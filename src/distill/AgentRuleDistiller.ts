@@ -109,11 +109,9 @@ export class AgentRuleDistiller {
     }
 
     // 执行 actions
-    let actionCount = 0;
     for (const action of actions) {
       try {
         this.executeAction(action, existingRules);
-        actionCount++;
       } catch (err) {
         logger.warn('Failed to execute rule distill action', {
           action: action.type,
@@ -125,10 +123,10 @@ export class AgentRuleDistiller {
 
     logger.info('Rule distillation complete', {
       processedMemories: matureMemories.length,
-      actions: actionCount,
+      actions: actions.length,
     });
 
-    return { processedMemories: matureMemories.length, actions: actionCount };
+    return { processedMemories: matureMemories.length, actions: actions.length };
   }
 
   /** 解析 AI 输出 */
@@ -156,10 +154,6 @@ export class AgentRuleDistiller {
       case 'DEPRECATE':
         this.deprecateRule(action, existingRules);
         break;
-      default:
-        logger.warn('Unknown rule distill action type', {
-          type: (action as { type: string }).type,
-        });
     }
   }
 
