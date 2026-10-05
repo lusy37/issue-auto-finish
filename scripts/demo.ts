@@ -11,6 +11,7 @@ import type {
   GitHubNote,
 } from "../src/clients/GitHubClient.js";
 import { main } from "../src/index.js";
+import { VERIFY_AGENT_SCHEMA_VERSION, type VerifyAgentResult } from "../src/verify/VerifyResultCodec.js";
 
 /** 可重复操作的本地演示：平台和 AI 使用固定响应，Git、状态机、浏览器验收均真实执行。 */
 const root = path.resolve(process.env.IAF_DEMO_DIR || ".iaf-mini/demo-langgraph-v6");
@@ -366,9 +367,10 @@ const runner: AIRunner = {
           },
         ],
       });
-    } else if (options.mode === "plan")
+    } else if (options.phaseName === "plan") {
+      // plan 和 verify 都使用只读模式，演示响应按实际阶段区分。
       output = JSON.stringify({ title: '实现演示页面', description: plan + (options.prompt.includes('反馈') ? '\n已补充边界条件与错误处理。' : ''), acceptanceCriteria: ['标题展示修复完成，浏览器验收通过'], tasks: [{ id: 'page', title: '实现页面', instructions: '实现 index.html 页面和说明，覆盖错误处理', acceptanceCriteria: ['浏览器可访问'], dependsOn: [] }] });
-    else {
+    } else {
       const number = options.identity?.issueNumber;
       if (options.phaseName === "build") {
         const html = path.join(options.workDir, "index.html");
@@ -382,7 +384,21 @@ const runner: AIRunner = {
         const ok = fs
           .readFileSync(path.join(options.workDir, "index.html"), "utf8")
           .includes("修复完成");
-        output = `# 验证报告\n\n**Lint 结果**: 通过\n**Build 结果**: 通过\n**Test 结果**: ${ok ? "通过" : "失败"}\n\n## 结果\n${ok ? "标题符合验收标准。" : "页面标题不符合验收标准，需要改为修复完成。"}\n`;
+        const check = (name: string, passed: boolean) => ({
+          status: passed ? "passed" as const : "failed" as const,
+          command: `demo:${name}（固定模拟）`,
+          exitCode: passed ? 0 : 1,
+          summary: passed ? "模拟检查通过" : "页面标题不符合验收标准，需要改为修复完成。",
+          diagnostics: passed ? [] : ["页面标题仍为待修复"],
+        });
+        const result: VerifyAgentResult = {
+          schemaVersion: VERIFY_AGENT_SCHEMA_VERSION,
+          phase: "verify",
+          checks: { lint: check("lint", true), build: check("build", true), test: check("test", ok) },
+          summary: ok ? "演示验证通过" : "演示验证失败，需要集成修复",
+          reportMarkdown: `# 演示验证报告\n\nLint、Build 使用固定模拟响应；Test 检查演示页面标题。\n\n结果：${ok ? "通过，标题符合验收标准。" : "失败，页面标题需要改为修复完成。"}\n`,
+        };
+        output = JSON.stringify(result);
       } else throw new Error(`演示执行器不支持此调用：${options.phaseName}`);
     }
     options.onStreamEvent?.({
