@@ -5,8 +5,10 @@
 - 核心阶段为 plan、review、build、verify、uat，成功后执行交付和经验采集。
 - `orchestration` 负责状态、意图和纯状态转换；`orchestrator` 负责调用和副作用，两者均保留。
 - 计划阶段只读，服务端持久化完整计划。审核驳回必须携带上次计划与反馈。
+- verify 的 AI 保持只读；工作台运行本轮 lint/build/test，允许被忽略的缓存和构建产物写入，校验待交付文件与 Git 状态未变。真实退出码决定结论，不复用旧验证会话。
 - Codex 通过官方 SDK 执行，禁止重建 CLI 参数和 JSONL 解析层；其他子进程使用 `src/utils/process.ts`；Windows 的 `.cmd`、空格路径、超时取消统一处理。
 - UAT 必须根据本次 Playwright 退出码和有效报告判定，不能接受模型文字声明或旧报告。
+- UAT 准备使用 workspace-write，仅额外授权服务端生成的当前 Issue 的 issues/<编号>/uat 目录；构建收尾和启动 Playwright 前共用准备文件校验，缺失或无效时按环境错误停止，不消耗业务修复轮次。视觉复核仍只读。
 - 数据只写 `.iaf-mini/` 或显式配置的新目录，禁止读取、修改原 `data/` 作为运行数据。
 - 不引入多租户、多仓调度、自动发布、远程知识同步。
 - GitHub REST API 已接入。自动回归使用模拟平台；本地演示代码在 `scripts/demo.ts`，不参与真实执行器选择。

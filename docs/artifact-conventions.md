@@ -7,8 +7,8 @@
 | 标识 | 文件名 | 用途与事实来源 |
 | --- | --- | --- |
 | plan | `01-plan.md` | 实施计划的只读展示；真实运行读取不可变 `plans/<revision>.json` 并渲染 |
-| verifyReport | `02-verify-report.md` | 本次 Verify JSON 中的 `reportMarkdown` 展示副本，由服务端在契约校验通过后保存 |
-| uatReport | `03-uat-report.md` | 浏览器验收报告，由服务端根据本次 Playwright 结果生成 |
+| verifyReport | `02-verify-report.md` | 工作台保存本轮真实命令凭证，AI 分析校验通过后追加解释；报告文字不能作为通过凭证 |
+| uatReport | `03-uat-report.md` | 浏览器验收报告，由服务端根据准备检查或本次 Playwright 结果生成；检查未通过时明确说明未启动验收 |
 | reviewFeedback | `review-feedback.md` | 审核反馈展示，从聚合记录的 reviewHistory 渲染 |
 | reviewHistory | `review-history.json` | 审核历史展示，读取同一聚合记录，保留完整计划快照 |
 | issueMeta | `issue-meta.json` | Issue 元信息，非阶段发布文档 |
@@ -16,9 +16,11 @@
 
 产物物理目录为 `DATA_DIR/issues/<编号>/artifacts/`。使用 [ArtifactPaths.ts](../src/persistence/ArtifactPaths.ts) 解析目录与文件路径；读写跟随当前 Issue 存储实例的数据目录，不从 worktree 路径推导。显式数据目录可以包含中文和空格。
 
+视觉用例清单另存于 `DATA_DIR/issues/<编号>/uat/visual-cases.json`，记录当前批准计划的场景、必需视口和验收引用，属于运行数据而非阶段产物或通过凭证。UAT 准备的 agent 调用仅额外授权该文件的父目录，服务端拒绝链接目录；构建收尾与验收启动前复用同一文件校验。关闭视觉复核时不要求清单，也不授予额外目录权限。
+
 [PlanPersistence](../src/persistence/PlanPersistence.ts) 的 `planDir` 表示产物目录，`baseDir` 表示项目执行工作目录。`artifactPath(filename)` 只接受单个文件名。真实运行构造 PlanPersistence 时传入 tracker 和同一 dataDir。
 
-计划和审核历史的权威内容分别在不可变计划文件和 Issue 聚合记录中。Verify 的权威判定来自本次 Agent 返回的 `iaf-mini/verify/v1` JSON，服务端只依据 Lint、Build、Test 三项结构化结果推进状态；Markdown 文件只用于前端展示。即使工作树不存在，API 仍可生成展示内容；不读取审核历史或反馈的文件副本作为后备。阶段发布直接接收产物元数据，无需构造阶段执行器。UAT 仍依据本次退出码和有效报告，Markdown 文件不是通过凭证。
+计划和审核历史的权威内容分别在不可变计划文件和 Issue 聚合记录中。Verify 的权威判定来自工作台本轮受管理进程执行 Lint、Build、Test 的真实退出码，三项都为 0 才能通过。只读 Agent 返回的 `iaf-mini/verify/v1` JSON 必须与本轮命令、退出码、状态一致，服务端替换检查内容为机器凭证后推进状态；Markdown 文件只用于前端展示。即使工作树不存在，API 仍可生成展示内容；不读取审核历史或反馈的文件副本作为后备。阶段发布直接接收产物元数据，无需构造阶段执行器。UAT 仍依据本次退出码和有效报告，Markdown 文件不是通过凭证。
 
 页面元数据不可用时，使用共享产物定义生成只读列表，并按本轮阶段定义决定是否展示 UAT 报告。国际化文案由各语言字典提供。
 
