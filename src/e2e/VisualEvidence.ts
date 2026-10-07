@@ -63,7 +63,8 @@ export function readVisualCases(
 
   const ids = new Set<string>();
   for (const item of parsed.cases) {
-    if (!ids.add(item.id)) throw new Error(`视觉用例 ID 重复：${item.id}`);
+    if (ids.has(item.id)) throw new Error(`视觉用例 ID 重复：${item.id}`);
+    ids.add(item.id);
     for (const ref of item.acceptanceRefs) {
       if (!acceptanceRefs.has(ref)) {
         throw new Error(`视觉用例引用未知验收条目：${ref}`);
@@ -214,9 +215,10 @@ export function validateEvidenceCoverage(
   const combinations = new Set<string>();
 
   for (const shot of evidence) {
-    if (!ids.add(shot.id)) {
+    if (ids.has(shot.id)) {
       gaps.push(gap(`截图 ID 重复：${shot.id}`, 'incomplete-agent-output'));
     }
+    ids.add(shot.id);
     const item = caseMap.get(shot.caseId);
     if (!item) {
       gaps.push(gap(`截图引用未知视觉用例：${shot.caseId}`, 'missing-case'));
@@ -246,7 +248,7 @@ export function validateEvidenceCoverage(
       ));
     }
     const combination = `${shot.caseId}@${shot.viewport.width}x${shot.viewport.height}`;
-    if (!combinations.add(combination)) {
+    if (combinations.has(combination)) {
       gaps.push(gap(
         `截图场景与视口重复：${combination}`,
         'incomplete-agent-output',
@@ -255,6 +257,7 @@ export function validateEvidenceCoverage(
         [shot.id],
       ));
     }
+    combinations.add(combination);
   }
 
   for (const item of cases) {

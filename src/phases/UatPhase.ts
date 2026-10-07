@@ -6,13 +6,12 @@ import { decideUatOutcome, resolveVisualGaps } from '../e2e/UatOutcome.js';
 import type { PhaseContext } from './BasePhase.js';
 import type { PhaseCallbacks } from './PhaseCallbacks.js';
 import type { PhaseResult } from '../orchestration/PhaseResult.js';
-import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { executeUat } from '../e2e/PlaywrightRunner.js';
 import { UatResultStore } from '../e2e/UatResultStore.js';
 import { VisualReviewRunner } from '../e2e/VisualReviewRunner.js';
-import { readVisualCases, visualCasesPath } from '../e2e/VisualEvidence.js';
+import { validateUatPreparation } from '../e2e/UatPreparation.js';
 import { getIssueContext } from '../context/IssueContext.js';
 import { ARTIFACTS, getPhaseArtifacts } from '../shared/runtime/artifacts.js';
 import type {
@@ -73,16 +72,6 @@ export class UatPhase {
   async run(ctx: PhaseContext, callbacks?: PhaseCallbacks): Promise<PhaseResult> {
     const number = Number(ctx.demand.sourceRef.displayId);
     const workDir = ctx.workDir || this.plan.baseDir;
-    const configPath = path.resolve(workDir, this.config.e2e.configFile);
-    if (!fs.existsSync(configPath)) {
-      return {
-        kind: 'failed',
-        error: {
-          message: '构建收尾未生成 Playwright 配置，请人工检查环境',
-          retryable: 'hard-no-auto',
-        },
-      };
-    }
     const tracker = this.tracker;
     const run = tracker.get(number)?.run;
     if (!run?.candidateCommit || !run.planDigest || !run.dispatchId) {
@@ -123,6 +112,29 @@ export class UatPhase {
       };
     });
     const issueSignal = getIssueContext()?.signal;
+    try {
+      validateUatPreparation({
+        workDir, dataDir: this.plan.dataDirectory, issueIid: number,
+        plan: tracker.store.readPlan(number, run.planRevision, run.planDigest),
+        e2e: this.config.e2e,
+      });
+    } catch (error) {
+      const message = (error as Error).message;
+      const visual = createVisualReview(
+        'not-run', '准备检查未通过，未启动 Playwright 或视觉复核',
+        'uat-preparation-invalid', [], run.uatReviewRounds + 1, policy.maxReviewRounds ?? 1,
+      );
+      summary = store.finalize({ ...summary, failureKind: 'environment', error: message }, visual);
+      store.writeSummary(summary);
+      store.writeDisplayCopies(
+        summary, (filename, content) => this.plan.writeFile(filename, content),
+      );
+      tracker.transaction(number, (record) => {
+        if (record.run.uatExecution?.runId !== runId) throw new Error('UAT 执行身份已失效');
+        record.run.uatExecution.status = summary.status;
+      });
+      return { kind: 'failed', error: { message, retryable: 'hard-no-auto' } };
+    }
     const outputDir = store.runDir(runId);
     const machine = await executeUat({
       issueIid: number, runId, dataDir: this.plan.dataDirectory, outputDir, signal: issueSignal,
@@ -172,22 +184,15 @@ export class UatPhase {
       );
     } else {
       let cases;
-      const acceptance = new Map<string, string>();
+      let acceptance = new Map<string, string>();
       try {
-        const plan = tracker.store.readPlan(number, run.planRevision, run.planDigest);
-        plan.acceptanceCriteria.forEach((item, index) => {
-          acceptance.set(`plan:${index}`, item);
+        const prepared = validateUatPreparation({
+          workDir, dataDir: this.plan.dataDirectory, issueIid: number,
+          plan: tracker.store.readPlan(number, run.planRevision, run.planDigest),
+          e2e: this.config.e2e,
         });
-        for (const task of plan.tasks) {
-          task.acceptanceCriteria.forEach((item, index) => {
-            acceptance.set(`task:${task.id}:${index}`, item);
-          });
-        }
-        cases = readVisualCases(
-          visualCasesPath(this.plan.dataDirectory, number),
-          execution.planDigest,
-          new Set(acceptance.keys()),
-        );
+        acceptance = prepared.acceptance;
+        cases = prepared.cases;
       } catch (error) {
         const gap: VisualCoverageGap = {
           description: (error as Error).message,

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { VISUAL_REVIEW_OUTPUT_SCHEMA, VisualReviewRunner } from '../../src/e2e/VisualReviewRunner.js';
-import { collectScreenshotEvidence, visualCasesPath } from '../../src/e2e/VisualEvidence.js';
+import { collectScreenshotEvidence, validateEvidenceCoverage, visualCasesPath } from '../../src/e2e/VisualEvidence.js';
 import type { AIRunner } from '../../src/ai-runner/AIRunner.js';
 import type { ScreenshotEvidence } from '../../src/shared/workbench.js';
 
@@ -66,6 +66,15 @@ describe('视觉复核运行器', () => {
 
   it('视觉用例清单按 Issue 保存在工作台数据目录', () => {
     expect(visualCasesPath('E:/runtime', 20)).toBe(path.join('E:/runtime', 'issues', '20', 'uat', 'visual-cases.json'));
+  });
+
+  it('重复截图 ID 和场景视口不能作为完整视觉证据', () => {
+    const { evidence } = fixture();
+    const cases = [{ id: 'login-desktop', sceneId: 'login', acceptanceRefs: ['task:login:0'],
+      viewports: [{ width: 1440, height: 900 }], expectedState: '登录表单可见' }];
+    const gaps = validateEvidenceCoverage(cases, [evidence[0], { ...evidence[0] }], 12);
+    expect(gaps.map(item => item.description)).toContain('截图 ID 重复：shot-001');
+    expect(gaps.some(item => item.description.startsWith('截图场景与视口重复'))).toBe(true);
   });
 
   it('只把服务端选定图片传给 AIRunner，并把 clear 聚合为通过', async () => {

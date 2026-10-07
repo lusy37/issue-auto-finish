@@ -14,6 +14,10 @@ beforeEach(() => {
 process.once('message', ({options}) => {
   fs.appendFileSync(options.workDir + '/started', options.prompt + '\\n');
   if (options.prompt === 'wait') { setInterval(() => {}, 1000); return; }
+  if (options.prompt === 'inspect-directories') {
+    process.send({type:'result',result:{success:true,output:JSON.stringify(options.additionalDirectories),exitCode:0}});
+    process.disconnect(); return;
+  }
   process.send({type:'result',result:{success:true,output:'模拟 SDK 结果',exitCode:0}});
   setTimeout(() => process.disconnect(), 250);
 });`);
@@ -34,6 +38,15 @@ class EnvironmentWorker extends ManagedCodexRunner {
   inspectEnvironment() { return this.codexEnvironment(); }
 }
 describe('受管理 worker 生命周期（模拟 IPC）', () => {
+  it('额外写目录通过 IPC 完整传递，不受回调序列化影响', async () => {
+    const additionalDirectories = [path.join(directory, 'runtime', 'issues', '1', 'uat')];
+    const result = await new TestWorker().run({
+      workDir: directory, prompt: 'inspect-directories', timeoutMs: 5000,
+      mode: 'agent', purpose: 'uat-prepare', additionalDirectories, onStreamEvent: () => {},
+    });
+    expect(result.success).toBe(true);
+    expect(JSON.parse(result.output)).toEqual(additionalDirectories);
+  });
   it('未设置 CODEX_HOME 时不注入独立配置目录', () => {
     const previous = {
       CODEX_HOME: process.env.CODEX_HOME,

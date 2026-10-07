@@ -1,7 +1,7 @@
 import { phaseCallId } from '../orchestration/ExecutionIds.js';
 import { buildCallOptions, configuredCallPolicy } from '../ai-runner/CallPolicy.js';
-import { integrationRepairPrompt, uatPreparationPrompt, visualRepairPrompt } from '../prompts/taskExecution.js';
-import { readVisualCasesManifest, visualCasesPath } from '../e2e/VisualEvidence.js';
+import { integrationRepairPrompt, visualRepairPrompt } from '../prompts/taskExecution.js';
+import { prepareUat, UatPreparationError } from '../e2e/UatPreparation.js';
 import {
   parseVisualRepairDecision,
   VISUAL_REPAIR_OUTPUT_SCHEMA,
@@ -82,10 +82,6 @@ function validateVisualRepairDecision(
     if (!passedTests.has(ref.testId))
       throw new Error(`本轮 Playwright 报告没有确认测试通过：${ref.testId}`);
   }
-}
-
-function readVisualCasesDigest(file: string): string | undefined {
-  return readVisualCasesManifest(file)?.planDigest;
 }
 
 /**
@@ -237,33 +233,19 @@ export class DagPhaseRunner {
 
         signal.throwIfAborted();
 
-        // 2.3 E2E 准备：若未配置浏览器测试文件，则由 AI 生成最小准备内容
-        const e2eConfigPath = path.resolve(context.workDir, config.e2e.configFile);
-        const plan = tracker.store.readPlan(number, state().planRevision);
-        const runtimeVisualCasesPath = visualCasesPath(tracker.store.dataDir, number);
-        const visualCasesDigest = readVisualCasesDigest(runtimeVisualCasesPath);
-        if (
-          isE2eEnabledForIssue(number, tracker, config) &&
-          (!fs.existsSync(e2eConfigPath)
-            || (config.e2e.visualReviewEnabled && visualCasesDigest !== plan.digest))
-        ) {
-          fs.mkdirSync(path.dirname(runtimeVisualCasesPath), { recursive: true });
-          const prepared = await runner.run({
+        // 2.3 E2E 准备：只有本轮计划对应的配置与清单实际有效，才形成候选提交。
+        if (isE2eEnabledForIssue(number, tracker, config)) {
+          await prepareUat({
+            runner,
             workDir: context.workDir,
-            ...buildCallOptions(configuredCallPolicy(config.ai), 'uat-prepare'),
-            prompt: uatPreparationPrompt(
-              ctx.demand,
-              plan,
-              config.e2e.configFile,
-              runtimeVisualCasesPath,
-            ),
+            dataDir: tracker.store.dataDir,
+            issueIid: number,
+            plan: tracker.store.readPlan(number, state().planRevision, state().planDigest),
+            e2e: config.e2e,
+            ai: config.ai,
+            demand: ctx.demand,
             ...callbacks,
           });
-          if (!prepared.success)
-            return {
-              kind: 'failed',
-              error: { message: prepared.errorMessage || '浏览器测试准备失败', retryable: 'hard' },
-            };
         }
 
         // 2.4 lockfile 变更检测：避免依赖安装不一致导致后续验收失真
@@ -392,7 +374,8 @@ export class DagPhaseRunner {
         error: {
           message: (error as Error).message,
           retryable:
-            spec.id === 'build' && !(error instanceof RecoveryError) ? 'hard' : 'hard-no-auto',
+            spec.id === 'build' && !(error instanceof RecoveryError) && !(error instanceof UatPreparationError)
+              ? 'hard' : 'hard-no-auto',
         },
       };
     }

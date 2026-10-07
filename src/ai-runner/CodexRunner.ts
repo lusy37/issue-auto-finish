@@ -4,6 +4,7 @@ import { Codex, type ThreadOptions, type ThreadItem } from '@openai/codex-sdk';
 import type { AIRunner, RunOptions, RunResult } from './AIRunner.js';
 import { isShuttingDown } from '../shutdown/ShutdownSignal.js';
 import { findExecutable } from '../utils/process.js';
+import { resolveAdditionalDirectories } from './CallPolicy.js';
 
 export type WindowsSandboxMode = 'elevated' | 'unelevated';
 export const DEFAULT_WINDOWS_SANDBOX_MODE: WindowsSandboxMode = 'elevated';
@@ -114,10 +115,12 @@ export class CodexRunner implements AIRunner {
       if (sessionId && !this.canResumeSession(sessionId)) {
         throw new Error('无法恢复其他执行器的会话，请使用完整任务重新开始');
       }
+      const additionalDirectories = resolveAdditionalDirectories(options);
       const client = createCodexClient(this.binary, this.windowsSandbox);
       const threadOptions: ThreadOptions = {
         workingDirectory: path.resolve(options.workDir),
         sandboxMode: options.mode === 'plan' ? 'read-only' : 'workspace-write',
+        additionalDirectories,
         // 构建阶段需要下载依赖；文件写入范围仍由工作区沙箱限制。
         networkAccessEnabled: options.purpose === 'uat-visual-review' ? false : options.mode !== 'plan',
         webSearchMode: options.purpose === 'uat-visual-review' ? 'disabled' : undefined,
@@ -129,6 +132,13 @@ export class CodexRunner implements AIRunner {
       const thread = sessionId
         ? client.resumeThread(parseCodexSessionId(sessionId)!, threadOptions)
         : client.startThread(threadOptions);
+      if (additionalDirectories) {
+        emit('sandbox.policy', {
+          workingDirectory: threadOptions.workingDirectory,
+          sandboxMode: threadOptions.sandboxMode,
+          additionalDirectories,
+        });
+      }
       scheduleWallTimeout(options.timeoutMs);
       refreshIdleTimeout();
       const input = options.imagePaths?.length

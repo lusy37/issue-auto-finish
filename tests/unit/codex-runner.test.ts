@@ -4,6 +4,7 @@ import type { ThreadEvent, TurnOptions } from '@openai/codex-sdk';
 import { CodexRunner } from '../../src/ai-runner/CodexRunner.js';
 import { createAIRunner } from '../../src/ai-runner/AIRunnerRegistry.js';
 import type { StreamEvent } from '../../src/ai-runner/AIRunner.js';
+import path from 'node:path';
 
 const sdk = vi.hoisted(() => ({ startThread: vi.fn(), resumeThread: vi.fn(), runStreamed: vi.fn(), codexOptions: undefined as unknown }));
 vi.mock('@openai/codex-sdk', () => ({
@@ -72,6 +73,45 @@ describe('Codex SDK 适配器', () => {
   it('只把线程原始 ID 交给 resumeThread，并保留只读限制', async () => {
     await new CodexRunner().run({ ...options, sessionId: 'codex:thread-1', continueSession: true, mode: 'plan' });
     expect(sdk.resumeThread).toHaveBeenCalledWith('thread-1', expect.objectContaining({ sandboxMode: 'read-only' }));
+    expect(sdk.startThread).not.toHaveBeenCalled();
+  });
+
+  it('UAT 准备将指定写目录交给官方 SDK，保留工作区沙箱和审批策略', async () => {
+    const directory = path.resolve('.iaf-mini/runtime/issues/1/uat');
+    const logs: StreamEvent[] = [];
+    const result = await new CodexRunner().run({
+      ...options, mode: 'agent', purpose: 'uat-prepare',
+      additionalDirectories: [directory, path.join(directory, '.')],
+      onStreamEvent: event => logs.push(event),
+    });
+    expect(result.success).toBe(true);
+    expect(sdk.startThread).toHaveBeenCalledWith(expect.objectContaining({
+      sandboxMode: 'workspace-write', approvalPolicy: 'never', additionalDirectories: [directory],
+    }));
+    expect(logs).toContainEqual(expect.objectContaining({
+      type: 'sandbox.policy', content: expect.objectContaining({ additionalDirectories: [directory] }),
+    }));
+  });
+
+  it.each([
+    { mode: 'plan', purpose: 'verify' },
+    { mode: 'plan', purpose: 'uat-visual-review' },
+    { mode: 'plan', purpose: 'uat-prepare' },
+    { mode: 'agent', purpose: 'task' },
+  ] as const)('拒绝 $purpose 的 $mode 调用扩大写目录', async policy => {
+    const result = await new CodexRunner().run({
+      ...options, ...policy, additionalDirectories: [path.resolve('.iaf-mini/runtime')],
+    });
+    expect(result.success).toBe(false);
+    expect(result.errorMessage).toContain('仅 UAT 准备');
+    expect(sdk.startThread).not.toHaveBeenCalled();
+  });
+
+  it('拒绝相对写目录，避免权限范围依赖 worker 的启动位置', async () => {
+    const result = await new CodexRunner().run({
+      ...options, mode: 'agent', purpose: 'uat-prepare', additionalDirectories: ['../runtime'],
+    });
+    expect(result.success).toBe(false);
     expect(sdk.startThread).not.toHaveBeenCalled();
   });
 

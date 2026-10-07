@@ -30,6 +30,8 @@ export interface RunOptions {
   onWorkerStarted?: (pid: number) => void;
   prompt: string;
   workDir: string;
+  /** 服务端授予的额外写目录；仅用于 UAT 准备，不改变只读调用的权限。 */
+  additionalDirectories?: string[];
   timeoutMs: number;
   idleTimeoutMs?: number;
   sessionId?: string;

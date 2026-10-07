@@ -27,7 +27,10 @@ export function uatPreparationPrompt(
   demand: DemandSpec,
   plan: TaskPlan,
   configFile: string,
-  visualCasesFile: string,
+  visualCasesFile?: string,
 ): string {
-  return `为批准的需求补充 Playwright Chromium 验收测试和配置 ${configFile}。视觉用例清单是工作台运行数据，必须写入 ${visualCasesFile}，不要在业务仓库创建或提交 iaf.visual-cases.json。测试代码通过 process.env.IAF_VISUAL_CASES_FILE 读取清单，并使用 process.env.UAT_BASE_URL 读取预览地址。视觉用例清单必须使用 format=iaf-mini/visual-cases/v1、planDigest=${plan.digest}，每个场景列出必需视口和验收条目，expectedState 描述截图时实际可见的界面状态。点击计算、状态转换、接口行为和边界条件必须用自动化断言验证；截图只用于界面布局、样式和可见状态复核，不能代替行为断言，也不要要求每条动态逻辑单独提供截图。需要视觉证据的测试在明确页面状态通过 testInfo.attach 附加图片（name=iaf-visual，contentType=image/png）及 JSON 元数据附件（name=iaf-visual-meta，字段 caseId、sceneId、viewport、pageUrl、acceptanceRefs）；不要依赖文件名识别场景。检查已有测试并补齐缺失采集能力，不要运行验收，不写验收结论，不推送。需求：${JSON.stringify(demand)}\n批准计划与验收要求：${JSON.stringify(plan)}`;
+  const visualInstructions = visualCasesFile
+    ? `视觉用例清单是工作台运行数据，必须写入 ${visualCasesFile}，该文件的父目录已授予额外写权限，不要在业务仓库创建或提交 iaf.visual-cases.json，也不要仅把清单保存在临时目录。测试代码通过 process.env.IAF_VISUAL_CASES_FILE 读取清单。视觉用例清单必须使用 format=iaf-mini/visual-cases/v1、planDigest=${plan.digest}，每个场景列出必需视口和验收条目，expectedState 描述截图时实际可见的界面状态。需要视觉证据的测试在明确页面状态通过 testInfo.attach 附加图片（name=iaf-visual，contentType=image/png）及 JSON 元数据附件（name=iaf-visual-meta，字段 caseId、sceneId、viewport、pageUrl、acceptanceRefs）；不要依赖文件名识别场景。`
+    : '视觉复核未启用，不需要生成或读取视觉用例清单。';
+  return `为批准的需求补充 Playwright Chromium 验收测试和配置 ${configFile}。${visualInstructions}测试使用 process.env.UAT_BASE_URL 读取预览地址。点击计算、状态转换、接口行为和边界条件必须用自动化断言验证；截图只用于界面布局、样式和可见状态复核，不能代替行为断言，也不要要求每条动态逻辑单独提供截图。检查已有测试并补齐缺失采集能力，不要运行验收，不写验收结论，不推送。完成前确认配置和要求的清单已实际写入指定路径。需求：${JSON.stringify(demand)}\n批准计划与验收要求：${JSON.stringify(plan)}`;
 }

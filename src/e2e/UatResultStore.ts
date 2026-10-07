@@ -208,10 +208,13 @@ export class UatResultStore {
       `最终结果：${result.passed ? '通过' : '未通过'}`,
       `通过 ${result.passedTests}，失败 ${result.failedTests}，跳过 ${result.skippedTests}`,
       `视觉复核：${visual.status}`,
+      `视觉说明：${visual.summary}`,
       `送审 ${visual.selectedScreenshots.length}，已复核 ${visual.checkedScreenshots.length}，未复核 ${visual.unreviewedScreenshots.length}`,
       visual.coverageGaps.length ? `覆盖缺口：${visual.coverageGaps.join('；')}` : '',
       result.error || visual.error || '',
-      `[HTML 报告](/api/uat/runs/${encodeURIComponent(result.runId)}/files/report/index.html)`, '',
+      result.reportAvailable
+        ? `[HTML 报告](/api/uat/runs/${encodeURIComponent(result.runId)}/files/report/index.html)`
+        : '本轮没有可用的 Playwright 报告。', '',
     ];
     for (const issue of visual.issues) {
       lines.push(
