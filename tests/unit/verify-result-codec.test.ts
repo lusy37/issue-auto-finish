@@ -7,6 +7,11 @@ import {
 import { verifyAgentOutput } from '../helpers/verify-result.js';
 
 describe('Verify Agent JSON 契约', () => {
+  it.each([1, null])('退出码为 %s 时，即使模型声称通过也不能放行', exitCode => {
+    const result = parseVerifyAgentOutput(verifyAgentOutput());
+    result.checks.test.exitCode = exitCode;
+    expect(evaluateVerifyResult(result).passed).toBe(false);
+  });
   it('接受完整结构化结果并根据三个检查项计算通过状态', () => {
     const result = parseVerifyAgentOutput(verifyAgentOutput());
 

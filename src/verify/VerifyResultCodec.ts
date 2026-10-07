@@ -67,7 +67,7 @@ export function evaluateVerifyResult(result: VerifyAgentResult): VerifyEvaluatio
     ['Test', result.checks.test],
   ];
   const failureReasons = checks
-    .filter(([, check]) => check.status !== 'passed')
+    .filter(([, check]) => check.status !== 'passed' || check.exitCode !== 0)
     .map(([label, check]) => `${label} 检查失败：${check.summary}`);
   return { passed: failureReasons.length === 0, failureReasons };
 }

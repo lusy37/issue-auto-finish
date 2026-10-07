@@ -31,6 +31,16 @@ it('无浏览器配置的仓库关闭 E2E 后，经审核重启仍可完成 veri
   await git(repo, 'init', '-b', 'main');
   await git(repo, 'config', 'user.name', '验收测试'); await git(repo, 'config', 'user.email', 'test@example.test');
   fs.writeFileSync(path.join(repo, 'README.md'), '# 无浏览器依赖的测试仓库\n');
+  fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ name: 'verify-fixture', version: '1.0.0', scripts: {
+    lint: 'node --check counter.mjs', build: 'node --check counter.mjs',
+    test: 'node --test counter.test.mjs',
+  } }));
+  fs.writeFileSync(path.join(repo, 'counter.test.mjs'),
+    "import assert from 'node:assert/strict';import {test} from 'node:test';" +
+    "import {negate} from './counter.mjs';test('计算正数和负数',()=>{assert.equal(negate(3),-3);assert.equal(negate(-2),2);});");
+  expect((await runProcess('npm', ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'], {
+    cwd: repo, timeoutMs: 30_000,
+  })).code).toBe(0);
   await git(repo, 'add', '.'); await git(repo, 'commit', '-m', '初始化');
   await git(repo, 'remote', 'add', 'origin', origin); await git(repo, 'push', '-u', 'origin', 'main');
   const config: Config = transformEnvToConfig(envSchema.parse({ GITHUB_TOKEN: 'mock', GITHUB_REPOSITORY: 'test/project', PROJECT_WORK_DIR: repo, BASE_BRANCH: 'main', WORKTREE_BASE_DIR: path.join(directory, 'worktrees'), E2E_UI_ENABLED: 'false', PREVIEW_ENABLED: 'false', ISSUE_NOTE_SYNC_ENABLED: 'false' }), directory);

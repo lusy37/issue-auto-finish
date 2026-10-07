@@ -1,3 +1,13 @@
+import { runVerificationCommands } from '../../src/verify/VerificationCommands.js';
+import { verificationChecks } from '../helpers/verify-result.js';
+vi.mock('../../src/verify/VerificationCommands.js', async importOriginal => {
+  const original = await importOriginal<typeof import('../../src/verify/VerificationCommands.js')>();
+  return { ...original, runVerificationCommands: vi.fn(async options => {
+    const { verificationChecks } = await import('../helpers/verify-result.js');
+    return verificationChecks({ commands: options.commands });
+  }) };
+});
+
 /** 阶段意图契约：验证完成、请求集成修复和超时失败的实际返回结构。
  * 审核 interrupt 与任务图恢复由原生工作流集成测试覆盖。
  */
@@ -88,6 +98,7 @@ describe('Phase Intent Contracts (INT-1~8)', () => {
   // INT-4：verify 失败 → RequestRetryFromIntent('build')
   // ──────────────────────────────────────────────────────────
   it('INT-4: verify 报告失败 → RequestRetryFromIntent("build")', async () => {
+    vi.mocked(runVerificationCommands).mockResolvedValueOnce(verificationChecks({ test: 'failed' }));
     const runner = new ScriptedAIRunner([
       successScript({ output: verifyAgentOutput({ test: 'failed', reportMarkdown: '# 验证报告\n\nTest 执行失败，存在未通过的检查项，需要回到 build 修复后重新验证。' }) }),
     ]);

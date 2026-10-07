@@ -1,3 +1,11 @@
+vi.mock('../../src/verify/VerificationCommands.js', async importOriginal => {
+  const original = await importOriginal<typeof import('../../src/verify/VerificationCommands.js')>();
+  return { ...original, runVerificationCommands: vi.fn(async options => {
+    const { verificationChecks } = await import('../helpers/verify-result.js');
+    return verificationChecks({ commands: options.commands });
+  }) };
+});
+
 import { structuredPlanOutput } from '../helpers/structured-plan.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
@@ -141,7 +149,7 @@ describe('Session Resume — 聚合状态', () => {
     expect(save).toHaveBeenCalledTimes(2);
   });
 
-  it('VerifyPhase 使用相同的聚合状态恢复规则', async () => {
+  it('VerifyPhase 每轮创建新会话，不沿用旧验证结论', async () => {
     setPhaseProgress(tracker, 'verify', { status: 'failed', sessionId: 'verify-session' });
     const git = createMockGitOperations();
     git.hasChanges.mockResolvedValue(true);
@@ -150,8 +158,9 @@ describe('Session Resume — 聚合状态', () => {
     await phase.run(ctx);
 
     expect(aiRunner.run.mock.calls[0][0]).toMatchObject({
-      sessionId: 'verify-session',
-      continueSession: true,
+      sessionId: undefined,
+      continueSession: undefined,
+      mode: 'plan',
     });
   });
   it.each([true, false])('没有流会话时只保存返回的会话一次，成功=%s', async success => {

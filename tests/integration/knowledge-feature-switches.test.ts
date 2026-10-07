@@ -1,3 +1,11 @@
+vi.mock('../../src/verify/VerificationCommands.js', async importOriginal => {
+  const original = await importOriginal<typeof import('../../src/verify/VerificationCommands.js')>();
+  return { ...original, runVerificationCommands: vi.fn(async options => {
+    const { verificationChecks } = await import('../helpers/verify-result.js');
+    return verificationChecks({ commands: options.commands });
+  }) };
+});
+
 import { DagPhaseRunner } from '../../src/orchestrator/DagPhaseRunner.js';
 import { GitOperations } from '../../src/git/GitOperations.js';
 import { AsyncMutex } from '../../src/utils/AsyncMutex.js';
@@ -69,7 +77,7 @@ it.each([
       calls.push(options);
       if (options.phaseName === 'build') fs.writeFileSync(path.join(options.workDir, 'feature.txt'), '代码变化');
       return { success: true, exitCode: 0, output: options.phaseName === 'verify'
-        ? verifyAgentOutput({ reportMarkdown: '# 验证报告\n\nLint、Build、Test 均已执行并通过，本次代码检查和关联测试满足进入下一阶段的条件。' })
+        ? verifyAgentOutput({ commands: { build: 'pnpm build:required', test: 'pnpm test:required' }, reportMarkdown: '# 验证报告\n\nLint、Build、Test 均已执行并通过，本次代码检查和关联测试满足进入下一阶段的条件。' })
         : JSON.stringify({ actions: [] }) };
     },
   };

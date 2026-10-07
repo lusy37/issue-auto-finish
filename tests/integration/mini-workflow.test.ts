@@ -24,6 +24,7 @@ import { DiaryStore } from "../../src/distill/DiaryStore.js";
 import { PlanPersistence } from "../../src/persistence/PlanPersistence.js";
 import { verifyAgentOutput } from '../helpers/verify-result.js';
 import { resolveTestBrowserChannel } from '../helpers/playwright-browser.js';
+import { runProcess } from '../../src/utils/process.js';
 
 const base = path.resolve(".iaf-mini/test-workflow");
 let dir: string, previous: string | undefined;
@@ -58,6 +59,19 @@ describe("完整流程：真实 Git 与浏览器、模拟 AI 和平台", () => {
     git(repo, "config", "user.email", "demo@example.test");
     git(repo, "config", "core.autocrlf", "false");
     fs.writeFileSync(path.join(repo, "README.md"), "# 演示项目\n");
+    fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ name: 'verify-fixture', version: '1.0.0', scripts: {
+      lint: 'node --check server.mjs', build: 'node --check server.mjs',
+      test: 'node --test page.test.mjs',
+    } }));
+    // verify 场景由真实断言触发修复；uat 场景的页面标题由浏览器验证。
+    fs.writeFileSync(path.join(repo, 'page.test.mjs'),
+      "import assert from 'node:assert/strict';import fs from 'node:fs';import {test} from 'node:test';" +
+      `test('页面具备预期结构',()=>{const page=fs.readFileSync('index.html','utf8');` +
+      (failurePhase === 'verify' ? "assert.ok(page.includes('<h1>修复完成</h1>'));" : "assert.ok(page.startsWith('<h1>') && page.endsWith('</h1>'));") +
+      '});');
+    expect((await runProcess('npm', ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'], {
+      cwd: repo, timeoutMs: 30_000,
+    })).code).toBe(0);
     fs.writeFileSync(
       path.join(repo, "server.mjs"),
       // 启动时读取页面，模拟不会自动加载新代码的服务；修复后必须重启才能通过第二轮 UAT。

@@ -1,3 +1,13 @@
+import { runVerificationCommands } from '../../src/verify/VerificationCommands.js';
+import { verificationChecks } from '../helpers/verify-result.js';
+vi.mock('../../src/verify/VerificationCommands.js', async importOriginal => {
+  const original = await importOriginal<typeof import('../../src/verify/VerificationCommands.js')>();
+  return { ...original, runVerificationCommands: vi.fn(async options => {
+    const { verificationChecks } = await import('../helpers/verify-result.js');
+    return verificationChecks({ commands: options.commands });
+  }) };
+});
+
 /**
  * 跨层集成测试 — 真实 Phase + ScriptedAIRunner + 真实 PlanPersistence。
  *
@@ -99,6 +109,7 @@ describe('Phase-AI Integration', () => {
   });
 
   it('VerifyPhase: should return requestRetryFrom build when test fails', async () => {
+    vi.mocked(runVerificationCommands).mockResolvedValueOnce(verificationChecks({ test: 'failed' }));
     const runner = new ScriptedAIRunner([
       successScript({ output: verifyAgentOutput({ test: 'failed', reportMarkdown: '# 验证报告\n\nTest 执行失败，存在未通过的检查项，需要回到 build 修复后重新验证。' }) }),
     ]);

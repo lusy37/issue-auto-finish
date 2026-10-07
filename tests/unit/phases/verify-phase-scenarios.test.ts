@@ -1,3 +1,13 @@
+import { runVerificationCommands } from '../../../src/verify/VerificationCommands.js';
+import { verificationChecks } from '../../helpers/verify-result.js';
+vi.mock('../../../src/verify/VerificationCommands.js', async importOriginal => {
+  const original = await importOriginal<typeof import('../../../src/verify/VerificationCommands.js')>();
+  return { ...original, runVerificationCommands: vi.fn(async options => {
+    const { verificationChecks } = await import('../../helpers/verify-result.js');
+    return verificationChecks({ commands: options.commands });
+  }) };
+});
+
 import * as codec from '../../../src/verify/VerifyResultCodec.js';
 import { resolveIssueArtifactsDir } from '../../../src/persistence/ArtifactPaths.js';
 /**
@@ -67,6 +77,33 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
     );
   }
 
+  it('AI 保持只读，并接收本轮工作台的命令凭证', async () => {
+    const runner = new ScriptedAIRunner([successScript({ output: PASSING_OUTPUT })]);
+    await createPhase(runner).run(buildPhaseCtx());
+    expect(runner.runCalls[0]).toMatchObject({ mode: 'plan', purpose: 'verify' });
+    expect(runner.runCalls[0].prompt).toContain('本轮工作台执行结果（唯一检查凭证）');
+    expect(runner.runCalls[0].prompt).toContain('不要再次运行检查命令');
+    expect(runVerificationCommands).toHaveBeenCalled();
+  });
+
+  it('AI 声称通过不能覆盖本轮真实失败的退出码', async () => {
+    vi.mocked(runVerificationCommands).mockResolvedValueOnce(verificationChecks({ test: 'failed' }));
+    const runner = new ScriptedAIRunner([successScript({ output: PASSING_OUTPUT })]);
+    const intent = await createPhase(runner).run(buildPhaseCtx());
+    expect(intent).toMatchObject({ kind: 'failed', error: { retryable: 'hard-no-auto' } });
+    if (intent.kind !== 'failed') throw new Error('应拒绝虚构通过');
+    expect(intent.error.message).toContain('与本轮命令执行凭证不一致');
+  });
+
+  it('命令修改源码时停止流程，不触发代码修复循环', async () => {
+    vi.mocked(runVerificationCommands).mockRejectedValueOnce(new Error('验证命令修改了仓库源码'));
+    const runner = new ScriptedAIRunner([]);
+    expect(await createPhase(runner).run(buildPhaseCtx())).toMatchObject({
+      kind: 'failed', error: { retryable: 'hard-no-auto' },
+    });
+    expect(runner.runCalls).toHaveLength(0);
+  });
+
   it('should return completed when verify report passes', async () => {
     const runner = new ScriptedAIRunner([
       successScript({ output: PASSING_OUTPUT }),
@@ -79,6 +116,7 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
   });
 
   it('should return requestRetryFrom("build") when verify report fails', async () => {
+    vi.mocked(runVerificationCommands).mockResolvedValueOnce(verificationChecks({ test: 'failed' }));
     const runner = new ScriptedAIRunner([
       successScript({ output: FAILING_OUTPUT }),
     ]);
@@ -96,6 +134,7 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
   });
 
   it('should attach failure context for build retry', async () => {
+    vi.mocked(runVerificationCommands).mockResolvedValueOnce(verificationChecks({ test: 'failed' }));
     const runner = new ScriptedAIRunner([
       successScript({ output: FAILING_OUTPUT }),
     ]);
@@ -109,13 +148,14 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
   });
 
   it('关闭自动修复后，验证失败保留报告并禁止自动重试', async () => {
+    vi.mocked(runVerificationCommands).mockResolvedValueOnce(verificationChecks({ test: 'failed' }));
     const runner = new ScriptedAIRunner([
       successScript({ output: FAILING_OUTPUT }),
     ]);
     const phase = createPhase(runner, { verifyFixLoop: { enabled: false, maxIterations: 3 } });
     const intent = await phase.run(buildPhaseCtx());
-    expect(intent).toMatchObject({ kind: 'failed', error: { retryable: 'hard-no-auto', rawOutput: FAILING_REPORT } });
-    expect(readFileSync(path.join(process.env.DATA_DIR!, 'issues', String(ISSUE_IID), 'artifacts', '02-verify-report.md'), 'utf8')).toBe(FAILING_REPORT);
+    expect(intent).toMatchObject({ kind: 'failed', error: { retryable: 'hard-no-auto', rawOutput: expect.stringContaining(FAILING_REPORT) } });
+    expect(readFileSync(path.join(process.env.DATA_DIR!, 'issues', String(ISSUE_IID), 'artifacts', '02-verify-report.md'), 'utf8')).toContain(FAILING_REPORT);
     expect(runner.runCalls).toHaveLength(1);
   });
 
@@ -174,8 +214,9 @@ describe('VerifyPhase Scenarios (ScriptedAIRunner)', () => {
     const parse = vi.mocked(codec.parseVerifyAgentOutput);
     expect((await phase.run(buildPhaseCtx())).kind).toBe('completed');
     expect(parse).toHaveBeenCalledTimes(1);
+    vi.mocked(runVerificationCommands).mockResolvedValueOnce(verificationChecks({ test: 'failed' }));
     const failed = await phase.run(buildPhaseCtx());
-    expect(failed).toMatchObject({ kind: 'requestRetryFrom', context: { rawReport: FAILING_REPORT } });
+    expect(failed).toMatchObject({ kind: 'requestRetryFrom', context: { rawReport: expect.stringContaining(FAILING_REPORT) } });
     expect(parse).toHaveBeenCalledTimes(2);
     expect((await phase.run(buildPhaseCtx())).kind).toBe('failed');
     expect(parse).toHaveBeenCalledTimes(3);

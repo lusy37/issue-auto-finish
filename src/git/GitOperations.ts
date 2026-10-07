@@ -2,6 +2,7 @@ import path from 'node:path';
 import { runProcess } from '../utils/process.js';
 import os from 'node:os';
 import fsSync from 'node:fs';
+import { createHash } from 'node:crypto';
 
 import { logger as rootLogger } from '../logger.js';
 
@@ -85,6 +86,32 @@ export class GitOperations {
 
   head(ref = 'HEAD'): Promise<string> {
     return this.exec(['rev-parse', '--verify', ref]);
+  }
+
+  /** 校验待交付文件的实际内容；忽略构建缓存，但保留被跟踪的产物。 */
+  async snapshotRepositoryContent(): Promise<string> {
+    const files = await this.exec([
+      'ls-files', '-z', '--cached', '--others', '--exclude-standard', '--',
+      ...REPOSITORY_CONTENT_PATHS,
+    ]);
+    const hash = createHash('sha256');
+    hash.update(await this.head());
+    hash.update(await this.exec(['diff', '--cached', '--binary', '--', ...REPOSITORY_CONTENT_PATHS]));
+    for (const file of [...new Set(files.split('\0').filter(Boolean))].sort()) {
+      hash.update(JSON.stringify(file));
+      const fullPath = path.join(this.workDir, file);
+      try {
+        const stat = fsSync.lstatSync(fullPath);
+        hash.update(String(stat.mode));
+        if (stat.isSymbolicLink()) hash.update(fsSync.readlinkSync(fullPath));
+        else if (stat.isFile()) hash.update(fsSync.readFileSync(fullPath));
+        else hash.update('directory');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        hash.update('missing');
+      }
+    }
+    return hash.digest('hex');
   }
   async isAncestor(ancestor: string, descendant: string): Promise<boolean> {
     try {
@@ -298,7 +325,9 @@ export class GitOperations {
     return { done: success, conflictFiles };
   }
 
-  private async executeRebase(args: string[]): Promise<{ success: boolean; conflictFiles: string[] }> {
+  private async executeRebase(
+    args: string[],
+  ): Promise<{ success: boolean; conflictFiles: string[] }> {
     try {
       await this.exec(args);
       return { success: true, conflictFiles: [] };

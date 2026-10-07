@@ -5,6 +5,7 @@ export function verifyAgentOutput(options?: {
   build?: 'passed' | 'failed';
   test?: 'passed' | 'failed';
   reportMarkdown?: string;
+  commands?: Partial<Record<'lint' | 'build' | 'test', string>>;
 }): string {
   const lint = options?.lint ?? 'passed';
   const build = options?.build ?? 'passed';
@@ -30,11 +31,16 @@ export function verifyAgentOutput(options?: {
     schemaVersion: VERIFY_AGENT_SCHEMA_VERSION,
     phase: 'verify',
     checks: {
-      lint: check(lint, 'npm run lint', lint === 'passed' ? 'Lint 通过' : 'Lint 失败'),
-      build: check(build, 'npm run build', build === 'passed' ? 'Build 通过' : 'Build 失败'),
-      test: check(test, 'npm test', test === 'passed' ? 'Test 通过' : 'Test 失败'),
+      lint: check(lint, options?.commands?.lint ?? 'npm run lint', lint === 'passed' ? 'Lint 通过' : 'Lint 失败'),
+      build: check(build, options?.commands?.build ?? 'npm run build', build === 'passed' ? 'Build 通过' : 'Build 失败'),
+      test: check(test, options?.commands?.test ?? 'npm test', test === 'passed' ? 'Test 通过' : 'Test 失败'),
     },
     summary: lint === 'passed' && build === 'passed' && test === 'passed' ? '全部检查通过' : '验证失败',
     reportMarkdown,
   });
+}
+
+/** 阶段单测隔离命令进程；真实写入边界另由集成测试覆盖。 */
+export function verificationChecks(options?: Parameters<typeof verifyAgentOutput>[0]) {
+  return JSON.parse(verifyAgentOutput(options)).checks;
 }

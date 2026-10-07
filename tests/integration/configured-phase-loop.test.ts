@@ -1,3 +1,13 @@
+import { runVerificationCommands } from '../../src/verify/VerificationCommands.js';
+import { verificationChecks } from '../helpers/verify-result.js';
+vi.mock('../../src/verify/VerificationCommands.js', async importOriginal => {
+  const original = await importOriginal<typeof import('../../src/verify/VerificationCommands.js')>();
+  return { ...original, runVerificationCommands: vi.fn(async options => {
+    const { verificationChecks } = await import('../helpers/verify-result.js');
+    return verificationChecks({ commands: options.commands });
+  }) };
+});
+
 // 本组隔离交付；真实浏览器凭证和平台幂等交付由 mini-workflow / dag-delivery 验证。
 vi.mock('../../src/orchestrator/steps/DeliverIssueStep.js', () => ({ deliverIssueStep: async (ctx: any, deps: any) => { deps.tracker.transaction(ctx.issue.number, (record: any) => { record.lifecycle = { kind: 'completed' }; record.deliveryPending = false; }); } }));
 import { AsyncMutex } from '../../src/utils/AsyncMutex.js';
@@ -86,6 +96,7 @@ function fixture(options: { e2e?: boolean; review?: boolean; label?: boolean; ma
   config.review.enabled = options.review ?? false;
   config.preview.enabled = false;
   config.e2e.enabled = options.e2e ?? true;
+  vi.mocked(runVerificationCommands).mockImplementation(async opts => verificationChecks({ commands: opts.commands, test: options.failVerify ? 'failed' : 'passed' }));
   config.verifyFixLoop.enabled = options.loop ?? true;
   config.verifyFixLoop.maxIterations = options.max ?? 3;
   const pipelineDef = buildPlanModePipeline({ e2eEnabled: config.e2e.enabled });
