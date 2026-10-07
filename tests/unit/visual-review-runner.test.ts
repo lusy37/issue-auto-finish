@@ -134,16 +134,52 @@ describe('视觉复核运行器', () => {
     expect(fs.existsSync(path.join(outputDir, collected.evidence[0].path))).toBe(true);
   });
 
-  it('必需证据超过图片上限时不调用模型', async () => {
+  it('必需证据超过显式图片上限时不调用模型', async () => {
     const { root, runId, evidence } = fixture();
     const airunner = runner({ summary: '', screenshots: [], coverageGaps: [] });
     const result = await new VisualReviewRunner().run({
       runner: airunner, dataDir: root, runId, issueIid: 1,
-      policy: { visualReviewEnabled: true, maxImages: 0, timeoutMs: 1000 }, evidence,
-      cases: [{ id: 'login-desktop', sceneId: 'login', acceptanceRefs: ['task:login:0'], viewports: [{ width: 1440, height: 900 }], expectedState: '登录表单可见' }],
+      policy: { visualReviewEnabled: true, maxImages: 1, timeoutMs: 1000 }, evidence,
+      cases: [{ id: 'login-desktop', sceneId: 'login', acceptanceRefs: ['task:login:0'], viewports: [{ width: 1440, height: 900 }, { width: 375, height: 812 }], expectedState: '登录表单可见' }],
       acceptanceText: '登录页面可用',
     });
     expect(result.status).toBe('needs-review');
+    expect(result.coverageGaps).toContain('必需视觉证据 2 张超过图片上限 1');
     expect(airunner.run).not.toHaveBeenCalled();
+  });
+
+  it('不限数量时超过旧上限的全部证据送审，遗漏逐图结果仍不能通过', async () => {
+    const { root, runId, evidence } = fixture();
+    const screenshots = Array.from({ length: 15 }, (_, index) => ({
+      ...evidence[0], id: `shot-${index}`, caseId: `case-${index}`,
+    }));
+    const cases = screenshots.map(shot => ({
+      id: shot.caseId, sceneId: shot.sceneId, acceptanceRefs: shot.acceptanceRefs,
+      viewports: [shot.viewport], expectedState: '登录表单可见',
+    }));
+    const output = {
+      summary: '全部截图清晰', coverageGaps: [],
+      screenshots: screenshots.map((_, index) => ({
+        id: `image-${String(index + 1).padStart(3, '0')}`,
+        assessment: 'clear', reason: '页面完整可见', issues: [],
+      })),
+    };
+    const airunner = runner(output);
+    const options = {
+      runner: airunner, dataDir: root, runId, issueIid: 1,
+      policy: { visualReviewEnabled: true, maxImages: 0, timeoutMs: 1000 },
+      evidence: screenshots, cases, acceptanceText: '全部登录页面可用',
+    };
+    const result = await new VisualReviewRunner().run(options);
+    expect(result.status).toBe('passed');
+    expect(vi.mocked(airunner.run).mock.calls[0][0].imagePaths).toHaveLength(15);
+    expect(result.checkedScreenshots).toEqual(screenshots.map(shot => shot.id));
+    expect(result.unreviewedScreenshots).toEqual([]);
+
+    const incomplete = await new VisualReviewRunner().run({
+      ...options, runner: runner({ ...output, screenshots: output.screenshots.slice(0, 14) }),
+    });
+    expect(incomplete.status).toBe('needs-review');
+    expect(incomplete.unreviewedScreenshots).toEqual(['shot-14']);
   });
 });

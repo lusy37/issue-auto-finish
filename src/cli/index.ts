@@ -60,7 +60,7 @@ function createInitialConfig(projectWorkDir: string): string {
       `E2E_BACKEND_PORT_BASE=${PREVIEW_DEFAULTS.backendPortBase}`,
       `E2E_FRONTEND_PORT_BASE=${PREVIEW_DEFAULTS.frontendPortBase}`,
       'E2E_VISUAL_REVIEW_ENABLED=true',
-      'E2E_VISUAL_REVIEW_MAX_IMAGES=12',
+      'E2E_VISUAL_REVIEW_MAX_IMAGES=0',
       'E2E_VISUAL_REVIEW_MODEL=',
       'E2E_VISUAL_REVIEW_TIMEOUT_MS=180000',
       '',

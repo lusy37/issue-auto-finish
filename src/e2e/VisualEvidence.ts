@@ -277,7 +277,7 @@ export function validateEvidenceCoverage(
   }
 
   const required = cases.reduce((count, item) => count + item.viewports.length, 0);
-  if (required > maxImages) {
+  if (maxImages > 0 && required > maxImages) {
     gaps.push(gap(`必需视觉证据 ${required} 张超过图片上限 ${maxImages}`, 'missing-visible-state'));
   }
   if (!evidence.length) gaps.push(gap('本轮没有带有效元数据的视觉截图', 'missing-case'));
@@ -303,5 +303,6 @@ export function selectEvidence(
   const optional = evidence
     .filter((item) => !used.has(item.id))
     .sort((a, b) => `${a.path}|${a.id}`.localeCompare(`${b.path}|${b.id}`));
-  return { selected: [...required, ...optional].slice(0, maxImages), gaps: [] };
+  const selected = [...required, ...optional];
+  return { selected: maxImages === 0 ? selected : selected.slice(0, maxImages), gaps: [] };
 }

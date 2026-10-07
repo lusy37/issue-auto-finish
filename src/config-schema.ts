@@ -150,7 +150,7 @@ export const envSchema = z.object({
   E2E_VISUAL_REVIEW_ENABLED: featureToggle(),
   E2E_VISUAL_REVIEW_MAX_IMAGES: envInt(
     String(E2E_DEFAULTS.visualReviewMaxImages),
-    { min: 1, max: 12 },
+    { min: 0 },
   ),
   E2E_VISUAL_REVIEW_MAX_RETRIES: envInt(
     String(E2E_DEFAULTS.visualReviewMaxRetries),

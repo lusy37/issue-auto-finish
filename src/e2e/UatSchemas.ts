@@ -90,7 +90,7 @@ export const visualReviewResultSchema = z.object({
 
 export const uatPolicySchema = z.object({
   visualReviewEnabled: z.boolean(),
-  maxImages: z.number().int().positive().max(12),
+  maxImages: z.number().int().nonnegative(),
   maxReviewRounds: z.number().int().positive().optional(),
   model: z.string().min(1).optional(),
   timeoutMs: z.number().int().min(1000),

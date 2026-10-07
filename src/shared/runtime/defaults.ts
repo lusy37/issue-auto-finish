@@ -19,7 +19,8 @@ export const PREVIEW_DEFAULTS = {
 export const E2E_DEFAULTS = {
   browserChannel: 'msedge',
   visualReviewEnabled: true,
-  visualReviewMaxImages: 12,
+  // 0 表示不限制送审图片数量，完整性仍由视觉证据校验保证。
+  visualReviewMaxImages: 0,
   visualReviewMaxRetries: 2,
   visualReviewTimeoutMs: 180_000,
 } as const;

@@ -27,7 +27,7 @@ exports[`裁剪版配置 > 只有公开执行器及当前模块 1`] = `
     "frontendPortBase": 9000,
     "timeoutMs": 300000,
     "visualReviewEnabled": true,
-    "visualReviewMaxImages": 12,
+    "visualReviewMaxImages": 0,
     "visualReviewMaxRetries": 2,
     "visualReviewTimeoutMs": 180000,
   },

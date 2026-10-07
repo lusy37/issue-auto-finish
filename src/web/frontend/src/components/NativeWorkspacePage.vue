@@ -138,7 +138,7 @@ const settingSections: SettingSection[] = [
         type: 'boolean',
         help: '机器验收通过后复核截图；配置在每次 UAT 开始时固化。',
       },
-      { key: 'E2E_VISUAL_REVIEW_MAX_IMAGES', label: '视觉复核最大图片数', type: 'number' },
+      { key: 'E2E_VISUAL_REVIEW_MAX_IMAGES', label: '视觉复核图片上限（0 为不限制）', type: 'number' },
       { key: 'E2E_VISUAL_REVIEW_MODEL', label: '视觉复核模型', placeholder: '留空继承 AI 模型' },
       { key: 'E2E_VISUAL_REVIEW_TIMEOUT_MS', label: '视觉复核超时（毫秒）', type: 'number' },
       { key: 'E2E_BASE_URL', label: '验收基础地址', placeholder: 'http://127.0.0.1:5173' },

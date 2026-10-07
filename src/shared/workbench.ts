@@ -120,6 +120,7 @@ export interface VisualReviewResult {
 
 export interface UatPolicySnapshot {
   visualReviewEnabled: boolean;
+  /** 0 表示不限数量；正整数表示用户显式配置的图片上限。 */
   maxImages: number;
   maxReviewRounds?: number;
   model?: string;
