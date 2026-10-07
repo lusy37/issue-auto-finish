@@ -25,9 +25,9 @@ const outputSchema = z.object({
       'incomplete-agent-output',
     ]),
     acceptanceRefs: z.array(z.string().min(1)).min(1),
-     caseId: z.string().min(1).optional(),
-     sceneId: z.string().min(1).optional(),
-     viewport: viewportSchema.optional(),
+    caseId: z.string().min(1).nullable(),
+    sceneId: z.string().min(1).nullable(),
+    viewport: viewportSchema.nullable(),
     screenshotIds: z.array(z.string().min(1)),
   }).strict()).max(100),
 }).strict();
@@ -52,7 +52,18 @@ export const visualRepairDecisionSchema = z.object({
   changedFiles: z.array(z.string().min(1)),
 }).strict();
 
-export type VisualReviewOutput = z.infer<typeof outputSchema>;
+/** SDK 要求字段全部必填；null 仅在协议边界转换为领域中的可选值。 */
+const parsedOutputSchema = outputSchema.transform(output => ({
+  ...output,
+  coverageGaps: output.coverageGaps.map(gap => ({
+    ...gap,
+    caseId: gap.caseId ?? undefined,
+    sceneId: gap.sceneId ?? undefined,
+    viewport: gap.viewport ?? undefined,
+  })),
+}));
+
+export type VisualReviewOutput = z.infer<typeof parsedOutputSchema>;
 export type VisualRepairDecisionPayload = z.infer<typeof visualRepairDecisionSchema>;
 
 /** SDK 结构化输出契约直接由运行时 Schema 生成，避免双重维护。 */
@@ -66,7 +77,7 @@ export function parseVisualReviewOutput(text: string): VisualReviewOutput {
   } catch {
     throw new Error('视觉复核没有返回合法 JSON');
   }
-  return outputSchema.parse(value);
+  return parsedOutputSchema.parse(value);
 }
 
 export function parseVisualRepairDecision(text: string): VisualRepairDecisionPayload {
